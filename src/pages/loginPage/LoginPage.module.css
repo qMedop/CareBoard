@@ -1,0 +1,394 @@
+:root {
+  --switch-transition: 0.5s ease-in-out;
+  --gradinat: radial-gradient(
+    circle farthest-corner at -5.6% -6.8%,
+    rgb(79 39 111) 37.3%,
+    rgba(50, 0, 129, 1) 73.5%
+  );
+}
+
+:global(.page-content.login) {
+  width: 100dvw;
+  height: 100dvh;
+  top: 0;
+  left: 0;
+  padding: 0;
+  overflow: initial;
+}
+.loginPageContainer {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-color: #161823;
+}
+.container .overlayContainer {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 50%;
+  height: 100%;
+  overflow: hidden;
+  transition: var(--switch-transition);
+  z-index: 100;
+}
+.container .overlayContainer .overlay {
+  background: var(--gradinat);
+  background-size: cover;
+  background-position: 0 0;
+  color: #ffffff;
+  position: relative;
+  left: -100%;
+  height: 100%;
+  width: 200%;
+  transform: translateX(0);
+  transition: var(--switch-transition);
+}
+.container.signUp .overlayContainer {
+  transform: translateX(-100%);
+}
+.container.signUp .overlayContainer .overlay {
+  transform: translateX(50%);
+}
+.container .overlayContainer .overlay .overlayPanel {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 0 40px;
+  text-align: center;
+  top: 0;
+  height: 100%;
+  width: 50%;
+  transform: translateX(0);
+  transition: var(--switch-transition);
+}
+.container .overlayContainer .overlay .overlayPanel.resetPasswordPanel {
+  right: 0;
+  transform: translateX(20%);
+  opacity: 0;
+  pointer-events: none;
+}
+.container .resetPasswordContainer {
+  opacity: 0;
+  transform: translateX(-20%);
+  pointer-events: none;
+}
+.container
+  .overlayContainer
+  .overlay
+  .overlayPanel.resetPasswordPanel
+  .newUser {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+}
+.container
+  .overlayContainer
+  .overlay
+  .overlayPanel.resetPasswordPanel
+  .newUser
+  > div {
+  display: flex;
+  gap: 8px;
+}
+.container
+  .overlayContainer
+  .overlay
+  .overlayPanel.resetPasswordPanel
+  .newUser
+  > div
+  .navigateBtn {
+  margin-top: 12px;
+}
+.container .overlayContainer .overlay .overlayPanel.signUpPanel {
+  right: 0;
+}
+.container .overlayContainer .overlay .overlayPanel.signInPanel {
+  transform: translateX(-20%);
+}
+.container.signUp .overlayContainer .overlay .overlayPanel.signUpPanel {
+  transform: translateX(20%);
+}
+.container.signUp .overlayContainer .overlay .overlayPanel.signInPanel {
+  transform: translateX(0%);
+}
+.container.resetPassword
+  .overlayContainer
+  .overlay
+  .overlayPanel.resetPasswordPanel {
+  right: 0;
+  transform: translateX(0%);
+  opacity: 1;
+  pointer-events: all;
+}
+.container.resetPassword .resetPasswordContainer {
+  opacity: 1;
+  transform: translateX(0%);
+  pointer-events: all;
+}
+.container.resetPassword .overlayContainer .overlay .overlayPanel.signUpPanel {
+  transform: translateX(20%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.container .overlayContainer .overlay .overlayPanel h2 {
+  font-family: "Google Sans Flex";
+  font-size: 42px;
+  margin-bottom: 12px;
+}
+.container .overlayContainer .overlay .overlayPanel p {
+  font-family: "Google Sans";
+}
+.container .overlayContainer .overlay .overlayPanel .navigateBtn {
+  font-family: "Google Sans";
+  border-radius: 20px;
+  border: 1px solid #f1f1f1;
+  color: var(--text-light);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 16px;
+  letter-spacing: 1px;
+  margin-top: 24px;
+}
+.container .top {
+  position: absolute;
+  top: 0;
+  height: 32px;
+  width: 100%;
+  display: flex;
+  justify-content: space-around;
+  z-index: 101;
+}
+.container .top p {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-light);
+  white-space: nowrap;
+}
+.container .backGround {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--gradinat);
+  filter: blur(80px);
+  z-index: -1;
+}
+.container > .formContainer {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  background-color: #161823;
+  height: 100%;
+  padding: 0 12px;
+  transition: var(--switch-transition);
+  position: absolute;
+  top: 0;
+  width: 50%;
+  left: 0;
+}
+
+.container > .signUpContainer {
+  animation: hide var(--switch-transition) forwards;
+  pointer-events: none;
+  opacity: 0;
+}
+.container.signUp > .signInContainer {
+  transform: translateX(100%);
+  pointer-events: none;
+  z-index: 2;
+}
+.container > .signInContainer {
+  z-index: 6;
+}
+.container.resetPassword > .signInContainer {
+  transform: translateX(-20%);
+  opacity: 0;
+  pointer-events: none;
+}
+.container.signUp > .signUpContainer {
+  transform: translateX(100%);
+  /* z-index: 5;
+  opacity: 1; */
+  animation: show var(--switch-transition) forwards;
+  pointer-events: all;
+}
+.container > div h2 {
+  font-family: "Google Flex Sans", sans-serif;
+  font-size: 32px;
+  font-weight: 500;
+  margin-bottom: 24px;
+}
+.container form {
+  width: 100%;
+  max-width: 432px;
+}
+.container form .userData > .field {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  border-radius: 26px;
+  border: 1px solid rgba(241, 241, 241, 0.6);
+  padding: 8px 16px;
+  transition: border 150ms ease-in-out;
+  margin-bottom: 12px;
+}
+.container form .userData > .field:focus-within {
+  border-color: var(--text-light);
+}
+.container form .userData > .field:hover {
+  border-color: var(--text-light);
+}
+.container form .userData > .field.error {
+  border-color: var(--text-error);
+}
+.container form .userData > .field.errorMess {
+  border-color: var(--text-error);
+  margin-bottom: 0px;
+}
+.container form .options {
+  display: flex;
+  justify-content: end;
+}
+.container form .options a {
+  width: initial;
+  padding: 0 4px;
+}
+.container form .options a:hover p {
+  text-decoration: underline;
+}
+.container form .options a p {
+  word-spacing: nowrap;
+  font-size: 14px;
+}
+.container form > div input {
+  background-color: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-light);
+  width: 100%;
+  font-family: "Google Sans", sans-serif;
+  font-size: 15px;
+  caret-color: var(--main-cyan);
+}
+
+.container form > .submit button {
+  width: 100%;
+  height: 42px;
+  border-radius: 26px;
+  padding: 8px 0;
+  font-size: 16px;
+}
+.container form .field .showHidePassword .icon {
+  opacity: 0.6;
+  transition: opacity 150ms ease-in-out;
+}
+.container form .field:hover .showHidePassword .icon {
+  opacity: 1;
+}
+.container form .showHidePassword .icon :global(.svg) {
+  width: 28px;
+  height: 28px;
+}
+.container form > .change {
+  display: flex;
+  justify-content: end;
+}
+.container form > .change button {
+  color: var(--text-light);
+  margin-top: 12px;
+  margin-right: 6px;
+  text-decoration: underline;
+  font-size: 16px;
+}
+.container form > .submit button {
+  background-color: var(--main-cyan);
+}
+.container form > .submit button p {
+  font-family: "Google Sans", sans-serif;
+  color: var(--text-dark);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 1px;
+}
+.container form .userData > .errorMessage {
+  font-size: 13px;
+  padding: 4px 16px;
+  color: var(--text-error);
+}
+.container form .forgotPassword {
+  margin-top: 8px;
+}
+.container form .forgotPassword:hover p {
+  text-decoration: underline;
+}
+.container .verification {
+  position: fixed;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transition: 200ms;
+}
+.container .verification:not(.active) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes show {
+  0%,
+  49.99% {
+    opacity: 0;
+    z-index: 1;
+  }
+  50%,
+  100% {
+    opacity: 1;
+    z-index: 5;
+  }
+}
+@keyframes show2 {
+  0%,
+  49.99% {
+    opacity: 0;
+  }
+  50%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes hide {
+  0% {
+    opacity: 1;
+    z-index: 5;
+  }
+  49.99% {
+    opacity: 1;
+    z-index: 5;
+  }
+  50%,
+  100% {
+    opacity: 0;
+    z-index: 2;
+  }
+}

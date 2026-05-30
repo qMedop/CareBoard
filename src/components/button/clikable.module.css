@@ -1,0 +1,62 @@
+.clikable {
+  cursor: pointer;
+  position: relative;
+  transition: 0.3s;
+}
+.clikable:hover .interactions,
+.clikable:focus .interactions {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+.clikable.mouseDown .interactions {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+.interactions {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.clikable .stroke {
+  border: 1.8px solid #fff;
+  border-radius: inherit;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: 300ms;
+}
+.clikable.pressed .stroke {
+  animation: opacityFade 400ms ease-out;
+}
+@keyframes opacityFade {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.noClick {
+  opacity: 0.6;
+  pointer-events: none;
+  cursor: no-drop;
+}
+.ripple {
+  animation: scale 0.4s ease-out forwards;
+  position: absolute;
+  background-color: hsla(0, 0%, 100%, 0.2);
+}
+@keyframes scale {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(2);
+  }
+}
+.scaleEffect {
+  transition: background-color 0.2s ease-in-out !important;
+  overflow: hidden;
+}

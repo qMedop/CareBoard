@@ -1,0 +1,68 @@
+.topNav {
+  position: fixed;
+  top: 16px;
+  left: 0;
+  height: var(--top-nav-height);
+  width: 100%;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  z-index: 101;
+}
+.topNav > div {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+.topNav .logo :global(.svg) {
+  width: 42px;
+  height: 42px;
+}
+.topNav .logo :global(.svg .heart) {
+  transform-origin: center;
+  animation: heartBeat 1.5s ease-in-out infinite;
+}
+.topNav .right {
+  display: flex;
+  justify-content: space-between;
+  margin-left: 8px;
+  flex: 1;
+}
+.topNav .titleText {
+  font-family: "Merienda", sans-serif;
+  font-size: 24px;
+  font-weight: 500;
+  transform: translateY(1px);
+}
+.topNav .right .list {
+  display: flex;
+}
+.topNav .right .list li {
+  padding: 0 8px;
+}
+.topNav .right .list a {
+  width: initial;
+}
+.topNav .right .list p {
+  white-space: nowrap;
+}
+.topNav .right .list a:hover p {
+  text-decoration: underline;
+}
+@keyframes heartBeat {
+  0% {
+    transform: scale(1);
+  }
+  14% {
+    transform: scale(1.1);
+  }
+  28% {
+    transform: scale(1);
+  }
+  42% {
+    transform: scale(1.1);
+  }
+  70% {
+    transform: scale(1);
+  }
+}

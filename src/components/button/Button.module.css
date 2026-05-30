@@ -1,0 +1,192 @@
+.button {
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  transition: 0.3s;
+  font-family: "Roboto", Arial, sans-serif;
+}
+.button .effecctBgColor {
+  z-index: -1;
+}
+.button.default {
+  border-radius: initial;
+  width: initial;
+  height: initial;
+  transition: initial;
+}
+.button.primary {
+  background-color: transparent;
+}
+.info {
+  position: absolute;
+  color: var(--text-light);
+  font-size: 14px;
+  background-color: rgba(255, 255, 255, 0.2);
+  bottom: -48px;
+  padding: 8px 8px;
+  border-radius: 4px;
+  transition: 0.15s;
+  opacity: 0;
+  pointer-events: none;
+}
+.info.show {
+  opacity: 1;
+}
+.info.fit {
+  padding: 4px 4px;
+  font-size: 12px;
+  bottom: -32px;
+}
+.button.whiteBg {
+  background-color: var(--text-light);
+  color: var(--primary-dark);
+}
+.button.grayBg {
+  background-color: var(--primary-gray);
+  color: var(--text-light);
+}
+.button.Br4 {
+  border-radius: 4px;
+}
+.button.BR6 {
+  border-radius: 6px;
+}
+.button.BR8 {
+  border-radius: 8px;
+}
+.button.BR10 {
+  border-radius: 10px;
+}
+.button.BR12 {
+  border-radius: 12px;
+}
+.button.BR14 {
+  border-radius: 14px;
+}
+.button.BR16 {
+  border-radius: 16px;
+}
+.button.BR18 {
+  border-radius: 18px;
+}
+.button.normal {
+  font-weight: 500;
+  padding: 0 16px;
+  height: 36px;
+  font-size: 14px;
+  line-height: 36px;
+  border-radius: 18px;
+  width: fit-content;
+  align-items: center;
+  color: var(--text-light);
+  background-color: var(--less-cyan);
+}
+.button.normal.secondary {
+  color: var(--text-dark);
+  background-color: var(--bg-gray);
+}
+.button.lineBorder {
+  color: var(--text-light);
+  font-weight: 500;
+  padding: 0 10px;
+  height: 42px;
+  font-size: 18px;
+  line-height: 36px;
+  border-radius: 38px;
+  width: fit-content;
+  align-items: center;
+  border: 1px solid var(--element-bg-color);
+}
+.button.lineBorder p {
+  margin: 0 6px;
+  pointer-events: none;
+}
+.button.square {
+  border-radius: 6px;
+}
+.button p,
+.button span,
+.button img {
+  pointer-events: none;
+  white-space: nowrap;
+}
+.button.select {
+  border-radius: 0px;
+  width: fit-content;
+  height: fit-content;
+}
+.button.select.defaultStyles {
+  padding: 0 16px;
+  height: 36px;
+  border-radius: 18px;
+}
+.button.transparentBg {
+  background-color: rgba(255, 255, 255, 0.8);
+}
+.button.select span {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--text-light);
+  margin-right: 8px;
+  position: relative;
+}
+.button.select span::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--less-cyan);
+  opacity: 0;
+  transition: all 0.1s ease-in-out;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.button.select.selected span::after,
+.button.select:hover span::after {
+  opacity: 1;
+}
+.button .arrowDown svg {
+  width: 24px;
+  height: 24px;
+}
+.button .effecctBgColor {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+.disabled {
+  opacity: 0.6;
+  cursor: not-allowed !important;
+}
+@media (max-width: 700px) {
+  .button {
+    font-size: 12px;
+    height: 28px;
+    line-height: 28px;
+  }
+  .button.lineBorder {
+    font-size: 14px;
+    height: 36px;
+    line-height: 36px;
+    border-radius: 18px;
+    padding: 0 6px;
+  }
+}
+
+body:global(.mobile) {
+  .button {
+    cursor: none;
+  }
+}

@@ -1,0 +1,397 @@
+:global(.page-content.profile-start) {
+  width: 100dvw;
+  height: 100dvh;
+  top: calc(var(--top-nav-height) + 16px);
+  left: 0;
+  padding: 0;
+  overflow: initial;
+}
+.firstTimeContainer {
+  width: 100%;
+  height: 100dvh;
+  display: flex;
+  align-items: center;
+}
+.firstTimeContainer > div {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.firstTimeContainer .left {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.firstTimeContainer .left {
+  width: 60%;
+  padding: 0 24px;
+  margin-bottom: 64px;
+}
+
+.firstTimeContainer .right {
+  width: 40%;
+  display: flex;
+  justify-content: center;
+  align-items: end;
+}
+.firstTimeContainer .left .title h1 {
+  font-family: "JotiOne", sans-serif;
+  font-size: 8vh;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.firstTimeContainer .welcome {
+  animation: fade 400ms ease-in-out;
+}
+.firstTimeContainer .welcome .text {
+  font-family: "Google Sans";
+  padding-left: 12px;
+  font-size: 2vh;
+  color: var(--text-light);
+  width: 75%;
+  line-height: 26px;
+}
+.firstTimeContainer .welcome .text .privacy {
+  color: var(--text-gray);
+  margin-top: 16px;
+  font-size: 1.7vh;
+}
+.firstTimeContainer .welcome .text .privacy a {
+  color: inherit;
+  font-size: inherit;
+  display: initial;
+}
+.firstTimeContainer .welcome .text .privacy a:hover {
+  text-decoration: underline;
+}
+.firstTimeContainer .welcome .left .start button :global(.svg) {
+  animation: arrowMove 0.6s infinite ease-in-out;
+}
+.firstTimeContainer .right .illustration {
+  width: 100%;
+  position: relative;
+  max-width: 600px;
+  max-height: 80dvh;
+}
+.firstTimeContainer .right .illustration .color {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  border-radius: 50%;
+  z-index: -1;
+  filter: blur(50px);
+  animation: move 5s infinite ease-in-out;
+}
+.firstTimeContainer .right .illustration .color.red {
+  background-color: #ff6584;
+  box-shadow: 0 0px 300px 200px rgba(255, 101, 132, 0.4);
+  top: 33%;
+  left: 16%;
+}
+.firstTimeContainer .right .illustration .color.blue {
+  background-color: #6c63ff;
+  box-shadow: 0 0px 200px 200px rgba(107, 99, 255, 0.4);
+  right: 20%;
+  top: 35%;
+  animation-delay: 1s;
+}
+.firstTimeContainer .right .illustration .color.black {
+  background-color: #3f3d56;
+  box-shadow: 0 0px 200px 100px rgb(63, 61, 86);
+  right: 25%;
+  bottom: 30%;
+  animation-delay: 2s;
+}
+.firstTimeContainer .right .illustration .color.white {
+  background-color: #f1f1f1;
+  box-shadow: 0 0px 200px 100px rgba(255, 255, 255, 0.5);
+  bottom: 1%;
+  left: 20%;
+  animation-delay: 3s;
+}
+.firstTimeContainer .right .illustration :global(.illustratior) {
+  width: 100%;
+  height: 100%;
+}
+.firstTimeContainer .sectionsContainer {
+  position: relative;
+}
+/* --- START: FIX 3 - Stacking Sections for Animation --- */
+.firstTimeContainer .section {
+  position: absolute;
+  width: 100%;
+  top: 0;
+  left: 0;
+}
+/* --- END: FIX 3 --- */
+
+.firstTimeContainer .left.default .sections {
+  width: 66.67%;
+  max-width: 532px;
+}
+.firstTimeContainer .sections .buttons button {
+  font-family: "Google Sans";
+  border-radius: 40px;
+  border: 1px solid #f1f1f1;
+  color: var(--text-light);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  width: 42px;
+  height: 42px;
+}
+.firstTimeContainer .sections .buttons button.welcome {
+  border-radius: 40px;
+  padding: 6px 18px;
+  width: initial;
+  height: initial;
+}
+.firstTimeContainer .buttons {
+  display: flex;
+  margin-top: 24px;
+  width: 100%; /* Ensure flex container takes full width */
+}
+.firstTimeContainer .left.default .sections .buttons {
+  opacity: 0;
+  animation: fade 200ms 400ms ease-in-out forwards;
+  width: 80%;
+  margin: 0px auto;
+}
+.firstTimeContainer .left.default .sections {
+  opacity: 0;
+  animation: fade 200ms 200ms ease-in-out forwards;
+}
+.firstTimeContainer .section .headder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.firstTimeContainer .section .headder h1 {
+  font-family: "Google Flex", sans-serif;
+  margin-bottom: 42px;
+  font-weight: 500;
+}
+
+.firstTimeContainer .section .inputContainer {
+  display: flex;
+  align-items: center;
+  justify-content: left;
+  border: 1px solid var(--text-light);
+  padding: 12px 18px;
+  border-radius: 48px;
+  width: 100%;
+}
+.firstTimeContainer .section .inputContainer :global(.svg) {
+  width: 32px;
+  height: 32px;
+}
+.firstTimeContainer .section .inputContainer input {
+  font-family: "Google Flex", sans-serif;
+
+  padding: 0 12px;
+  color: var(--text-light);
+  font-size: 16px;
+  font-weight: 400;
+  flex: 1;
+  line-height: 22px;
+}
+.firstTimeContainer .section .options {
+  display: flex;
+  gap: 42px;
+}
+.firstTimeContainer .section .options .option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.firstTimeContainer .section .options .option p {
+  margin-bottom: 22px;
+}
+.firstTimeContainer .section .options .option button {
+  position: relative;
+}
+.firstTimeContainer .section .options .option button :global(.illustratior) {
+  width: 156px;
+  height: 156px;
+}
+.firstTimeContainer .section .options .option button::after {
+  position: absolute;
+  content: "";
+  width: 1px;
+  height: 1px;
+  transition: 0.2s ease-in-out;
+  z-index: -1;
+}
+.firstTimeContainer .section .options .option button.male::after {
+  background-color: #a1e5fc;
+  box-shadow: 0px 0px 60px 0px #a1e5fc;
+}
+.firstTimeContainer .section .options .option button.female::after {
+  background-color: #ffa5dc;
+  box-shadow: 0px 0px 60px 0px #ffa5dc;
+}
+.firstTimeContainer .section .options .option button.male.selected::after,
+.firstTimeContainer .section .options .option button.male:hover::after {
+  box-shadow: 0px 0px 60px 50px #a1e5fc;
+}
+.firstTimeContainer .section .options .option button.female.selected::after,
+.firstTimeContainer .section .options .option button.female:hover::after {
+  box-shadow: 0px 0px 60px 50px #ffa5dc;
+}
+.firstTimeContainer .section .gender .bottom .others p {
+  font-family: "Google Sans", sans-serif;
+  color: var(--text-light);
+  font-size: 16px;
+  margin-top: 14px;
+}
+.firstTimeContainer .section .gender .bottom .others:hover p,
+.firstTimeContainer .section .gender .bottom .others.selected p {
+  text-decoration: underline;
+}
+.firstTimeContainer .section .content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.firstTimeContainer .section .gender .options .top > div {
+  width: 50%;
+  max-width: 256px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: inherit;
+  cursor: pointer;
+}
+.firstTimeContainer .section.gender .options .top > div button {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+}
+.firstTimeContainer .section.gender .options .top > div:hover button,
+.firstTimeContainer .section.gender .options .top > div button.selected {
+  border: 2px solid var(--main-cyan);
+}
+.firstTimeContainer .section.gender .options .top > div button p {
+  color: var(--text-light);
+  font-size: 18px;
+  margin-top: 12px;
+}
+.firstTimeContainer .section.gender .options .top img {
+  width: 100%;
+  height: 100%;
+}
+.firstTimeContainer .section.gender .options .bottom {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+.firstTimeContainer .section.gender .options .bottom button {
+  color: var(--text-light);
+  font-size: 18px;
+}
+
+.firstTimeContainer .section .displayPicture .imageWrapper {
+  position: relative;
+  width: 256px;
+  height: 256px;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  margin: 0 auto;
+}
+
+.firstTimeContainer .section .displayPicture .profileImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.firstTimeContainer .section .displayPicture .overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5); /* 50% black */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  font-size: 1rem;
+}
+
+.firstTimeContainer .section .displayPicture .imageWrapper:hover .overlay {
+  opacity: 1;
+}
+.firstTimeContainer .section .info {
+  margin: 8px 0 8px;
+  color: var(--text-gray);
+  font-size: 14px;
+}
+/* Error States */
+.firstTimeContainer .section .inputContainer.error {
+  border-color: var(--text-error);
+}
+.firstTimeContainer .section .info.error {
+  color: var(--text-error);
+}
+/* This keyframe is no longer used, but can be kept for other purposes */
+@keyframes contentAnimation {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0px);
+  }
+}
+
+@keyframes move {
+  0% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(12px, -8px);
+  }
+  40% {
+    transform: translate(-8px, 4px);
+  }
+  60% {
+    transform: translate(8px, 12px);
+  }
+  80% {
+    transform: translate(-8px, -12px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+@keyframes arrowMove {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(2px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+@keyframes fade {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}

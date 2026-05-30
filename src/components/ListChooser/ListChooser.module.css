@@ -1,0 +1,55 @@
+.listItem > button {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.listItem .icon {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--text-light);
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: content-box;
+}
+.listItem .icon::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+.listItem .icon .circle {
+  display: block;
+  border-radius: 50%;
+  background-color: var(--main-cyan);
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  transform: scale(0);
+  transition: 300ms;
+}
+.listItem.active .icon .circle {
+  transform: scale(1);
+}
+.listItem .info {
+  margin-left: 12px;
+}
+.listItem .info p {
+  font-family: "Google Sans", sans-serif;
+  color: var(--text-light);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 40px;
+}
+.listItem .info p::first-letter {
+  text-transform: uppercase;
+}
+.listItem .description {
+  margin-left: 34px;
+}

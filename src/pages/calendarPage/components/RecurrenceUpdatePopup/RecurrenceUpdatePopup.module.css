@@ -1,0 +1,44 @@
+.recurrenceUpdatePopup {
+  background-color: var(--bg-color);
+  border-radius: 24px;
+  padding: 24px;
+}
+.recurrenceUpdatePopup .top {
+  margin-bottom: 16px;
+}
+.recurrenceUpdatePopup .top h3 {
+  margin-bottom: 8px;
+  font-family: "Google Sans flex", sans-serif;
+  font-weight: 500;
+  font-size: 24px;
+}
+.recurrenceUpdatePopup .middle {
+  margin-bottom: 24px;
+}
+.recurrenceUpdatePopup .middle p {
+  font-family: "Google Sans", sans-serif;
+}
+.recurrenceUpdatePopup .bottom {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.recurrenceUpdatePopup .bottom .submitButton,
+.recurrenceUpdatePopup .bottom .cancelButton {
+  font-family: "Google Sans flex", sans-serif;
+  line-height: 42px;
+  padding: 0 12px;
+  color: var(--text-light);
+  font-size: 16px;
+  border-radius: 22px;
+  font-weight: 500;
+}
+.recurrenceUpdatePopup .bottom .submitButton {
+  padding: 0 18px;
+  background-color: var(--main-cyan);
+  color: var(--text-dark);
+}
+.recurrenceUpdatePopup .bottom .submitButton.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

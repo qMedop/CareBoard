@@ -1,0 +1,24 @@
+# Production build output
+dist/
+dist-ssr/
+*.local
+
+# Dependencies
+node_modules/
+
+# Environment variables (CRITICAL - DO NOT REMOVE)
+.env
+.env.local
+.env.production
+.env.development
+
+# Firebase logs and keys
+*.log
+firebase-debug.log
+google-services.json
+
+# IDEs and editors
+.vscode/
+*.code-workspace
+.idea/
+.DS_Store

@@ -1,0 +1,1123 @@
+.calendarContainer {
+  --time-width: 48px;
+  --top-height: 84px;
+  --box-height: 52px;
+  --line-left: 8px;
+
+  --top-space: 6px;
+  --space-left: 18px;
+  --items-width: 14.28%;
+  background: #1a1e2a;
+  color: #fff;
+  background-color: var(--element-bg-color);
+  width: 100%;
+  height: 100%;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.calendarContainer.dayView {
+  --items-width: 100%;
+}
+.days {
+  display: flex;
+  width: calc(100% - 8px);
+  position: relative;
+  transition: 0.2s;
+  margin-right: 8px;
+  padding-top: 12px;
+  padding-left: var(--space-left);
+}
+.days .topLeft {
+  min-width: var(--time-width);
+  display: flex;
+  justify-content: end;
+  flex-direction: column;
+  position: relative;
+}
+.days .topLeft .globalTime p {
+  width: calc(100% - 8px);
+  font-size: 12px;
+  text-wrap: nowrap;
+  transform: translate(-6px, 0px);
+}
+.days .topLeft .border {
+  position: absolute;
+  width: 8px;
+  bottom: 0;
+  right: 0;
+  border-bottom: 1px solid var(--calender-borders);
+}
+.days .topLeft .showMore {
+  margin-top: 12px;
+  transition: 0.3s ease-in-out;
+}
+.days .topLeft .showMore svg {
+  transition: 0.3s ease-in-out;
+}
+.days .topLeft .showMore.expanded svg {
+  transform: rotate(180deg);
+}
+.days .topLeft .showMore button {
+  width: 40px;
+  height: 40px;
+}
+.days .left {
+  width: 100%;
+}
+.days .left .top {
+  display: flex;
+}
+.calendarContainer .topBottom {
+  display: flex;
+  width: 100%;
+  position: relative;
+  min-height: 8px;
+}
+.calendarContainer .topBottom .viewMoreBtn {
+  border-radius: 6px;
+  animation: fadeIn 0.3s ease-in-out;
+}
+.calendarContainer .topBottom .viewMoreBtn p {
+  color: var(--text-light);
+}
+.calendarContainer .topBottom .cell {
+  width: var(--items-width);
+  height: 100%;
+  border-left: 1px solid var(--calender-borders);
+  border-bottom: 1px solid var(--calender-borders);
+}
+.calendarContainer .linesContainer {
+  position: absolute;
+  top: 0;
+  left: calc(var(--line-left) * -1);
+  width: calc(100% + var(--line-left));
+  height: 100%;
+  pointer-events: none;
+}
+.calendarContainer .linesContainer .columnsLine {
+  width: 100%;
+  height: var(--box-height);
+  border-bottom: 1px solid var(--calender-borders);
+}
+.day {
+  width: var(--items-width);
+  height: var(--top-height);
+  position: relative;
+}
+.day .dayBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  height: 100%;
+  width: 100%;
+}
+.day .dayBlock a {
+  border-radius: 50%;
+}
+.calendarContainer.dayView .day .dayBlock {
+  align-items: start;
+  padding-left: 48px;
+}
+.day .dayBlock > p {
+  font-size: 18px;
+  color: var(--text-light);
+  font-weight: 400;
+}
+.day .dayBlock .dayText {
+  height: 42px;
+  width: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.calendarContainer .day.today .dayBlock .dayText {
+  background: var(--main-cyan);
+  box-shadow: 0px 0px 4px 2px rgba(0, 0, 0, 0.25);
+}
+.day .dayBlock .dayText p {
+  font-size: 25px;
+  color: var(--text-light);
+  font-weight: 400;
+}
+.day::before {
+  content: "";
+  position: absolute;
+  width: 1px;
+  height: 60%;
+  background-color: var(--calender-borders);
+  left: 0px;
+  bottom: calc(-1 * var(--top-space));
+}
+/* .day::after {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 1px;
+  background-color: var(--calender-borders);
+  bottom: calc(-1 * var(--top-space));
+} */
+.calendarContainer .bottom {
+  --topBottomHeight: 0px;
+  display: flex;
+  overflow: auto;
+  height: calc(
+    100% -
+      (var(--top-height) + var(--top-space) + var(--topBottomHeight) + 12px)
+  );
+  width: 100%;
+  position: relative;
+  transition: 300ms ease-in-out;
+  touch-action: pan-y;
+  overscroll-behavior-y: contain !important;
+}
+
+.calendarContainer .bottom::-webkit-scrollbar-track,
+.calendarContainer .yearLayout::-webkit-scrollbar-track {
+  background: var(--element-bg-color);
+}
+.calendarContainer .bottom::-webkit-scrollbar,
+.calendarContainer .yearLayout::-webkit-scrollbar {
+  width: 8px;
+  background: var(--element-bg-color);
+}
+.calendarContainer .bottom::-webkit-scrollbar-thumb,
+.calendarContainer .yearLayout::-webkit-scrollbar-thumb {
+  background: var(--text-gray);
+  border-radius: 4px;
+}
+.calendarContainer .time {
+  min-width: var(--time-width);
+  margin-left: var(--space-left);
+}
+.calendarContainer .time .timeBlock {
+  height: var(--box-height);
+  display: flex;
+  align-items: end;
+  transform: translateY(6px);
+}
+.calendarContainer .time .timeBlock {
+  font-size: 12px;
+  color: var(--text-light);
+  font-weight: 400;
+  /* transform: translateY(-5px); */
+}
+
+.date {
+  color: var(--text-light);
+}
+.calendarContainer .bottom .dayTasks {
+  display: flex;
+  width: 100%;
+  position: relative;
+}
+.calendarContainer .bottom .dayTasks .colums {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  height: calc(var(--box-height) * 24);
+  position: relative;
+  overflow: hidden;
+}
+.calendarContainer .bottom .dayTasks .columnContainer {
+  width: var(--items-width);
+  position: relative;
+  height: calc(var(--box-height) * 24);
+  border-left: 1px solid var(--calender-borders);
+}
+.calendarContainer .bottom .dayTasks .column {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.calendarContainer .bottom .dayTasks .column button {
+  width: 100%;
+  min-height: var(--box-height);
+  border-bottom: 1px solid var(--calender-borders);
+  border-left: 1px solid var(--calender-borders);
+  position: relative;
+}
+.calendarContainer .bottom .dayTasks .column button.firstBtn::before {
+  content: "";
+  position: absolute;
+  top: -22px;
+  left: -1px;
+  width: 1px;
+  height: 22px;
+  background-color: var(--calender-borders);
+}
+.calendarContainer .bottom .dayTasks .column.firstColumn button::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -8px;
+  width: 8px;
+  height: 1px;
+  background-color: var(--calender-borders);
+}
+/*.calendarContainer .bottom  .day .dayTasks button:first-child {
+  border-top: none;
+} */
+.calendarContainer .bottom .dayTasks .column button:last-child {
+  border-bottom: none;
+}
+/*.calendarContainer .bottom  .day .dayTasks.firstColumn button {
+  border-left: none;
+} */
+.selected .date {
+  position: relative;
+  z-index: 1;
+}
+.selected .date span {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  background: var(--main-cyan);
+  z-index: -1;
+  border-radius: 50%;
+}
+
+.navControls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 12px;
+  position: relative;
+  padding-left: 12px;
+}
+.navControls::before {
+  content: "";
+  position: absolute;
+  width: 1px;
+  height: 28px;
+  background-color: var(--text-light);
+  left: 0px;
+}
+.navControls .left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.navControls .left .currentDate {
+  display: flex;
+  gap: 6px;
+}
+.navControls .left .navButtons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.navControls .right p::first-letter {
+  text-transform: uppercase;
+}
+@media (max-width: 1000px) {
+  .navControls .left {
+    gap: 4px;
+  }
+  .navControls .right {
+    gap: 4px;
+  }
+}
+@media (max-width: 700px) {
+  .navControls::before {
+    display: none;
+  }
+  .navControls {
+    margin: 0;
+    padding: 0;
+  }
+  .navControls .left .currentDate .year {
+    display: none;
+  }
+  .navControls .left {
+    gap: 2px;
+  }
+  .navControls .left .navButtons {
+    gap: 4px;
+  }
+  .navControls .todayMobile {
+    width: 36px !important;
+    height: 36px !important;
+  }
+}
+.viewPopup {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--popup-bg-color);
+}
+.viewPopup a {
+  padding: 12px 12px;
+  display: flex;
+  justify-content: space-between;
+  min-width: 200px;
+}
+.viewPopup a p::first-letter,
+.viewPopup a span::first-letter {
+  text-transform: uppercase;
+}
+.viewPopup a span {
+  font-size: 12px;
+  opacity: 0.8;
+}
+.transitionWrapper {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+}
+.calendarContainer {
+  position: relative;
+  overflow: hidden;
+}
+.calendarContainer .monthLayout {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  border: 1px solid var(--calender-borders);
+  border-radius: 20px;
+}
+.calendarContainer .monthLayout > div {
+  display: flex;
+  width: 100%;
+  height: calc(100% - 84px);
+  position: relative;
+}
+.calendarContainer .monthLayout > div > div {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  border-right: 1px solid var(--calender-borders);
+  border-bottom: 1px solid var(--calender-borders);
+  padding-top: 8px;
+}
+.calendarContainer .monthLayout > div > div:last-child {
+  border-right: none;
+}
+.calendarContainer .monthLayout > div:last-child > div {
+  border-bottom: none;
+}
+.calendarContainer .monthLayout .dayCell .dayOfWeek {
+  font-size: 12px;
+  color: var(--text-gray);
+  margin: 0;
+  text-align: center;
+  margin-bottom: 4px;
+  line-height: 1;
+}
+.calendarContainer .monthLayout .dayCell.prev .dayButton,
+.calendarContainer .monthLayout .dayCell.next .dayButton {
+  opacity: 0.6;
+}
+.calendarContainer .monthLayout .dayCell.today .dayButton {
+  background: var(--main-cyan);
+  box-shadow: 0px 0px 4px 2px rgba(0, 0, 0, 0.25);
+}
+.calendarContainer .yearLayout {
+  height: 100%;
+  width: 100%;
+
+  overflow: hidden auto;
+}
+.calendarContainer .yearLayout .monthsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 64px;
+  height: 100%;
+  width: 100%;
+  max-width: calc(4 * 220px + 4 * 64px);
+  padding: 24px;
+  margin: 0 auto;
+  justify-items: center;
+}
+.calendarContainer .yearLayout .monthBlock {
+  color: var(--text-gray);
+}
+.calendarContainer .yearLayout .monthBlock .monthTitle {
+  font-size: 18px;
+  font-weight: 400;
+  margin-bottom: 12px;
+  padding-left: 10px;
+}
+.calendarContainer .yearLayout .monthBlock .monthGrid .weekRow {
+  display: flex;
+}
+.calendarContainer .yearLayout .monthBlock .monthGrid .weekRow .dayButton {
+  font-size: 12px;
+  width: 32px;
+  height: 32px;
+}
+.calendarContainer .yearLayout .monthBlock .monthGrid .weekRow .dayId {
+  font-size: 14px;
+  text-align: center;
+}
+.calendarContainer
+  .yearLayout
+  .monthBlock
+  .monthGrid
+  .weekRow
+  .dayCell.prev
+  .dayButton,
+.calendarContainer
+  .yearLayout
+  .monthBlock
+  .monthGrid
+  .weekRow
+  .dayCell.next
+  .dayButton {
+  opacity: 0;
+  pointer-events: none;
+}
+.calendarContainer .yearLayout .monthBlock .monthButton {
+  display: block;
+  width: fit-content;
+}
+
+.calendarContainer
+  .yearLayout
+  .monthBlock
+  .monthGrid
+  .weekRow
+  .dayCell.today
+  .dayButton {
+  background: var(--main-cyan);
+  box-shadow: 0px 0px 4px 2px rgba(0, 0, 0, 0.25);
+}
+.calendarContainer .eventBlock {
+  --bg-color: rgb(255, 212, 169);
+  background-color: var(--bg-color);
+  border-radius: 6px;
+  position: absolute;
+  user-select: none;
+  cursor: grab;
+  overflow: hidden;
+}
+
+.calendarContainer .eventBlockContainer .eventBlock {
+  cursor: pointer;
+}
+.calendarContainer .eventBlock.editing {
+  opacity: 0.6;
+  filter: brightness(0.8);
+}
+
+.calendarContainer .eventBlock:not(.dragging) {
+  width: 90%;
+}
+body:global(.dragging) .calendarContainer .eventBlock:not(.dragging),
+body:global(.resizing) .calendarContainer .eventBlock:not(.dragging) {
+  opacity: 0.6;
+}
+.calendarContainer .eventBlock.dragging {
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0px 0px 4px 2px rgba(0, 0, 0, 0.25);
+  width: 90% !important;
+  z-index: 10;
+}
+.calendarContainer .eventBlock.dragging.active {
+  opacity: 1;
+}
+.calendarContainer .eventBlock .title {
+  font-size: 12px;
+  color: var(--text-light);
+  padding: 4px 8px;
+  text-wrap: nowrap;
+  color: var(--text-dark);
+  height: calc(100% - 8px);
+}
+.calendarContainer .eventBlock .title .eventText {
+  margin-bottom: 2px;
+}
+.calendarContainer .eventBlock .resize {
+  display: block;
+  height: 8px;
+  width: 100%;
+  cursor: n-resize;
+  position: absolute;
+  z-index: 1;
+}
+.calendarContainer .topBottom {
+  transition: height 0.3s ease-in-out;
+  overflow: hidden;
+}
+.calendarContainer .topBottom .eventBlock .title {
+  display: flex;
+  gap: 6px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+.calendarContainer .topBottom .eventBlock {
+  width: 100%;
+  height: 100%;
+}
+.calendarContainer .topBottom .eventBlockContainer {
+  /* animation: eventEnter 0.3s ease-in-out; */
+}
+.calendarContainer .topBottom .eventBlockContainer.contBackward {
+  animation: eventEnterBackwardTrue 0.3s ease-in-out;
+  transform: translateX(8px);
+}
+.calendarContainer .topBottom .eventBlockContainer.contBackward .eventBlock {
+  border-radius: 0 6px 6px 0;
+}
+.calendarContainer .topBottom .eventBlockContainer.contForward .eventBlock {
+  border-radius: 6px 0 0 6px;
+}
+.calendarContainer
+  .topBottom
+  .eventBlockContainer.contForward.contBackward
+  .eventBlock {
+  border-radius: 0;
+}
+.calendarContainer
+  .topBottom
+  .eventBlockContainer.editing.contBackward
+  .backWard {
+  opacity: 0.6;
+  filter: brightness(0.8);
+}
+.calendarContainer
+  .topBottom
+  .eventBlockContainer.editing.contForward
+  .forWard {
+  opacity: 0.6;
+  filter: brightness(0.8);
+}
+.calendarContainer .eventBlock .emojiBg {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  transform: rotate(0deg);
+  font-size: 200%;
+  opacity: 0.4;
+  pointer-events: none;
+  transform-origin: center center;
+  z-index: -1;
+}
+.calendarContainer .eventBlock .icons {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  z-index: -1;
+  pointer-events: none;
+  display: flex;
+  gap: 2px;
+  align-items: end;
+}
+.calendarContainer .eventBlock .icons :global(.svg) {
+  width: 16px;
+  height: 16px;
+}
+.calendarContainer .eventBlock .recurrenceIcon :global(.svg) path {
+  fill: rgba(0, 0, 0, 0.6);
+}
+.calendarContainer .eventBlock .privateIcon :global(.svg) path {
+  stroke: rgba(0, 0, 0, 0.6);
+}
+.calendarContainer .eventBlock .icons .sharedPfp img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+.calendarContainer .topBottom .eventBlockContainer.contForward.contBackward {
+  border-radius: 0;
+  width: 97% !important;
+}
+.calendarContainer .topBottom .eventBlockContainer.contBackward .backWard {
+  position: absolute;
+  top: 50%;
+  left: -6px;
+  border-left-width: 0px;
+  border-right-width: 6px;
+  border-top-width: 9px;
+  border-bottom-width: 9px;
+  border-style: solid;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-color: transparent;
+  border-right-color: var(--bg-color);
+  z-index: 1;
+}
+.calendarContainer .topBottom .eventBlockContainer.contForward .forWard {
+  position: absolute;
+  top: 50%;
+  right: -6px;
+  border-right-color: var(--bg-color);
+  border-left-width: 6px;
+  border-right-width: 0px;
+  border-top-width: 9px;
+  border-bottom-width: 9px;
+  border-style: solid;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-color: transparent;
+  z-index: 1;
+}
+
+@keyframes eventEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes eventEnterBackwardTrue {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0px) translateX(8px);
+  }
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* CalendarPage.module.css */
+
+.recurrenceUpdatePopup {
+  background-color: var(--popup-bg-color);
+  padding: 16px;
+  border-radius: 12px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--text-light);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.recurrenceUpdatePopup h3 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.recurrenceUpdatePopup .optionsList {
+  display: flex;
+  flex-direction: column;
+}
+
+.recurrenceUpdatePopup .optionsList button {
+  padding: 12px;
+  width: 100%;
+  text-align: left;
+}
+
+.recurrenceUpdatePopup .optionsList button:hover {
+  background-color: var(--element-bg-color);
+}
+
+.recurrenceUpdatePopup .actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.calendarContainer .monthLayout .monthEvent {
+  position: absolute;
+  height: 20px;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--text-dark);
+  z-index: 5;
+  border-radius: 4px;
+}
+.calendarContainer .monthLayout .moreButton {
+  color: var(--text-light);
+}
+.calendarContainer .monthLayout .monthEvent span {
+  color: var(--text-dark);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.calendarContainer .monthLayout .monthEventContainer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.calendarContainer .monthLayout .monthEvent.editing {
+  box-shadow: 0px 0px 8px 1px #000000b5;
+}
+.calendarContainer .monthLayout .multiDayMonthEvent {
+  height: 100%;
+  border-radius: 4px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.calendarContainer .monthLayout .monthDayEvent {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+}
+.calendarContainer .monthLayout .monthDayEvent .circle {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.calendarContainer .monthLayout .monthDayEvent span {
+  font-size: 12px;
+  font-weight: 500;
+}
+.calendarContainer .monthLayout .monthDayEvent span.monthEventTitle {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  margin-left: 4px;
+}
+.daysPopup {
+  position: fixed;
+  z-index: 1000;
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+}
+.daysPopup .navButtons {
+  position: absolute;
+  z-index: 110;
+  width: 48px;
+  height: 48px;
+  background-color: rgba(0, 0, 0, 0.4);
+}
+.daysPopup .navButtons.prev {
+  left: 5%;
+}
+.daysPopup .navButtons.prev svg path {
+  stroke: #f1f1f1;
+}
+.daysPopup .navButtons.next {
+  right: 5%;
+}
+.daysPopup .navButtons.next svg path {
+  stroke: #f1f1f1;
+}
+.daysPopup .daysContainer {
+  position: relative;
+  height: 80%;
+  width: 100%;
+  max-height: 600px;
+}
+.daysPopup .daysContainer .dayCard {
+  position: absolute;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  width: 30%;
+  height: 100%;
+  top: 0;
+  left: 50%;
+  background-color: #181a26;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  max-width: 500px;
+  min-width: 300px;
+}
+
+/* CalendarPage.module.css - ADD TO BOTTOM */
+
+/* Filter Button */
+.right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.filterButtonContainer {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 20px;
+  background-color: rgba(255, 255, 255, 0.05);
+  transition: background-color 0.2s;
+  padding-left: 12px;
+}
+
+.filterButtonContainer:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.filterAvatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--bg-color);
+  margin-left: -8px; /* Creates the overlapping effect */
+  background-color: var(--element-bg-color);
+}
+
+.filterAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.filterMore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--text-light);
+  background-color: var(--calender-borders);
+}
+
+/* Filter Popup */
+.filterPopup {
+  background-color: var(--popup-bg-color);
+  border-radius: 20px;
+  padding: 20px;
+  width: 340px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.filterHeader {
+  margin-bottom: 16px;
+}
+
+.filterHeader h3 {
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-light);
+  margin: 0;
+}
+
+.filterBody {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+
+/* Custom Scrollbar for the filter body */
+.filterBody::-webkit-scrollbar {
+  width: 6px;
+}
+.filterBody::-webkit-scrollbar-track {
+  background: transparent;
+}
+.filterBody::-webkit-scrollbar-thumb {
+  background-color: var(--text-gray);
+  border-radius: 10px;
+}
+
+.filterFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid var(--calender-borders);
+  padding-top: 16px;
+}
+
+.filterFooter button {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 500;
+  color: var(--text-light);
+}
+
+.filterFooter button:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.filterFooter button.primary {
+  background-color: var(--main-cyan);
+  color: var(--text-dark);
+}
+
+.filterFooter button.primary:hover {
+  background-color: rgba(50, 230, 226, 0.8);
+}
+
+/* cite: uploaded:src/pages/calendarPage/CalendarPage.module.css */
+.currentHour {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+  z-index: 5;
+  height: 2px;
+  background-color: #fe7437;
+}
+
+/* Optional styling to add a nice circle anchor indicator at the start of the line */
+.currentHour::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -6px;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #fe7437;
+}
+
+/* START MOBILE CSS */
+body:global(.mobile) {
+  .calendarContainer {
+    --time-width: 16px;
+    --top-height: 72px;
+    --box-height: 64px;
+    --line-left: 0px;
+    --top-space: 6px;
+    --space-left: 4px;
+    --items-width: 14.28%;
+    background-color: transparent;
+  }
+  .calendarContainer .bottom::-webkit-scrollbar,
+  .calendarContainer .yearLayout::-webkit-scrollbar {
+    width: 0px;
+  }
+
+  .days {
+    width: 100%;
+    padding-left: 0px;
+  }
+  .days .left,
+  .dayTasks {
+    margin-right: var(--space-left);
+  }
+
+  .day .dayName {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    border-bottom: 1px solid var(--calender-borders);
+    padding-bottom: 4px;
+  }
+  .day::before {
+    display: none;
+  }
+  .day .dayBlock {
+    gap: 6px;
+  }
+  .calendarContainer .time .timeBlock {
+    display: flex;
+    flex-direction: column;
+    align-items: end;
+    padding-right: 4px;
+    transform: translate(0, 0);
+    justify-content: end;
+  }
+  .calendarContainer .time .timeBlock span {
+    font-size: 10px;
+  }
+  .calendarContainer .time .timeBlock {
+    transform: translateY(20px);
+  }
+  .days .topLeft {
+    max-width: calc(var(--time-width) + var(--space-left));
+    min-width: calc(var(--time-width) + var(--space-left));
+  }
+  .calendarContainer .time {
+    max-width: calc(var(--time-width));
+    min-width: calc(var(--time-width));
+  }
+  .days .topLeft .globalTime p {
+    display: flex;
+    flex-direction: column;
+    align-items: end;
+    width: initial;
+    transform: translate(0, 0);
+    margin-right: 4px;
+  }
+  .day .dayBlock p {
+    font-size: 14px;
+  }
+  .day .dayBlock .dayText {
+    width: 32px;
+    height: 32px;
+  }
+  .navControls::before {
+    display: none;
+  }
+  .todayMobile {
+    padding: 4px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+  }
+
+  .calendarContainer .bottom {
+    --topBottomHeight: 0px;
+    height: calc(
+      100% -
+        (var(--top-height) + var(--top-space) + var(--topBottomHeight) + 54px)
+    );
+  }
+  .mobileTop {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin: 4px 0 16px 0;
+    font-size: 16px;
+  }
+  .calendarContainer .eventBlock {
+  }
+  .calendarContainer .eventBlock .title {
+    font-size: 10px;
+    padding: 4px;
+  }
+  .currentHour {
+    height: 1px;
+  }
+
+  /* Optional styling to add a nice circle anchor indicator at the start of the line */
+  .currentHour::before {
+    width: 8px;
+    height: 8px;
+    left: -4px;
+  }
+  /* WeekView */
+}
+
+.eventBlock.dragging {
+  touch-action: none !important;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* END MOBILE CSS */

@@ -1,0 +1,25 @@
+.popup {
+  background: var(--popup-bg-color);
+  padding: 16px;
+  border-radius: 16px;
+}
+.popup .message {
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+}
+.popup .buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 16px;
+}
+.popup .buttons button {
+  --bg-click-effect: rgba(37, 108, 232, 0.1);
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: #a8c7fa;
+  padding: 8px 12px;
+  border-radius: 16px;
+}

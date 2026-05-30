@@ -1,0 +1,140 @@
+:global(.page-content.notes) {
+  padding: 0 22px;
+  width: calc(
+    100% - calc(var(--side-nav-width) + var(--page-content-margin) + 8px)
+  );
+  left: calc(var(--side-nav-width) + var(--page-content-margin) + 8px);
+  height: calc(
+    100% -
+      (
+        var(--top-nav-height) + (var(--side-nav-margin) * 2) +
+          (var(--page-content-margin))
+      )
+  );
+}
+.notesPageContainer {
+}
+
+.notesPageContainer .notesSection {
+  margin-bottom: 16px;
+}
+
+.notesPageContainer .sectionTitle {
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.notesPageContainer .notesGrid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.notesPageContainer .noteCard {
+  padding: 16px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  height: fit-content;
+  width: fit-content;
+  max-width: 100%;
+}
+.notesPageContainer .noteCard .noteTitle {
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: var(--text-light);
+}
+.notesPageContainer .noteCard .noteContent {
+  font-family: "Google Sans", sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-light);
+  word-wrap: break-word;
+}
+.notesPageContainer .noteCard .noteContent .field:not(:last-child) {
+  margin-bottom: 4px;
+}
+.notesPageContainer .noteCard .noteContent .fieldKey {
+  font-family: "Google Sans Flex", sans-serif;
+}
+.notesPageContainer .noteCard .noteContent .fieldseperator {
+  margin: 0 4px 0 2px;
+}
+.noteEditing {
+  font-family: "Google Sans", sans-serif;
+
+  color: var(--text-light);
+  border-radius: 8px;
+  padding: 16px;
+  width: 95%;
+  max-width: 600px;
+  min-width: 600px;
+}
+.noteEditing .top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.noteEditing .top .title {
+  flex: 1;
+}
+.noteEditing .top .title .textInput {
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 20px;
+  line-height: 24px;
+  width: 100%;
+}
+.noteEditing .top .pinButton {
+  --bg-click-effect: rgba(255, 255, 255, 0.1);
+  width: 38px;
+  height: 38px;
+}
+.noteEditing .bottom {
+  padding: 16px 0;
+}
+
+.noteEditing .lastEdited {
+  font-size: 12px;
+  opacity: 0.8;
+  padding: 10px 0;
+  display: flex;
+  justify-content: flex-end;
+}
+.noteEditing .options,
+.noteEditing .options .left,
+.noteEditing .options .undoRedo {
+  display: flex;
+  align-items: center;
+}
+.noteEditing .options .left {
+  flex: 1;
+}
+.noteEditing .options button {
+  --bg-click-effect: rgba(255, 255, 255, 0.1);
+
+  width: 34px;
+  height: 34px;
+  margin: 0 4px;
+}
+.noteEditing .options button :global(.svg) {
+  width: 18px;
+  height: 18px;
+}
+.noteEditing .options .left > div:last-child {
+  margin-left: 12px;
+}
+.noteEditing .options .close button {
+  color: var(--text-light);
+  font-size: 14px;
+  font-family: "Google Sans Flex", sans-serif;
+  white-space: nowrap;
+  height: 36px;
+  padding: 8px 24px;
+  border-radius: 4px;
+}

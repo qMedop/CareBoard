@@ -1,0 +1,130 @@
+.infoPopup {
+  background-color: var(--popup-bg-color, #1a1e2a);
+  border-radius: 20px;
+  padding: 12px 18px;
+  font-family: "Google Sans", sans-serif;
+  display: flex;
+  flex-direction: column;
+  width: 70%;
+  min-width: 240px;
+  max-width: 300px;
+}
+
+.header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+  padding: 2px 0;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+}
+
+.header .actions > button {
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iconBtn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.titleRow {
+  display: flex;
+  gap: 18px;
+}
+.colorContainer {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: start;
+  justify-content: center;
+  transform: translateY(5px);
+}
+.colorIndicator {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+}
+
+.titleContainer {
+  display: flex;
+  flex-direction: column;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 500;
+  margin: 0;
+}
+.titleContainer > p {
+  font-size: 14px;
+}
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.details > div {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.details > div p {
+  font-size: 14px;
+  text-transform: capitalize;
+}
+
+.descriptionRow {
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--text-light, #fff);
+  opacity: 0.8;
+  line-height: 1.5;
+}
+.sharedPfp img {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+
+/* mobile */
+@media (max-width: 768px) {
+  .infoPopup {
+    padding: 14px 8px;
+  }
+  .titleRow,
+  .details > div {
+    gap: 8px;
+  }
+  .title {
+    font-size: 18px;
+  }
+  .titleContainer > p {
+    font-size: 12px;
+  }
+  .descriptionRow {
+    font-size: 12px;
+  }
+  .details > div p {
+    font-size: 12px;
+  }
+  .header {
+    margin-bottom: 8px;
+  }
+}

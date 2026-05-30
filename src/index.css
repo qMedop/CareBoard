@@ -1,0 +1,182 @@
+@font-face {
+  font-family: "Google Sans Flex";
+  src: url("./assets/fonts/google-sans-flex.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Google Sans";
+  src: url("./assets/fonts/google-sans-thin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Merienda";
+  src: url("./assets/fonts/Merienda-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JotiOne";
+  src: url("./assets/fonts/JotiOne-Regular.woff2") format("woff2");
+}
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  list-style: none;
+  text-decoration: none;
+}
+
+:root {
+  --top-nav-height: 48px;
+  --side-nav-width: 64px;
+  --side-nav-margin: 12px;
+  --bg-color: #181a26;
+  --element-bg-color: #282c40;
+  --text-light: #f1f1f1;
+  --text-dark: #000;
+  --text-gray: #c4c7c5;
+  --calender-borders: #474747;
+  --icons-fill: #f1f1f1;
+  --main-cyan: #32e6e2;
+  --less-cyan: #00bcd4;
+  --blue: #1badff;
+  --text-error: #fd7069;
+  --bg-gray: #bababa;
+  --page-content-margin: 8px;
+  --popup-bg-color: #1a2332;
+  --popup-bg-color-light: #303550;
+}
+body {
+  font-family: "Google Sans", sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-light);
+}
+body.dragging {
+  user-select: none;
+  cursor: grabbing;
+}
+body.resizing {
+  user-select: none;
+  cursor: n-resize;
+}
+body.popup-dragging {
+  user-select: none;
+  cursor: move;
+}
+svg {
+  width: 100%;
+  height: 100%;
+}
+input {
+  background-color: transparent;
+  outline: none;
+  border: none;
+}
+.svg {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 32px;
+  width: 32px;
+}
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  outline: none;
+}
+button .svg,
+button svg,
+a .svg,
+a svg {
+  pointer-events: none;
+}
+a {
+  color: var(--text-light);
+}
+.shadow-effect {
+  box-shadow:
+    0 1px 3px 0 rgba(0, 0, 0, 0.6),
+    0 4px 8px 3px rgba(0, 0, 0, 0.3);
+}
+.page-content {
+  position: fixed;
+  width: calc(
+    100% -
+      (
+        var(--side-nav-width) + (var(--side-nav-margin) * 2) +
+          ((var(--page-content-margin) * 2) + (var(--page-content-margin) / 2))
+      )
+  );
+  top: calc(
+    var(--top-nav-height) + (var(--side-nav-margin) * 2) +
+      var(--page-content-margin)
+  );
+  left: calc(
+    var(--side-nav-width) + (var(--side-nav-margin) * 2) +
+      var(--page-content-margin)
+  );
+  height: calc(
+    100% -
+      (
+        var(--top-nav-height) + (var(--side-nav-margin) * 2) +
+          (var(--page-content-margin) * 2) + (var(--page-content-margin) / 2)
+      )
+  );
+  overflow: auto;
+}
+.box-shadow {
+  box-shadow: 0px 2px 4px 2px rgba(0, 0, 0, 0.25);
+}
+.default-scrollbar::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+  background-color: var(--text-light);
+  border-bottom: 1px solid var(--text-light);
+}
+.default-scrollbar::-webkit-scrollbar-track {
+  background: var(--element-bg-color);
+}
+.default-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  background: var(--element-bg-color);
+}
+.default-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--text-gray);
+  border-radius: 4px;
+}
+.loadingIcon {
+  transform-origin: center center;
+  animation: loadingIconAnim 3s linear infinite;
+}
+@keyframes loadingIconAnim {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (max-width: 1000px) {
+  .page-content {
+    width: calc(
+      100% -
+        ((var(--page-content-margin) * 2) + (var(--page-content-margin) / 2))
+    );
+    left: calc(var(--page-content-margin));
+  }
+}
+@media (max-width: 700px) {
+  .svg {
+    height: 24px;
+    width: 24px;
+  }
+}
+
+/* START MOBILE CSS */
+body.mobile {
+  --mobile-margin: 6px;
+  .page-content {
+    width: 100%;
+    left: 0;
+    height: calc(100% - (var(--top-nav-height)));
+    top: calc(var(--top-nav-height) + var(--mobile-margin));
+  }
+}
+/* END MOBILE CSS */

@@ -1,0 +1,893 @@
+.addEditEvent {
+  --cyan: rgba(50, 230, 226, 0.5);
+  --left-gap: 36px;
+  min-width: 300px;
+  height: 100%;
+  background-color: var(--popup-bg-color);
+  width: 512px;
+  position: relative; /* Ensure overlay sits on top */
+}
+.addEditEvent p {
+  font-family: "Google Sans Flex", Arial, sans-serif;
+}
+.addEditEvent .content {
+  overflow: hidden auto;
+  height: calc(100% - 54px);
+  padding: 18px;
+}
+.addEditEvent .content::-webkit-scrollbar,
+.addEditEvent .content::-webkit-scrollbar-track {
+  background-color: var(--popup-bg-color);
+}
+
+.addEditEvent .top {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--popup-bg-color);
+}
+.addEditEvent .top .title {
+  margin-bottom: 16px;
+  width: 100%;
+}
+.addEditEvent .inputContainer {
+  position: relative;
+}
+.addEditEvent .inputContainer input::placeholder {
+  color: var(--text-gray);
+}
+.addEditEvent .inputContainer::after {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 1px;
+  background-color: var(--text-gray);
+  bottom: -2px;
+  left: 0;
+}
+.addEditEvent .inputContainer:focus-within:after {
+  height: 3px;
+  background-color: var(--cyan);
+}
+
+.addEditEvent .inputContainer input {
+  margin-bottom: 4px;
+  color: var(--text-light);
+  font-size: 22px;
+  caret-color: var(--cyan);
+  width: 100%;
+}
+.addEditEvent .top .eventType {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.addEditEvent .top .eventType button {
+  font-size: 14px;
+  color: var(--text-light);
+  line-height: 36px;
+  padding: 0 8px;
+  border-radius: 8px;
+  transition: 0.2s;
+}
+.addEditEvent .top .eventType button:not(.activeTab):hover {
+  background-color: rgba(40, 44, 64, 0.6);
+}
+.addEditEvent .top .eventType button.activeTab {
+  background-color: var(--main-cyan);
+  color: var(--text-dark);
+  transition: color 300ms;
+}
+
+.addEditEvent .bottom {
+  display: flex;
+  flex-direction: column;
+}
+.addEditEvent .bottom > div {
+  padding-top: 16px;
+}
+.addEditEvent .bottom > div.detailsContainter {
+  margin-bottom: 16px;
+}
+.addEditEvent .bottom > div .headder h1 {
+  font-family: "Google Sans Flex", Arial, sans-serif;
+  font-size: 18px;
+  color: var(--text-light);
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+.addEditEvent .bottom .timeContainter .contContnet,
+.addEditEvent .bottom .timeContainter .contContnet .time,
+.addEditEvent .bottom .timeContainter .contContnet .date,
+.addEditEvent .bottom .timeContainter .contContnet .right {
+  display: flex;
+  align-items: center;
+}
+.addEditEvent .bottom .timeContainter .contContnet {
+  justify-content: space-between;
+  gap: 8px;
+}
+.addEditEvent .bottom .timeContainter .contContnet .right {
+  flex: 1;
+  gap: 8px;
+}
+.addEditEvent .bottom .timeContainter .contContnet .time {
+  position: relative;
+  flex: 1;
+}
+.addEditEvent
+  .bottom
+  .timeContainter
+  .contContnet:not(.expanded)
+  .time
+  > div:not(.line) {
+  width: 50%;
+}
+.addEditEvent .bottom .detailsContainter .contContnet {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.addEditEvent .bottom .contContnet > div.date {
+  width: 50%;
+}
+.addEditEvent .bottom .contContnet > div.time {
+  width: calc(50% - 8px - 40px);
+}
+.addEditEvent .bottom .contContnet > div.time > div {
+  width: calc(100% - 8px - 40px);
+}
+.addEditEvent .bottom .contContnet > div button {
+  background-color: var(--element-bg-color);
+  padding: 4px 8px;
+  border-radius: 24px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.addEditEvent .bottom .contContnet > div.date button {
+  justify-content: start;
+}
+.addEditEvent .bottom .timeContainter .contContnet > div button {
+  padding: 4px 8px;
+}
+.addEditEvent .bottom .contContnet > div button :global(.arrow) {
+  margin-left: auto;
+}
+.addEditEvent .bottom > div .icon {
+  margin-right: 12px;
+}
+.addEditEvent .bottom > div .icon :global(.svg) {
+  width: 24px;
+  height: 24px;
+}
+.addEditEvent .bottom .timeContainter > div .icon :global(.svg) {
+  width: 20px;
+  height: 20px;
+}
+.addEditEvent .bottom > div .emoji .icon {
+  font-size: 18px;
+}
+.addEditEvent .bottom > div .icon span {
+  display: block;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  transition: 0.3s;
+}
+.addEditEvent .bottom > div p {
+  font-size: 14px;
+  line-height: 32px;
+  color: var(--text-light);
+}
+.addEditEvent .bottom .timeContainter > div p {
+  line-height: 32px;
+}
+.addEditEvent .bottom .timeContainter > div .time .line {
+  background-color: var(--text-light);
+  height: 2px;
+  width: 12px;
+  margin: 0 4px;
+}
+.addEditEvent .bottom .timeContainter > div .options button {
+  padding: 6px;
+  width: 40px;
+  height: 40px;
+}
+.addEditEvent .bottom .timeContainter > div .options button :global(.svg) {
+  width: 24px;
+  height: 24px;
+}
+.addEditEvent .bottom .timeContainter > div .options button .icon {
+  margin: 0;
+}
+.addEditEvent .bottom .timeContainter .contContnet.expanded {
+  flex-direction: column;
+}
+.addEditEvent .bottom .timeContainter .contContnet.expanded .date {
+  width: 100%;
+  gap: 8px;
+}
+.addEditEvent .bottom .timeContainter .contContnet.expanded .more {
+  width: 100%;
+  height: 40px;
+  position: relative;
+  justify-content: center;
+}
+.addEditEvent .bottom .timeContainter .contContnet.expanded .more .fullDay {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  background-color: var(--element-bg-color);
+  padding: 2px 8px 2px 2px;
+  border-radius: 24px;
+}
+.addEditEvent .bottom .timeContainter .contContnet.expanded .time {
+  justify-content: center;
+}
+.addEditEvent .bottom > div span {
+  font-family: "Google Sans Flex", Arial, sans-serif;
+  font-size: 14px;
+  color: var(--text-light);
+  text-wrap: nowrap;
+}
+.addEditEvent .bottom > div span::first-letter {
+  text-transform: uppercase;
+}
+.addEditEvent .bottom > div .left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.addEditEvent .bottom > div.description {
+  position: relative;
+  border-top: 1px solid var(--calender-borders);
+}
+.addEditEvent .bottom > div.description .line {
+  height: 1px;
+  width: calc(100% - 8px);
+  background-color: var(--text-gray);
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.addEditEvent .bottom > div.description button {
+  width: 100%;
+  display: flex;
+  justify-content: start;
+  padding: 4px 8px;
+  background-color: var(--element-bg-color);
+  border-radius: 24px;
+}
+.addEditEvent .submit {
+  display: flex;
+  justify-content: end;
+  padding: 0px 18px 8px;
+}
+.addEditEvent .submit button {
+  line-height: 42px;
+  padding: 0 12px;
+  background-color: var(--main-cyan);
+  color: var(--text-dark);
+  font-size: 16px;
+  border-radius: 22px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.colorPickerPopup,
+.emojiPopup {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 8px;
+  padding: 0px 8px;
+}
+.colorPickerPopup span {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+.optionsPopup {
+  display: flex;
+  flex-direction: column;
+}
+.optionsPopup button {
+  padding: 12px 12px;
+  display: flex;
+  justify-content: space-between;
+  min-width: 200px;
+  color: var(--text-light);
+}
+.optionsPopup button p::first-letter {
+  text-transform: uppercase;
+}
+
+.timeRangePopup {
+  display: flex;
+  gap: 12px;
+}
+.timeRangePopup .row {
+  background-color: #1a1e2a;
+  padding: 6px;
+}
+.timeRangePopup .row {
+}
+.timeRangePopup .row input {
+  color: var(--text-light);
+  width: 52px;
+}
+.timeRangePopup .row button {
+  color: var(--text-light);
+}
+.addEventPopup {
+  background-color: var(--popup-bg-color);
+}
+
+/* Floating Tabs */
+
+.placeholderForm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: var(--text-gray);
+}
+
+/* Improved Color Picker Hover */
+.colorOptionWrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+}
+
+.colorOptionWrapper .colorDot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  position: relative;
+  z-index: 2;
+}
+
+.colorOptionWrapper .colorHover {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1;
+}
+
+.colorOptionWrapper:hover .colorHover {
+  opacity: 0.4;
+  transform: scale(1);
+}
+
+.timeListPopup {
+  background-color: var(--popup-bg-color);
+  max-height: calc(38px * 5);
+  width: 180px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  overflow-y: auto;
+}
+
+.timeListPopup::-webkit-scrollbar {
+  width: 6px;
+}
+
+.timeBtn {
+  font-family: "Google sans Flex", Arial, sans-serif;
+  background: none;
+  border: none;
+  color: var(--text-light);
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+}
+
+.highlightedTime {
+  background-color: var(--element-bg-color);
+}
+
+.selectedTime {
+  background-color: var(--main-cyan);
+  color: var(--text-dark);
+}
+
+.checkIcon {
+  font-size: 12px;
+  color: var(--main-cyan);
+}
+
+.descriptionButton {
+  background: none;
+  border: none;
+  text-align: left;
+  width: 100%;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-light);
+}
+
+.descriptionText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.placeholder .descriptionText {
+  color: var(--text-gray);
+}
+
+.descriptionPopup {
+  background-color: var(--popup-bg-color);
+  padding: 16px;
+  border-radius: 12px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.descriptionTextarea {
+  width: 100%;
+  min-height: 100px;
+  background-color: var(--element-bg-color);
+  border: 1px solid var(--calender-borders);
+  border-radius: 8px;
+  color: var(--text-light);
+  padding: 12px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.descriptionTextarea:focus {
+  border-color: var(--main-cyan);
+}
+
+.descriptionActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.descriptionActions button {
+  background-color: var(--main-cyan);
+  color: var(--text-light);
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+/* RECURRENCE */
+.customRecurrencePopup {
+  background-color: var(--popup-bg-color);
+  padding: 16px;
+  border-radius: 12px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--text-light);
+}
+
+.crHeader h2 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.crRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.crRowVertical {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.crRow label,
+.crRowVertical label {
+  font-size: 14px;
+  color: var(--text-light);
+}
+
+.crIntervalInputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.crNumberInput {
+  background: var(--element-bg-color);
+  border: 1px solid var(--calender-borders);
+  color: var(--text-light);
+  border-radius: 4px;
+  padding: 4px 8px;
+  width: 60px;
+}
+.crNumberInputSmall {
+  background: var(--element-bg-color);
+  border: 1px solid var(--calender-borders);
+  color: var(--text-light);
+  border-radius: 4px;
+  padding: 4px 8px;
+  width: 50px;
+  margin: 0 8px;
+}
+.crSelect {
+  background: var(--element-bg-color);
+  border: 1px solid var(--calender-borders);
+  color: var(--text-light);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+.crWeekDays {
+  display: flex;
+  gap: 8px;
+}
+.crDayBtn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--calender-borders);
+  background: none;
+  color: var(--text-gray);
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.crDayBtn.active {
+  background-color: var(--main-cyan);
+  color: var(--text-dark);
+  border-color: var(--main-cyan);
+}
+
+.crRadioGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.crRadioRow {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+}
+.crRadioRow input[type="radio"] {
+  margin-right: 8px;
+}
+
+.crDateInput {
+  background: var(--element-bg-color);
+  border: 1px solid var(--calender-borders);
+  color: var(--text-light);
+  border-radius: 4px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+.crActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* LOADING OVERLAY */
+.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(26, 30, 42, 0.85); /* Matches calendar dark theme */
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.spinnerContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(50, 230, 226, 0.1);
+  border-left-color: var(--main-cyan);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.statusText {
+  color: var(--text-light);
+  font-size: 14px;
+  font-weight: 500;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.successIcon {
+  color: var(--main-cyan);
+  font-size: 48px;
+  animation: scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes scaleUp {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* ADD TO BOTTOM OF FILE */
+
+.divider {
+  height: 1px;
+  width: 100%;
+  background-color: var(--calender-borders);
+  margin: 6px 0;
+}
+
+.activeVis p {
+  color: var(--main-cyan);
+}
+
+.onlyShareWith {
+  padding: 10px 12px;
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: background-color 0.2s;
+}
+
+.onlyShareWith p {
+  font-size: 14px;
+  color: var(--text-light);
+  margin: 0;
+}
+
+.onlyShareWith:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.avatarsRow {
+  display: flex;
+  align-items: center;
+}
+
+.avatarsRow img {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--popup-bg-color);
+  margin-left: -8px;
+  object-fit: cover;
+}
+
+.avatarsRow img:first-child {
+  margin-left: 0;
+}
+
+.moreAvatars {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--popup-bg-color);
+  margin-left: -8px;
+  background-color: var(--element-bg-color);
+  color: var(--text-light);
+  font-size: 10px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Specific Friends Centered Filter Popup */
+.filterPopup {
+  background-color: var(--popup-bg-color);
+  border-radius: 20px;
+  padding: 20px;
+  width: 340px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.filterHeader {
+  margin-bottom: 16px;
+}
+
+.filterHeader h3 {
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-light);
+  margin: 0;
+}
+
+.filterBody {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+
+.filterBody::-webkit-scrollbar {
+  width: 6px;
+}
+.filterBody::-webkit-scrollbar-track {
+  background: transparent;
+}
+.filterBody::-webkit-scrollbar-thumb {
+  background-color: var(--text-gray);
+  border-radius: 10px;
+}
+
+.filterFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid var(--calender-borders);
+  padding-top: 16px;
+}
+
+.filterFooter button {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 500;
+  color: var(--text-light);
+}
+
+.filterFooter button:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.filterFooter button.primary {
+  background-color: var(--main-cyan);
+  color: var(--text-dark);
+}
+
+/* Mobile View */
+body:global(.mobile) {
+  .addEditEvent {
+    width: 100dvw;
+    height: 100dvh;
+    border-radius: 0;
+  }
+  .addEditEvent .content {
+    padding: 12px;
+    height: calc(100% - (54px + 48px));
+  }
+  .mobileOnly {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .mobileOnly button {
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    margin: 4px;
+    padding: 4px;
+    box-sizing: content-box;
+  }
+
+  .addEditEvent .bottom .detailsContainter .contContnet {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .addEditEvent .bottom .contContnet > div button {
+    padding: 4px 8px;
+    border-radius: 24px;
+    height: 42px;
+  }
+  .addEditEvent .bottom > div .icon :global(.svg) {
+    width: 26px;
+    height: 26px;
+  }
+  .addEditEvent .bottom > div .icon span {
+    width: 22px;
+    height: 22px;
+    margin: 0 1px 0 2px;
+  }
+  .addEditEvent .bottom > div .emoji .icon {
+    font-size: 18px;
+    text-wrap: nowrap;
+    margin: 0 14px 0 2px;
+  }
+  .addEditEvent .content::-webkit-scrollbar {
+    display: none;
+  }
+  @media (max-width: 420px) {
+    .addEditEvent .contContnet {
+      flex-direction: column;
+      position: relative;
+    }
+    .addEditEvent .contContnet .date {
+      width: 100%;
+      flex-direction: column;
+    }
+    .addEditEvent .bottom .timeContainter .contContnet.expanded .more .fullDay {
+      position: initial;
+      transform: none;
+    }
+    .addEditEvent .bottom .timeContainter .contContnet .more {
+      display: flex;
+      justify-content: space-between;
+    }
+    .addEditEvent .bottom .timeContainter .contContnet .time {
+      flex: initial;
+    }
+    .addEditEvent .contContnet .options {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+    }
+  }
+}
