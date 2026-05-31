@@ -44,30 +44,45 @@ function SideNav() {
         </div>
         <div className={styles.menuItems}>
           <div>
-            <NavLink to="/">
+            <CustomButton
+              link={true}
+              href={"/"}
+              ClickEffect={isMobile ? "scale" : false}
+            >
               <HomeIcon active={activePage === "/"} />
-            </NavLink>
+            </CustomButton>
           </div>
           <div>
-            <NavLink to="/calendar">
+            <CustomButton
+              link={true}
+              href={"/calendar"}
+              ClickEffect={isMobile ? "scale" : false}
+            >
               <CalendarIcon active={activePage.startsWith("/calendar")} />
-            </NavLink>
+            </CustomButton>
           </div>
           <div>
-            <NavLink to="/to-do">
+            <CustomButton
+              link={true}
+              href={"/to-do"}
+              ClickEffect={isMobile ? "scale" : false}
+            >
               <ToDoIcon active={activePage.startsWith("/to-do")} />
-            </NavLink>
+            </CustomButton>
           </div>
           <div>
-            <NavLink to="/notes">
+            <CustomButton
+              link={true}
+              href={"/notes"}
+              ClickEffect={isMobile ? "scale" : false}
+            >
               <NoteIcon active={activePage.startsWith("/notes")} />
-            </NavLink>
+            </CustomButton>
           </div>
           {isMobile && (
             <div>
               <CustomButton
-                ClickEffect={false}
-                className="default"
+                ClickEffect={"scale"}
                 onClick={(e) => {
                   openMobileMenu(e);
                 }}
@@ -79,19 +94,31 @@ function SideNav() {
           {!isMobile && (
             <>
               <div>
-                <NavLink to="/games">
+                <CustomButton
+                  link={true}
+                  href={"/games"}
+                  ClickEffect={isMobile ? "scale" : false}
+                >
                   <GameIcon active={activePage.startsWith("/games")} />
-                </NavLink>
+                </CustomButton>
               </div>
               <div>
-                <NavLink to="/time">
+                <CustomButton
+                  link={true}
+                  href={"/time"}
+                  ClickEffect={isMobile ? "scale" : false}
+                >
                   <TimekIcon active={activePage.startsWith("/time")} />
-                </NavLink>
+                </CustomButton>
               </div>
               <div>
-                <NavLink to="/money">
+                <CustomButton
+                  link={true}
+                  href={"/money"}
+                  ClickEffect={isMobile ? "scale" : false}
+                >
                   <MoneyIcon active={activePage.startsWith("/money")} />
-                </NavLink>
+                </CustomButton>
               </div>
             </>
           )}
@@ -101,14 +128,22 @@ function SideNav() {
         <>
           <div className={styles.bottom}>
             <div className={styles.profile}>
-              <NavLink to="/profile">
+              <CustomButton
+                link={true}
+                href={"/profile"}
+                ClickEffect={isMobile ? "scale" : false}
+              >
                 <img src={currentUser.pfpUrl} alt="" />
-              </NavLink>
+              </CustomButton>
             </div>
             <div className={styles.settings}>
-              <NavLink to="/settings">
+              <CustomButton
+                link={true}
+                href={"/settings"}
+                ClickEffect={isMobile ? "scale" : false}
+              >
                 <SettingsIcon active={activePage.startsWith("/settings")} />
-              </NavLink>
+              </CustomButton>
             </div>
           </div>
         </>
