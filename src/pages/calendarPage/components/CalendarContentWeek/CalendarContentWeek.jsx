@@ -322,6 +322,7 @@ function CalendarContentWeek({
               )}
             </div>
           ))}
+          {isMobile && <div style={{ height: "64px" }}></div>}
         </div>
 
         <div className={styles.dayTasks}>
