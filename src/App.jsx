@@ -34,9 +34,6 @@ function App() {
   useEffect(() => {
     setActivePage(location.pathname);
   }, [location.pathname]);
-  // =========================================================================
-  // TEMPORARY TEST CONFIGURATION: TRIGGERS 10 SECONDS AFTER CREATION
-  // =========================================================================
   useEffect(() => {
     if (!loadedEvents || loadedEvents.length === 0) return;
 
@@ -48,14 +45,11 @@ function App() {
 
       const now = Date.now();
 
-      // Only schedule it if the 10 second window hasn't already passed
       if (targetTestTimeMs > now) {
-        // Decrypted title from your AuthContext is passed directly here!
         const displayTitle = event.title || "CareBoard Offline Alert";
         const displayBody =
           "Success! Your phone triggered this with the app closed!";
 
-        // Schedule the alarm inside the phone's native OS layer!
         scheduleNotificationAtTimestamp(
           displayTitle,
           displayBody,
@@ -93,7 +87,6 @@ function App() {
             <Route path="/profile-start" element={<ProfileStart />} />
           </Route>
 
-          {/* Normal protected routes */}
           <Route element={<ProtectedRoute />}>
             <Route index element={<HomePage />} />
             <Route

@@ -6,9 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5174,
-    host: true, // Allows network connections
-    allowedHosts: [
-      "unworried-sinister-chapter.ngrok-free.dev", // FIXED: Safelists your ngrok tunnel URL
-    ],
+    host: true,
+    allowedHosts: ["unworried-sinister-chapter.ngrok-free.dev"],
   },
 });
