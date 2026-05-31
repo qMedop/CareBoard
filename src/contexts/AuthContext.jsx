@@ -412,7 +412,12 @@ function AuthProvider({ children }) {
         );
       }
 
-      setCurrentUser({ ...currentUser, ...publicPayload, ...privatePayload });
+      setCurrentUser({
+        ...currentUser,
+        ...publicPayload,
+        ...privatePayload,
+        pfpUrl: publicPayload.pfpUrl || "",
+      });
       setAuthStatus("done");
 
       return { success: true, message: "Profile updated successfully" };
