@@ -178,5 +178,8 @@ body.mobile {
     height: calc(100% - (var(--top-nav-height)));
     top: calc(var(--top-nav-height) + var(--mobile-margin));
   }
+  a {
+    cursor: none;
+  }
 }
 /* END MOBILE CSS */
