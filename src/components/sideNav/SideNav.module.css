@@ -63,7 +63,7 @@
 body:global(.mobile) {
   .sideNav {
     display: flex;
-    width: 80%;
+    width: 90%;
     max-width: 400px;
     flex-direction: row;
     top: calc(100% - 52px - 4px);
@@ -83,7 +83,7 @@ body:global(.mobile) {
   .sideNav .menuItems,
   .sideNav .bottom {
     flex-direction: row;
-    gap: 24px;
+    gap: 0px;
     margin-top: 0;
     justify-content: space-around;
   }
