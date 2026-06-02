@@ -51,25 +51,19 @@ function EventBlock({
         height: `${event?.size?.height}px`,
         zIndex: zIndex,
         backgroundColor: `${event?.color}`,
+        cursor: isShared ? "pointer" : "grab", // 🟢 Cursor indicators across the whole body block
         ...editingStyle,
       }}
       className={`${styles.eventBlock} ${event.active ? styles.dragging : ""} `}
       data-sourceid={realId}
       id={event.id}
-      onMouseDown={(e) => {
+      // 🟢 Attached directly to the container so you can tap anywhere on the event block
+      onPointerDown={(e) => {
         e.stopPropagation();
+        handlePointerDown(e, event, innerRef?.current || blockRef.current);
       }}
     >
-      <div
-        className={styles.title}
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          // 🔴 We call onDragStart so the pointerup listener is attached.
-          // The handler itself will block the drag timer for shared events.
-          handlePointerDown(e, event, blockRef.current);
-        }}
-        style={{ cursor: isShared ? "pointer" : undefined }}
-      >
+      <div className={styles.title}>
         <p className={styles.eventText}>
           {event?.title?.length === 0 ? "(No title)" : event?.title}
         </p>
@@ -87,7 +81,6 @@ function EventBlock({
         </span>
       </div>
 
-      {/* 🔴 HIDE RESIZE HANDLER ENTIRELY IF SHARED */}
       {!isShared && (
         <span
           onMouseDown={(e) => {

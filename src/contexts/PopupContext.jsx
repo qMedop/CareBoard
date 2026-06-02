@@ -136,7 +136,6 @@ function PopupProvider({ children }) {
     setPopups([]);
     return true;
   }, []);
-
   return (
     <PopupContext.Provider
       value={{ openPopup, closePopup, hidePopup, showPopup, closeAllPopups }}
@@ -149,12 +148,13 @@ function PopupProvider({ children }) {
             type={popup.type}
             direction={popup.direction}
             triggerElement={popup.triggerElement}
-            onClose={() => closePopup(popup.id)} // Pass its own ID to close!
+            onClose={() => closePopup(popup.id)}
             isTopmost={index === popups.length - 1}
             BR={popup.BR}
-            isHidden={popup.isHidden} // Pass the hidden state down
+            isHidden={popup.isHidden}
           >
-            {popup.render()}
+            {/* 🛠️ FIX: If it's a function, render it once. If it's an element, pass it directly. */}
+            {typeof popup.render === "function" ? popup.render() : popup.render}
           </Popup>
         ))}
       </AnimatePresence>
