@@ -13,15 +13,12 @@ function EventBlock({
   infoPopupEventId,
 }) {
   const blockRef = useRef();
-  const { timeZoneOffset } = useTime();
-  const { isMobile } = useTime();
+  const { timeZoneOffset, isMobile, newEvent } = useTime();
   const realId = event.sourceEventId || event.id;
   const isShared = event.isShared;
   const isUnsaved = realId.toString().startsWith("unsaved");
   const isEditing = String(editingEventId) === String(realId);
   const isInfoOpen = String(infoPopupEventId) === String(realId);
-
-  if (isUnsaved) console.log(event);
 
   const isGhost = event.id?.toString().startsWith("drag-");
   const isDraggedOriginal = event.active === true;
@@ -31,12 +28,17 @@ function EventBlock({
   const isMobileGhost = isMobile && isGhost;
   const isMobileActive = isMobile && isActive;
 
+  const normalizedId = String(realId).replace(/^drag-/, "");
+
+  const isGhostFromUnsaved =
+    !!newEvent?.id && normalizedId === String(newEvent.id);
+  console.log(realId.toString());
   const mobileGhostBg = (opacity) => `rgb(0 233 225 / ${opacity})`;
   const hasShadow = isActive && !isGhost && !isDraggedOriginal;
   const zIndex = isGhost ? 50 : isUnsaved ? 30 : isActive ? 20 : 10;
   const opacity = isGhost ? 0.7 : isDraggedOriginal ? 0.3 : 1;
   const finalOpacity =
-    isMobileUnsaved && event.editing ? 0 : isMobileGhost ? 1 : opacity;
+    isMobileUnsaved && event.editing ? 0 : isGhostFromUnsaved ? 1 : opacity;
   const editingStyle =
     isActive || isGhost
       ? {
@@ -44,7 +46,9 @@ function EventBlock({
           opacity: finalOpacity,
           zIndex: zIndex,
           boxShadow:
-            hasShadow || isMobileGhost ? "0px 0px 8px 1px #000000b5" : "none",
+            hasShadow || isGhostFromUnsaved
+              ? "0px 0px 8px 1px #000000b5"
+              : "none",
         }
       : {};
 
@@ -57,32 +61,30 @@ function EventBlock({
         position: "absolute",
         top: `${event?.position?.y}px`,
         left: `${event?.position?.x}%`,
-        width: `${isMobileGhost || isMobileUnsaved ? 100 : event?.size?.width}%`,
+        width: `${event?.size?.width || 90}%`,
         height: `${event?.size?.height}px`,
         zIndex: zIndex,
-        backgroundColor: `${isMobileUnsaved || isMobileGhost ? `${event?.editing ? "#ffffff00" : mobileGhostBg(0.2)}` : event?.color}`,
-        cursor: isShared ? "pointer" : "grab", // 🟢 Cursor indicators across the whole body block
+        backgroundColor: `${isMobileUnsaved || isGhostFromUnsaved ? `${event?.editing ? "#ffffff00" : mobileGhostBg(0.2)}` : event?.color}`,
+        cursor: isShared ? "pointer" : "grab",
         border:
-          isMobileGhost || isMobileUnsaved
+          isGhostFromUnsaved || isMobileUnsaved
             ? `1px solid ${mobileGhostBg(1)}`
             : "none",
-        overflow: isMobileGhost || isMobileUnsaved ? "initial" : "hidden",
+        overflow: isGhostFromUnsaved || isMobileUnsaved ? "initial" : "hidden",
         ...editingStyle,
       }}
-      className={`${styles.eventBlock} ${event.active ? styles.dragging : ""} `}
+      className={`${styles.eventBlock} ${event.active ? styles.dragging : ""} ${isMobileUnsaved && styles.mobileUnsaved}`}
       data-sourceid={realId}
       id={event.id}
-      // 🟢 Attached directly to the container so you can tap anywhere on the event block
       onPointerDown={(e) => {
         e.stopPropagation();
-        // 🟢 Fix: Always pass blockRef.current directly so mobile layout tracking math remains identical to version 1
         handlePointerDown(e, event, blockRef.current);
       }}
       onTouchStart={(e) => {
         e.stopPropagation();
       }}
     >
-      {isMobileUnsaved || isMobileGhost ? (
+      {isMobileUnsaved || isGhostFromUnsaved ? (
         <div
           style={{
             opacity: event?.editing ? 0 : 1,

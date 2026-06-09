@@ -1098,7 +1098,7 @@ body:global(.mobile) {
   .calendarContainer .eventBlock {
     border-radius: 4px;
   }
-  .calendarContainer .eventBlock::before {
+  .calendarContainer .eventBlock.mobileUnsaved::before {
     content: "";
     position: absolute;
     top: -4px;
@@ -1109,7 +1109,7 @@ body:global(.mobile) {
     border-radius: 50%;
     background-color: var(--MobileGhostcolor);
   }
-  .calendarContainer .eventBlock::after {
+  .calendarContainer .eventBlock.mobileUnsaved::after {
     content: "";
     position: absolute;
     bottom: -4px;
