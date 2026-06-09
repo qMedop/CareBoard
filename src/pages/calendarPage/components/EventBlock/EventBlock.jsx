@@ -91,7 +91,7 @@ function EventBlock({
           }}
           className={styles.mobileGhost}
         >
-          <PlusIcon size={18} />
+          <PlusIcon size={14} />
           {isMobileGhost && (
             <div className={styles.mobileMovingTimeRange}>
               {event?.originalTimeRange &&

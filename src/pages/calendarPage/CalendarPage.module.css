@@ -1104,8 +1104,8 @@ body:global(.mobile) {
     top: -4px;
     left: 50%;
     transform: translateX(-50%);
-    width: 8px;
-    height: 8px;
+    width: 4px;
+    height: 4px;
     border-radius: 50%;
     background-color: var(--MobileGhostcolor);
   }
@@ -1115,8 +1115,8 @@ body:global(.mobile) {
     bottom: -4px;
     left: 50%;
     transform: translateX(-50%);
-    width: 8px;
-    height: 8px;
+    width: 4px;
+    height: 4px;
     border-radius: 50%;
     background-color: var(--MobileGhostcolor);
   }
