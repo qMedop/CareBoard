@@ -9,6 +9,7 @@ import { usePopup } from "../../../contexts/PopupContext";
 import AddEditNewEvent from "../components/addEditNewEvent/AddEditNewEvent";
 import EventInfoPopup from "../components/EventInfoPopup/EventInfoPopup";
 import RecurrenceUpdatePopup from "../components/RecurrenceUpdatePopup/RecurrenceUpdatePopup";
+import { m } from "framer-motion";
 
 function useCalendarEventHandlers(props = {}) {
   const { notify } = useNotification();
@@ -48,6 +49,11 @@ function useCalendarEventHandlers(props = {}) {
   const prevFullDayExpandedRef = useRef(null);
   const dragStartColumnDateRef = useRef(null);
   const fullDayExpandedRef = useRef(fullDayExpanded);
+  const mobileCellHeight = 64;
+  const desktopCellHeight = 52;
+  const defaultEventDurationMinutes = 60;
+  const defaultEventColor = "#ffd4a9ff";
+  const intervalSnapMinutes = 15;
 
   const autoScrollState = useRef({
     active: false,
@@ -269,7 +275,6 @@ function useCalendarEventHandlers(props = {}) {
     ],
   );
 
-  /* cite: uploaded:src/pages/calendarPage/utils/useCalendarEventHandlers.jsx */
   const calculateResizeEvent = useCallback(
     (e, event) => {
       if (!event || !event.originalTimeRange) return null;
@@ -663,7 +668,6 @@ function useCalendarEventHandlers(props = {}) {
     [calculateEventPosition, setDraggableEvent],
   );
 
-  /* cite: uploaded:src/pages/calendarPage/utils/useCalendarEventHandlers.jsx */
   const handleDragging = useCallback(
     (e) => {
       if (e.preventDefault) e.preventDefault();
@@ -1063,7 +1067,7 @@ function useCalendarEventHandlers(props = {}) {
     },
     [calculateResizeEvent, setDraggableEvent],
   );
-  /* cite: uploaded:src/pages/calendarPage/utils/useCalendarEventHandlers.jsx */
+
   const handleResizing = useCallback(
     (e) => {
       if (!isResizing.current) return;
@@ -1136,8 +1140,6 @@ function useCalendarEventHandlers(props = {}) {
     [performResizeUpdate, getActiveContainer],
   );
 
-  /* cite: uploaded:src/pages/calendarPage/utils/useCalendarEventHandlers.jsx */
-  // --- MODIFY YOUR EXISTING handleResizeEnd WITHIN useCalendarEventHandlers ---
   async function handleResizeEnd() {
     autoScrollState.current.active = false;
     if (autoScrollState.current.animationFrameId) {
@@ -1158,6 +1160,8 @@ function useCalendarEventHandlers(props = {}) {
 
     const currentEvent = draggableEventRef.current;
     setDraggableEvent((prev) => ({ ...prev, active: false }));
+    setNewEvent((prev) => ({ ...prev, editing: false }));
+
     isResizing.current = false;
 
     if (!hasDragged.current) return;
@@ -1322,7 +1326,6 @@ function useCalendarEventHandlers(props = {}) {
     ],
   );
 
-  // Mobile
   const MOBILE_RESIZE_EDGE_THRESHOLD_PX = 16;
   const isScrolling = props.isScrolling;
   const setIsScrolling = props.setIsScrolling;
@@ -1402,6 +1405,7 @@ function useCalendarEventHandlers(props = {}) {
           },
           position: { x: relativeLeft + "px", y: relativeTop },
         });
+        setNewEvent((prev) => ({ ...prev, editing: true }));
       }
 
       mobileEventRef.current = {
@@ -1706,7 +1710,6 @@ function useCalendarEventHandlers(props = {}) {
   const handleMobileResizing = useCallback(
     (clientX, clientY, handleType = "bottom") => {
       const currentEvent = draggableEventRef.current;
-
       if (!currentEvent || !currentEvent.originalTimeRange) return;
 
       const container = getActiveContainer();
@@ -1732,7 +1735,7 @@ function useCalendarEventHandlers(props = {}) {
       else if (clientY > rect.bottom - threshold) speed = 12;
 
       const calculateAndUpdateEvent = (currentClientY) => {
-        const cellHeight = 64;
+        const cellHeight = mobileCellHeight;
 
         const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
 
@@ -1865,12 +1868,6 @@ function useCalendarEventHandlers(props = {}) {
 
         const newY = (minutesFromDayStart / 60) * cellHeight;
 
-        console.log(
-          finalStartUTC.toISO({ suppressMilliseconds: true }),
-
-          finalEndUTC.toISO({ suppressMilliseconds: true }),
-        );
-
         setDraggableEvent((prev) => ({
           ...prev,
 
@@ -1929,9 +1926,23 @@ function useCalendarEventHandlers(props = {}) {
   );
 
   const handleTouchMove = useCallback(
-    (e) => {
+    (e, manualMode = null) => {
       if (cancelTouch.current) return;
-      const touch = e.touches[0];
+
+      // Support passing either a native TouchEvent or a mocked/synthetic event object
+      const touch = e.touches ? e.touches[0] : e.touch || e;
+
+      // 🟢 MANUAL OVERRIDE BYPASS: If called directly with an explicit mode
+      if (manualMode === "resize") {
+        isHolding.current = true;
+        if (!isResizing.current) {
+          hasDragged.current = true;
+          isResizing.current = true;
+          activeMobileMode.current = "resize"; // Dictates "bottom" resize below
+          initialPointer.current = mobileInitialTouch.current;
+        }
+      }
+
       const dx = touch.clientX - mobileInitialTouch.current.x;
       const dy = touch.clientY - mobileInitialTouch.current.y;
 
@@ -1945,7 +1956,7 @@ function useCalendarEventHandlers(props = {}) {
         return;
       }
 
-      e.preventDefault(); // Stop mobile background viewport rubber-banding
+      if (e.preventDefault) e.preventDefault(); // Stop mobile viewport rubber-banding safely
       const stored = mobileEventRef.current;
       if (!stored) return;
 
@@ -2007,7 +2018,6 @@ function useCalendarEventHandlers(props = {}) {
         cleanupTouch();
         return;
       }
-
       autoScrollState.current.active = false;
       if (autoScrollState.current.animationFrameId) {
         cancelAnimationFrame(autoScrollState.current.animationFrameId);
@@ -2086,18 +2096,34 @@ function useCalendarEventHandlers(props = {}) {
           } else {
             if (e.stopPropagation) e.stopPropagation();
 
-            if (
-              draggableEventRef.current?.id?.toString().startsWith("unsaved") ||
-              newEvent
-            ) {
-              setNewEvent(null);
-              setEditingEventId(null);
-              closePopup("edit-popup", true);
-              if (editingElementRef.current) {
-                editingElementRef.current.forEach((el) => {
-                  if (el && el.classList) el.classList.remove(styles.editing);
-                });
-                editingElementRef.current = null;
+            // 🟢 FIX: Verify if the touch target is inside a valid saved event block.
+            // If the user tapped a real event, we bypass wiping out the active draft context layers
+            // which was causing the race condition that closed the popup instantly.
+            const clickedSavedBlock = e.target?.closest
+              ? e.target.closest("[data-sourceid]")
+              : null;
+            const isTappingRealEvent =
+              clickedSavedBlock &&
+              !clickedSavedBlock
+                .getAttribute("data-sourceid")
+                .startsWith("unsaved");
+
+            if (!isTappingRealEvent) {
+              if (
+                draggableEventRef.current?.id
+                  ?.toString()
+                  .startsWith("unsaved") ||
+                newEvent
+              ) {
+                setNewEvent(null);
+                setEditingEventId(null);
+                closePopup("edit-popup", true);
+                if (editingElementRef.current) {
+                  editingElementRef.current.forEach((el) => {
+                    if (el && el.classList) el.classList.remove(styles.editing);
+                  });
+                  editingElementRef.current = null;
+                }
               }
             }
 
@@ -2192,6 +2218,8 @@ function useCalendarEventHandlers(props = {}) {
 
       if (!modeApplied) {
         setDraggableEvent((prev) => ({ ...prev, active: false }));
+        setNewEvent((prev) => ({ ...prev, editing: false }));
+
         isDragging.current = false;
         isResizing.current = false;
         hasDragged.current = false;
@@ -2200,7 +2228,7 @@ function useCalendarEventHandlers(props = {}) {
 
       const currentEvent = draggableEventRef.current;
       setDraggableEvent((prev) => ({ ...prev, active: false }));
-
+      setNewEvent((prev) => ({ ...prev, editing: false }));
       isDragging.current = false;
       isResizing.current = false;
       hasDragged.current = false;
@@ -2241,8 +2269,9 @@ function useCalendarEventHandlers(props = {}) {
   const cancelTouch = useRef(false);
 
   function handlePointerDown(e, event, element) {
+    e.preventDefault();
+    e.stopPropagation();
     if (!event || !element) return;
-
     const isTouch =
       e.pointerType === "touch" ||
       e.type === "touchstart" ||
@@ -2308,7 +2337,7 @@ function useCalendarEventHandlers(props = {}) {
       return;
     }
 
-    closePopup("info-popup");
+    // closePopup("info-popup");
     if (closePopup("edit-popup") === false) return;
 
     mobileInitialTouch.current = {
@@ -2438,21 +2467,18 @@ function useCalendarEventHandlers(props = {}) {
     scrollTimeoutRef,
   ]);
 
-  /* cite: uploaded:src/pages/calendarPage/utils/useCalendarEventHandlers.jsx */
-  // Inside useCalendarEventHandlers hook:
-
-  /* cite: uploaded:src/pages/calendarPage/utils/useCalendarEventHandlers.jsx */
-  // --- ADD THESE HOOK REF LAYERS INSIDE useCalendarEventHandlers ---
-  /* cite: uploaded:src/pages/calendarPage/utils/useCalendarEventHandlers.jsx */
-  // --- ADD THIS STATE REF LAYER AT THE TOP OF THE HOOK WITH THE OTHER REFS ---
   const isHoldCreatedEvent = useRef(false);
 
-  // --- STREAMLINED AND SECURE GRID POINTER HANDLER ---
   const handleGridPointerDown = useCallback(
     (e) => {
+      e.preventDefault();
+
       if (e.button !== 0 && e.pointerType !== "touch") return;
       if (isDragging.current || isResizing.current) return;
-      if (closePopup("edit-popup") === false) return;
+      if (props.editingEventId && addEditRef.current?.hasUnsavedChanges()) {
+        addEditRef.current.requestClose();
+        return;
+      }
 
       const columnElement = e.currentTarget;
       const clientX = e.clientX;
@@ -2461,14 +2487,12 @@ function useCalendarEventHandlers(props = {}) {
       const initialPointerPos = { x: clientX, y: clientY };
       let holdTimer = null;
 
-      // Fixes Issue #2: Prevent annoying browser text highlighting while holding down
       document.body.style.userSelect = "none";
       document.body.style.webkitUserSelect = "none";
 
-      // Calculate clicked hour and target time coordinate boundaries cleanly
       const rect = columnElement.getBoundingClientRect();
       const clickY = clientY - rect.top;
-      const cellHeight = isMobile ? 64 : 52;
+      const cellHeight = isMobile ? mobileCellHeight : desktopCellHeight;
       const clickedHour = Math.floor(clickY / cellHeight);
       const columnDateStr = columnElement.getAttribute("data-column-date");
 
@@ -2481,12 +2505,11 @@ function useCalendarEventHandlers(props = {}) {
         .toUTC()
         .toISO({ suppressMilliseconds: true });
 
-      // Start Hold-to-Create Timer
       holdTimer = setTimeout(() => {
         if (navigator.vibrate) navigator.vibrate(40);
 
         const draftId = `unsaved-${Date.now()}`;
-        // Fixes VS Code warnings: Construct a standard localized time range matching handleNewEventClick exactly
+
         const startTimeUTC = targetIsoString;
         const endTimeUTC = calcDateTime
           .plus({ hours: 1 })
@@ -2500,24 +2523,50 @@ function useCalendarEventHandlers(props = {}) {
           timeRange: { start: startTimeUTC, end: endTimeUTC },
           originalTimeRange: { start: startTimeUTC, end: endTimeUTC },
           isFullDay: false,
-          color: "#ffd4a9ff",
+          color: defaultEventColor,
           columnDate: columnDateStr,
         };
 
-        // Flag that this resize sequence belongs to a fresh draft creation gesture
         isHoldCreatedEvent.current = true;
 
-        // 1. Tell React to render the block placeholder natively via state
         setNewEvent(mockEvent);
         setEditingEventId(draftId);
 
-        // 2. Wait 20ms for DOM commit, then smoothly trigger the native resize machine loops
         setTimeout(() => {
           const liveEventBlock =
             document.getElementById(draftId) ||
             document.querySelector(`[data-sourceid="${draftId}"]`);
           if (liveEventBlock) {
-            handleResizeStart(e, mockEvent, liveEventBlock);
+            draggableEventRef.current = {
+              ...mockEvent,
+              _element: liveEventBlock,
+            };
+            if (isMobile) {
+              // 1. Core structural tracking properties assigned
+              mobileInitialTouch.current = { x: clientX, y: clientY };
+              mobileEventRef.current = {
+                ...mockEvent,
+                _element: liveEventBlock,
+                _e: e,
+              };
+              setDraggableEvent({ ...mockEvent, active: true });
+              setNewEvent((prev) =>
+                prev && prev.id === draftId ? { ...prev, editing: true } : prev,
+              );
+              // 2. Fire the handler instantly with your manual override string
+              // Passing a custom coordinate mock object ensures it calculates using down coords
+              const mockTouchCoordinates = { clientX, clientY };
+              handleTouchMove(mockTouchCoordinates, "resize");
+
+              // 3. Mount native listeners for the ongoing drag session
+              document.addEventListener("touchmove", handleTouchMove, {
+                passive: false,
+              });
+              document.addEventListener("touchend", handleTouchEnd);
+              document.addEventListener("touchcancel", handleTouchEnd);
+            } else {
+              handleResizeStart(e, mockEvent, liveEventBlock);
+            }
           }
         }, 20);
 
@@ -2574,8 +2623,6 @@ function useCalendarEventHandlers(props = {}) {
     ],
   );
 
-  // --- UPDATED AND FIXED RESIZE END TO HANDLE THE HOLD OVERLAY OPENING ---
-
   return {
     handleNewEventClick,
     handlePointerDown,
@@ -2588,5 +2635,9 @@ function useCalendarEventHandlers(props = {}) {
     handleGridPointerDown,
   };
 }
+
+document.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+});
 
 export default useCalendarEventHandlers;

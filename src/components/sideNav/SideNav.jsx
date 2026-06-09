@@ -28,7 +28,7 @@ function SideNav() {
   const { openPopup, closePopup: closeContextPopup } = usePopup();
 
   const openMobileMenu = (e) => {
-    openPopup("contextual", <MobileMenu />, e.currentTarget, "TopRight");
+    openPopup("contextual", () => <MobileMenu />, e.currentTarget, "TopRight");
   };
 
   useEffect(() => {

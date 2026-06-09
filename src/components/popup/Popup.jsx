@@ -18,10 +18,21 @@ function Popup({
   const popupContainerRef = useRef(null);
   const initialHeightRef = useRef(null);
   const [dynamicStyles, setDynamicStyles] = useState({ opacity: 0 });
-  const [isCalculated, setIsCalculated] = useState(false); // 👈 Track calculation state
+
   // --- 1. Handle Outside Click & Escape ---
+
   useEffect(() => {
     const handleClickOutside = (e) => {
+      // 🟢 Safety Guard: If the body has drag/resize classes active, completely bypass outside click closures!
+      if (
+        document.body.classList.contains("dragging") ||
+        document.body.classList.contains("resizing") ||
+        e.target.closest('[class*="dragging"]') ||
+        e.target.closest('[class*="resize"]')
+      ) {
+        return;
+      }
+
       if (
         isTopmost &&
         popupRef.current &&
@@ -35,29 +46,29 @@ function Popup({
       if (e.key === "Escape" && isTopmost) onClose();
     };
     document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside, {
+      passive: true,
+    });
     document.addEventListener("keydown", handleEsc);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
       document.removeEventListener("keydown", handleEsc);
     };
-  }, [onClose, isTopmost, triggerElement]);
-
+  }, [isTopmost, triggerElement, onClose]);
   // --- 2. Contextual Positioning Logic (Updated) ---
-  // --- 2. Contextual Positioning Logic (Bulletproof First-Paint Fix) ---
   useLayoutEffect(() => {
+    if (popupContainerRef.current && initialHeightRef.current == null) {
+      initialHeightRef.current = popupContainerRef.current.offsetHeight;
+    }
+
     if (type !== "contextual" || !triggerElement || !popupRef.current) {
       return;
     }
 
     const calculateAndSetStyles = () => {
-      if (!triggerElement || !popupRef.current) return;
-
-      const tr = triggerElement.getBoundingClientRect();
-
-      // Force the browser to evaluate the absolute full scroll height of the inner content
-      const actualPopupHeight =
-        popupRef.current.scrollHeight || popupRef.current.offsetHeight;
-      const actualPopupWidth = popupRef.current.offsetWidth;
+      const tr = triggerElement.getBoundingClientRect(); // tr = Trigger Rect
+      const pr = popupRef.current.getBoundingClientRect(); // pr = Popup Rect
 
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
@@ -66,41 +77,41 @@ function Popup({
       const minTop = 30;
       const minBottom = 30;
 
-      // Adjust centering based on true dimensions
-      const centerX = tr.left + tr.width / 2 - actualPopupWidth / 2;
-      const centerY = tr.top + tr.height / 2 - actualPopupHeight / 2;
+      // Helper for horizontal centering
+      const centerX = tr.left + tr.width / 2 - pr.width / 2;
+      // Helper for vertical centering
+      const centerY = tr.top + tr.height / 2 - pr.height / 2;
 
+      // --- A. Define All 12 Possible Positions ---
       const positions = {
-        bottom: { top: tr.bottom + gap, left: centerX },
-        bottomLeft: { top: tr.bottom + gap, left: tr.left },
-        bottomRight: {
-          top: tr.bottom + gap,
-          left: tr.right - actualPopupWidth,
-        },
+        // 1. Bottom Variations
+        bottom: { top: tr.bottom + gap, left: centerX }, // Centered
+        bottomLeft: { top: tr.bottom + gap, left: tr.left }, // Aligns with Left edge
+        bottomRight: { top: tr.bottom + gap, left: tr.right - pr.width }, // Aligns with Right edge
 
-        top: { top: tr.top - actualPopupHeight - gap, left: centerX },
-        topLeft: { top: tr.top - actualPopupHeight - gap, left: tr.left },
-        topRight: {
-          top: tr.top - actualPopupHeight - gap,
-          left: tr.right - actualPopupWidth,
-        },
+        // 2. Top Variations
+        top: { top: tr.top - pr.height - gap, left: centerX }, // Centered
+        topLeft: { top: tr.top - pr.height - gap, left: tr.left }, // Aligns with Left edge
+        topRight: { top: tr.top - pr.height - gap, left: tr.right - pr.width }, // Aligns with Right edge
 
-        right: { top: centerY, left: tr.right + gap },
-        rightTop: { top: tr.top, left: tr.right + gap },
-        rightBottom: {
-          top: tr.bottom - actualPopupHeight,
-          left: tr.right + gap,
-        },
+        // 3. Right Variations
+        right: { top: centerY, left: tr.right + gap }, // Centered
+        rightTop: { top: tr.top, left: tr.right + gap }, // Aligns with Top edge
+        rightBottom: { top: tr.bottom - pr.height, left: tr.right + gap }, // Aligns with Bottom edge
 
-        left: { top: centerY, left: tr.left - actualPopupWidth - gap },
-        leftTop: { top: tr.top, left: tr.left - actualPopupWidth - gap },
+        // 4. Left Variations
+        left: { top: centerY, left: tr.left - pr.width - gap }, // Centered
+        leftTop: { top: tr.top, left: tr.left - pr.width - gap }, // Aligns with Top edge
         leftBottom: {
-          top: tr.bottom - actualPopupHeight,
-          left: tr.left - actualPopupWidth - gap,
-        },
+          top: tr.bottom - pr.height,
+          left: tr.left - pr.width - gap,
+        }, // Aligns with Bottom edge
       };
 
+      // --- B. Define Fallback Priority Logic ---
+      // If the requested direction fits, use it. If not, try the next one in the list.
       const priority = {
+        // Bottom preferences
         bottom: ["bottom", "bottomLeft", "bottomRight", "top", "right", "left"],
         bottomLeft: [
           "bottomLeft",
@@ -116,9 +127,13 @@ function Popup({
           "topRight",
           "leftBottom",
         ],
+
+        // Top preferences
         top: ["top", "topLeft", "topRight", "bottom", "right", "left"],
         topLeft: ["topLeft", "topRight", "top", "bottomLeft", "rightTop"],
         topRight: ["topRight", "topLeft", "top", "bottomRight", "leftTop"],
+
+        // Right preferences
         right: ["right", "rightTop", "rightBottom", "left", "bottom", "top"],
         rightTop: ["rightTop", "rightBottom", "right", "leftTop", "bottomLeft"],
         rightBottom: [
@@ -128,6 +143,8 @@ function Popup({
           "leftBottom",
           "topLeft",
         ],
+
+        // Left preferences
         left: ["left", "leftTop", "leftBottom", "right", "bottom", "top"],
         leftTop: ["leftTop", "leftBottom", "left", "rightTop", "bottomRight"],
         leftBottom: [
@@ -143,11 +160,12 @@ function Popup({
         return (
           pos.top >= minTop &&
           pos.left >= gap &&
-          pos.top + actualPopupHeight <= viewportHeight - minBottom &&
-          pos.left + actualPopupWidth <= viewportWidth - gap
+          pos.top + pr.height <= viewportHeight - minBottom &&
+          pos.left + pr.width <= viewportWidth - gap
         );
       };
 
+      // --- C. Find The First Position That Fits ---
       let bestPosition = null;
       const priorityList = priority[direction] || priority["bottom"];
 
@@ -159,19 +177,20 @@ function Popup({
         }
       }
 
+      // --- D. Fallback (Force into Viewport) ---
       if (!bestPosition) {
-        bestPosition = { ...positions[priorityList[0]] };
+        bestPosition = positions[priorityList[0]]; // Default to requested direction
 
         // Clamp Horizontal
         if (bestPosition.left < gap) bestPosition.left = gap;
-        if (bestPosition.left + actualPopupWidth > viewportWidth - gap) {
-          bestPosition.left = viewportWidth - gap - actualPopupWidth;
+        if (bestPosition.left + pr.width > viewportWidth - gap) {
+          bestPosition.left = viewportWidth - gap - pr.width;
         }
 
         // Clamp Vertical
         if (bestPosition.top < minTop) bestPosition.top = minTop;
-        if (bestPosition.top + actualPopupHeight > viewportHeight - minBottom) {
-          bestPosition.top = viewportHeight - minBottom - actualPopupHeight;
+        if (bestPosition.top + pr.height > viewportHeight - minBottom) {
+          bestPosition.top = viewportHeight - minBottom - pr.height;
         }
       }
 
@@ -180,23 +199,18 @@ function Popup({
         left: `${bestPosition.left}px`,
         opacity: 1,
       });
-      setIsCalculated(true);
     };
 
-    // 🛠️ Delay execution by one frame so the browser can accurately complete layout calculation
-    const frameId = requestAnimationFrame(() => {
-      calculateAndSetStyles();
-    });
+    queueMicrotask(calculateAndSetStyles);
 
     window.addEventListener("scroll", calculateAndSetStyles, { passive: true });
     window.addEventListener("resize", calculateAndSetStyles);
 
     return () => {
-      cancelAnimationFrame(frameId);
       window.removeEventListener("scroll", calculateAndSetStyles);
       window.removeEventListener("resize", calculateAndSetStyles);
     };
-  }, [triggerElement, direction, type, children]);
+  }, [triggerElement, direction, type]);
 
   // --- 3. Movable Popup Logic (Unchanged) ---
   useLayoutEffect(() => {
@@ -293,9 +307,8 @@ function Popup({
         type === "contextual" || type === "movable"
           ? {
               ...dynamicStyles,
-              // 🛠️ KEEP HIDDEN UNTIL CALCULATED: prevents flickering/shifting on first frame
-              opacity: isHidden || !isCalculated ? 0 : dynamicStyles.opacity,
-              pointerEvents: isHidden || !isCalculated ? "none" : "auto",
+              opacity: isHidden ? 0 : dynamicStyles.opacity, // 🔥 Hides it safely
+              pointerEvents: isHidden ? "none" : "auto", // 🔥 Stops phantom clicks
               overflow: "hidden",
               borderRadius:
                 BR != null
