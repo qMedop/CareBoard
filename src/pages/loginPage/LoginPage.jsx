@@ -18,7 +18,7 @@ function LoginPage() {
   const containerRef = useRef(null);
   const { currentUser } = useData();
   const navigate = useNavigate();
-
+  const { isMobile } = useTime();
   useEffect(() => {
     if (currentUser) navigate("/");
   }, [navigate, currentUser]);
@@ -47,6 +47,7 @@ function LoginPage() {
         <SignInForm resetTrigger={mode} />
         <SignUpForm resetTrigger={mode} />
         <ResetPassword resetTrigger={mode} />
+
         <div className={`${styles.overlayContainer}`}>
           <div className={`${styles.overlay}`}>
             <div className={`${styles.overlayPanel} ${styles.signUpPanel}`}>
@@ -79,12 +80,11 @@ function LoginPage() {
               className={`${styles.overlayPanel} ${styles.resetPasswordPanel}`}
             >
               <h2>Lost your secret code?</h2>
-              <p>Don’t stress — we’ll help you create a fresh one.</p>
               <div className={styles.newUser}>
                 <div>
                   <CustomButton
                     ClickEffect={"scaleDown"}
-                    className={`${styles.navigateBtn} default`}
+                    className={`${styles.navigateBtn} default `}
                     link={true}
                     href="/login/sign-in"
                   >
@@ -276,6 +276,14 @@ function SignInForm({ resetTrigger }) {
             <p>Forgot your password?</p>
           </CustomButton>
         </div>
+        <CustomButton
+          ClickEffect={"scaleDown"}
+          className={`${styles.smallScreenBtn} default `}
+          link={true}
+          href="/login/sign-up"
+        >
+          <p>Sign up</p>
+        </CustomButton>
       </form>
     </div>
   );
@@ -476,6 +484,14 @@ function SignUpForm({ resetTrigger }) {
             <p>Sign up</p>
           </CustomButton>
         </div>
+        <CustomButton
+          ClickEffect={"scaleDown"}
+          className={`default ${styles.smallScreenBtn}`}
+          link={true}
+          href="/login/sign-in"
+        >
+          <p>Sign in</p>
+        </CustomButton>
       </form>
     </div>
   );
@@ -483,70 +499,47 @@ function SignUpForm({ resetTrigger }) {
 function ResetPassword({ resetTrigger }) {
   const [signUpEmail, setSignUpEmail] = useState("");
 
-  const [signUpUsernameErr, setSignUpUsernameErr] = useState(null);
-
-  // Reset state when switching tabs
   useEffect(() => {
     setSignUpEmail("");
   }, [resetTrigger]);
 
-  function handleEmailValidate() {
-    if (!signUpEmail || signUpEmail.length === 0) {
-      setSignUpUsernameErr(true);
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(signUpEmail)) {
-      setSignUpUsernameErr("Invalid email format");
-      return;
-    }
-    setSignUpUsernameErr(null);
-  }
-
-  function handleSignUpSubmit(e) {
-    e.preventDefault();
-    handleEmailValidate();
-  }
-
   return (
     <div className={`${styles.resetPasswordContainer} ${styles.formContainer}`}>
-      <h2>Reset password</h2>
-      <form onSubmit={handleSignUpSubmit}>
-        <div className={styles.userData}>
-          <div
-            className={`${styles.username} ${styles.field} ${
-              signUpUsernameErr && styles.error
-            } ${signUpUsernameErr?.length > 1 && styles.errorMess}`}
-          >
-            <div className={styles.icon}>
-              <EmailIcon />
-            </div>
-            <input
-              type="email"
-              placeholder="Email"
-              value={signUpEmail}
-              onChange={(e) => setSignUpEmail(e.target.value)}
-              onFocus={() => setSignUpUsernameErr(null)}
-              onBlur={handleEmailValidate}
-            />
-          </div>
-          {signUpUsernameErr?.length > 0 && (
-            <div className={styles.errorMessage}>
-              <span>{signUpUsernameErr}</span>
-            </div>
-          )}
-        </div>
-
-        <div className={styles.submit}>
-          <CustomButton
-            ClickEffect={"scaleDown"}
-            className={`${styles.reset} default`}
-            type="submit"
-          >
-            <p>Reset password</p>
-          </CustomButton>
-        </div>
-      </form>
+      <h2>password Recovery</h2>
+      <div className={styles.securityNotice}>
+        <p>
+          Your data is protected with end-to-end encryption and secured using a
+          key generated from your password.
+        </p>
+        <p>To ensure maximum privacy, we never store your password.</p>
+        <p>
+          This means that if you forget your password, we cannot recover it or
+          reset it for you.
+        </p>
+        <p>
+          Unfortunately, without your password, your encrypted data cannot be
+          accessed.
+        </p>
+        <p className={styles.warning}>Please keep your password safe.</p>
+      </div>
+      <div className={styles.buttonsContainer}>
+        <CustomButton
+          ClickEffect={"scaleDown"}
+          className={`${styles.navigateBtn} default ${styles.smallScreenBtn}`}
+          link={true}
+          href="/login/sign-in"
+        >
+          <p>Sign in</p>
+        </CustomButton>
+        <CustomButton
+          ClickEffect={"scaleDown"}
+          className={`${styles.navigateBtn} default ${styles.smallScreenBtn}`}
+          link={true}
+          href="/login/sign-up"
+        >
+          <p>Sign up</p>
+        </CustomButton>
+      </div>
     </div>
   );
 }

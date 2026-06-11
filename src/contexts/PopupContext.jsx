@@ -29,7 +29,7 @@ function PopupProvider({ children }) {
       customId = null, // Let the user pass an ID, or generate one
     ) => {
       const id = customId || `popup-${Date.now()}-${Math.random()}`;
-
+      console.log(id);
       setPopups((prev) => {
         const existingIndex = prev.findIndex(
           (p) =>

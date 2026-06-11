@@ -30,7 +30,7 @@
   position: relative;
   width: 100%;
   height: 100%;
-  background-color: #161823;
+  background-color: var(--bg-color);
 }
 .container .overlayContainer {
   position: absolute;
@@ -152,7 +152,7 @@
 .container .overlayContainer .overlay .overlayPanel p {
   font-family: "Google Sans";
 }
-.container .overlayContainer .overlay .overlayPanel .navigateBtn {
+.container .navigateBtn {
   font-family: "Google Sans";
   border-radius: 20px;
   border: 1px solid #f1f1f1;
@@ -189,12 +189,11 @@
   z-index: -1;
 }
 .container > .formContainer {
-  width: 100%;
   display: flex;
   align-items: center;
   flex-direction: column;
   justify-content: center;
-  background-color: #161823;
+  /* background-color: #161823; */
   height: 100%;
   padding: 0 12px;
   transition: var(--switch-transition);
@@ -213,6 +212,7 @@
   transform: translateX(100%);
   pointer-events: none;
   z-index: 2;
+  opacity: 0;
 }
 .container > .signInContainer {
   z-index: 6;
@@ -354,7 +354,79 @@
   opacity: 0;
   pointer-events: none;
 }
+.loginPageContainer .smallScreenBtn {
+  display: none;
+  width: fit-content;
+  margin: 8px auto;
+  font-size: 12px;
+}
+.securityNotice {
+  padding: 0px 12px;
+}
 
+.securityNotice p {
+  margin: 0 0 12px;
+  color: var(--text-gray);
+}
+
+.securityNotice .warning {
+  margin-top: 24px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-light);
+}
+
+.buttonsContainer {
+  display: flex;
+  gap: 12px;
+}
+
+@media (max-width: 700px) {
+  .container > .formContainer {
+    width: 100%;
+  }
+  .container .overlayContainer {
+    display: none;
+  }
+  .container > .signUpContainer {
+    transform: translateX(50%);
+    animation: none;
+  }
+  .container > .signInContainer {
+    transform: translateX(0%);
+    animation: none;
+  }
+  .container.signUp > .signUpContainer {
+    transform: translateX(0%);
+    z-index: 5;
+    opacity: 1;
+    pointer-events: all;
+    animation: none;
+  }
+  .container.signUp > .signInContainer {
+    transform: translateX(50%);
+    z-index: 0;
+    opacity: 0;
+    pointer-events: none;
+    animation: none;
+  }
+  .loginPageContainer .smallScreenBtn {
+    display: flex;
+  }
+}
+@media (max-width: 450px) {
+  .container > div h2 {
+    font-size: 28px;
+  }
+}
+body:global(.mobile) {
+  .container form .userData > .field:hover {
+    border-color: none;
+    .container form .field:hover .showHidePassword .icon {
+      opacity: initial;
+    }
+  }
+}
 @keyframes show {
   0%,
   49.99% {

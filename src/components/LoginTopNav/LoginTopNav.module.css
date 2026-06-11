@@ -1,6 +1,6 @@
 .topNav {
   position: fixed;
-  top: 16px;
+  top: 4px;
   left: 0;
   height: var(--top-nav-height);
   width: 100%;
@@ -49,6 +49,46 @@
 .topNav .right .list a:hover p {
   text-decoration: underline;
 }
+.contextMenuBtn {
+  display: none;
+}
+.contextMenu {
+  width: 200px;
+}
+.contextMenu a {
+  width: 100%;
+  height: 42px;
+  border-radius: 0px;
+}
+@media (max-width: 700px) {
+  .topNav .titleText {
+    font-size: 18px;
+  }
+}
+@media (max-width: 450px) {
+  .topNav {
+    padding: 0 6px;
+  }
+  .topNav .logo :global(.svg) {
+    width: 32px;
+    height: 32px;
+  }
+  .topNav .right {
+    margin-left: 2px;
+  }
+  .topNav .titleText {
+    font-size: 14px;
+  }
+  .topNav .right .list {
+    display: none;
+  }
+  .contextMenuBtn {
+    display: flex;
+    width: 32px;
+    height: 32px;
+  }
+}
+
 @keyframes heartBeat {
   0% {
     transform: scale(1);
