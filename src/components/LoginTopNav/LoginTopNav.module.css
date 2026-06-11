@@ -51,6 +51,12 @@
 }
 .contextMenuBtn {
   display: none;
+  width: 42px;
+  height: 42px;
+}
+.contextMenuBtn :global(.svg) {
+  width: 28px;
+  height: 28px;
 }
 .contextMenu {
   width: 200px;
@@ -70,22 +76,20 @@
     padding: 0 6px;
   }
   .topNav .logo :global(.svg) {
-    width: 32px;
-    height: 32px;
+    width: 42px;
+    height: 42px;
   }
   .topNav .right {
     margin-left: 2px;
   }
   .topNav .titleText {
-    font-size: 14px;
+    font-size: 18px;
   }
   .topNav .right .list {
     display: none;
   }
   .contextMenuBtn {
     display: flex;
-    width: 32px;
-    height: 32px;
   }
 }
 

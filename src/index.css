@@ -145,6 +145,11 @@ a {
   transform-origin: center center;
   animation: loadingIconAnim 3s linear infinite;
 }
+.glassEffect {
+  background: #181a267a;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
 @keyframes loadingIconAnim {
   from {
     transform: rotate(0deg);

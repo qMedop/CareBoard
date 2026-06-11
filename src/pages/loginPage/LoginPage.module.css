@@ -357,7 +357,7 @@
 .loginPageContainer .smallScreenBtn {
   display: none;
   width: fit-content;
-  margin: 8px auto;
+  margin: 12px auto;
   font-size: 12px;
 }
 .securityNotice {
@@ -412,6 +412,15 @@
   }
   .loginPageContainer .smallScreenBtn {
     display: flex;
+  }
+  .container form .forgotPassword {
+    margin-top: 12px;
+  }
+  .securityNotice {
+    padding: 24px 12px 0 12px;
+  }
+  .securityNotice .warning {
+    margin-top: 24px;
   }
 }
 @media (max-width: 450px) {

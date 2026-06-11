@@ -11,7 +11,7 @@ export function LoginTopNav() {
     openPopup(
       "contextual",
       () => (
-        <div className={styles.contextMenu}>
+        <div className={`${styles.contextMenu} glassEffect`}>
           <CustomButton ClickEffect={"scale"} link={true} href="/">
             <p>Privacy & security</p>
           </CustomButton>
