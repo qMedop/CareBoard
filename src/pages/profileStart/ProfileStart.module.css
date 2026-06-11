@@ -360,6 +360,16 @@
     top: 0;
     right: 0;
     z-index: -1;
+    opacity: 0.6;
+  }
+  .firstTimeContainer .right .illustration {
+    height: 100%;
+  }
+  .firstTimeContainer .right .illustration .color.red {
+    top: 10%;
+  }
+  .firstTimeContainer .right .illustration .color.blue {
+    top: 50%;
   }
   .firstTimeContainer .right :global(.illustratior) {
     display: none;
@@ -376,6 +386,7 @@
   }
   .firstTimeContainer .left .text p {
     font-size: 14px;
+    text-align: center;
   }
   .firstTimeContainer .left .text p.privacy {
     font-size: 12px;
@@ -412,6 +423,14 @@
   .firstTimeContainer .info {
     font-size: 14px;
     text-align: center;
+  }
+}
+body:global(.mobile) {
+  .firstTimeContainer .section.gender .options .top > div {
+    cursor: none;
+  }
+  .firstTimeContainer .section .displayPicture .imageWrapper {
+    cursor: none;
   }
 }
 /* This keyframe is no longer used, but can be kept for other purposes */

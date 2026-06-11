@@ -40,6 +40,7 @@ export function LoginTopNav() {
         </div>
         <div className={styles.links}>
           <CustomButton
+            style={{ transform: "rotate(180deg)" }}
             className={styles.contextMenuBtn}
             ClickEffect={"scale"}
             onClick={openMenu}
