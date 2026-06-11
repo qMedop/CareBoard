@@ -5,7 +5,7 @@
 }
 .pinBoxWrapper {
   position: relative;
-  border: 2px solid var(--main-cyan);
+  border: 2px solid var(--text-light);
   border-radius: 12px;
   height: 80px;
   width: 60px;

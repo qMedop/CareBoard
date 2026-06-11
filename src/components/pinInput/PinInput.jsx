@@ -1,45 +1,104 @@
-import { useState } from "react";
-import styles from "./PinInput.module.css"; // Adjust this to your styles location
+import { useState, useRef, useEffect } from "react";
+import styles from "./PinInput.module.css";
 
-export default function PinInput({ length = 4, onChange }) {
+export default function PinInput({ length = 4, onChange, isMasked = true }) {
   const [values, setValues] = useState(Array(length).fill(""));
 
-  const handleChange = (index, val) => {
-    const value = val.replace(/\D/, "");
-    const updated = [...values];
-    updated[index] = value;
-    setValues(updated);
-    onChange(updated.join(""));
+  // Track input elements dynamically without relying on brittle document.getElementById DOM selectors
+  const inputRefs = useRef([]);
 
-    // Move focus to next input
-    if (value && index < length - 1) {
-      const next = document.getElementById(`pin-${index + 1}`);
-      if (next) next.focus();
+  // Ensure refs array scales correctly if the length prop changes dynamically
+  useEffect(() => {
+    inputRefs.current = inputRefs.current.slice(0, length);
+  }, [length]);
+
+  const updatePinState = (updatedValues) => {
+    setValues(updatedValues);
+    if (onChange) {
+      onChange(updatedValues.join(""));
     }
+  };
 
-    // Blur last input
-    if (value && index === length - 1) {
-      const last = document.getElementById(`pin-${index}`);
-      if (last) last.blur();
+  const handleChange = (index, rawValue) => {
+    // Strip non-numeric inputs immediately to protect downstream data parsers
+    const numericValue = rawValue.replace(/\D/g, "");
+    if (!numericValue) return;
+
+    const updated = [...values];
+    // Grab only the last character entered (handles mobile keyboards autocompleting over text)
+    const targetChar = numericValue.substring(numericValue.length - 1);
+    updated[index] = targetChar;
+
+    updatePinState(updated);
+
+    // Move focus forward automatically
+    if (index < length - 1) {
+      inputRefs.current[index + 1]?.focus();
+    } else if (index === length - 1) {
+      inputRefs.current[index]?.blur();
     }
   };
 
   const handleKeyDown = (e, index) => {
-    if (e.key === "Backspace" && !values[index] && index > 0) {
-      const prev = document.getElementById(`pin-${index - 1}`);
-      if (prev) prev.focus();
+    const currentVal = values[index];
+
+    switch (e.key) {
+      case "Backspace":
+        e.preventDefault();
+
+        if (currentVal) {
+          // If current box has a value, delete it but preserve focus
+          const updated = [...values];
+          updated[index] = "";
+          updatePinState(updated);
+        } else if (index > 0) {
+          // If current box is empty, wipe out the previous box and move focus back
+          const updated = [...values];
+          updated[index - 1] = "";
+          updatePinState(updated);
+          inputRefs.current[index - 1]?.focus();
+        }
+        break;
+
+      case "ArrowLeft":
+        e.preventDefault();
+        if (index > 0) inputRefs.current[index - 1]?.focus();
+        break;
+
+      case "ArrowRight":
+        e.preventDefault();
+        if (index < length - 1) inputRefs.current[index + 1]?.focus();
+        break;
+
+      default:
+        break;
     }
   };
 
-  const handleFocus = () => {
-    // Clear values and focus first input
-    const cleared = Array(length).fill("");
-    setValues(cleared);
-    onChange(""); // Send empty string to parent
-    setTimeout(() => {
-      const first = document.getElementById("pin-0");
-      if (first) first.focus();
-    }, 0);
+  /**
+   * Safe Intercept Vector: Handles standard multi-digit pasting (e.g., from 2FA SMS or clipboard)
+   */
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData("text");
+    const cleanNumbers = pastedData.replace(/\D/g, "").substring(0, length);
+
+    if (!cleanNumbers) return;
+
+    const updated = cleanNumbers.split("");
+    // Pad array with empty strings if pasted digits are fewer than the expected length
+    const padded = Array.from({ length }, (_, i) => updated[i] || "");
+
+    updatePinState(padded);
+
+    // Focus either the next empty box or blur the last box if completely filled
+    const targetFocusIndex =
+      cleanNumbers.length < length ? cleanNumbers.length : length - 1;
+    if (cleanNumbers.length === length) {
+      inputRefs.current[targetFocusIndex]?.blur();
+    } else {
+      inputRefs.current[targetFocusIndex]?.focus();
+    }
   };
 
   return (
@@ -50,23 +109,18 @@ export default function PinInput({ length = 4, onChange }) {
           className={`${styles.pinBoxWrapper} ${val ? styles.filled : ""}`}
         >
           <input
-            id={`pin-${i}`}
-            type="text"
+            ref={(el) => (inputRefs.current[i] = el)}
+            type={isMasked ? "password" : "text"}
             inputMode="numeric"
-            maxLength="1"
-            className={`${styles.pinBox}`}
+            pattern="[0-9]*"
+            maxLength={length} // Accommodates clipboard paste intercepts
+            className={styles.pinBox}
             value={val}
             onChange={(e) => handleChange(i, e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, i)}
-            onPointerDown={handleFocus}
-            onBlur={() => {
-              const wrapper = document.getElementById(
-                `pin-${i}`
-              )?.parentElement;
-              if (wrapper) wrapper.classList.remove(styles.focused);
-            }}
+            onPaste={handlePaste}
+            autoComplete="one-time-code" // Encourages mobile browsers to suggest incoming SMS codes
           />
-          <div className={styles.hide}></div>
         </div>
       ))}
     </div>

@@ -136,61 +136,60 @@ function SignInForm({ resetTrigger }) {
   function handleUsernameValidate() {
     if (!signInEmail || signInEmail.length === 0) {
       setSignInUsernameErr(true);
-      return;
+      return false;
     }
     if (signInEmail.includes("@")) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(signInEmail)) {
         setSignInUsernameErr("Invalid email format.");
-        return;
+        return false;
       }
     } else {
       if (signInEmail.length < 3) {
         setSignInUsernameErr("Username must be at least 3 characters.");
-        return;
+        return false;
       }
       if (signInEmail.length > 10) {
         setSignInUsernameErr("Username can't be more than 10 characters.");
-        return;
+        return false;
       }
       if (!/^[a-zA-Z0-9._]+$/.test(signInEmail)) {
         setSignInUsernameErr(
           "Only letters, numbers, dots and underscores are allowed.",
         );
-        return;
+        return false;
       }
     }
     setSignInUsernameErr(null);
+    return true;
   }
 
   function handlePasswordValidate() {
     if (signInPassword.length === 0) {
       setSignInPassErr(true);
+      return false;
     } else if (signInPassword.length < 8) {
       setSignInPassErr("Password must be at least 8 characters");
+      return false;
     } else {
       setSignInPassErr(null);
+      return true;
     }
   }
 
   async function handleSignInSubmit(e) {
     e.preventDefault();
-    setApiError(null); // Clear previous errors
+    setApiError(null);
 
-    // Run local validations first
-    handleUsernameValidate();
-    handlePasswordValidate();
+    const usernameValid = handleUsernameValidate();
+    const passwordValid = handlePasswordValidate();
 
-    // Check if local validations passed
-    const isUsernameValid = !signInUsernameErr; // Note: You might need to refine this logic
-    const isPasswordValid = !signInPassErr;
+    console.log(passwordValid, usernameValid);
+    if (!usernameValid || !passwordValid) return;
+    const result = await signIn(signInEmail, signInPassword);
 
-    if (isUsernameValid && isPasswordValid) {
-      const result = await signIn(signInEmail, signInPassword);
-
-      if (!result.success) {
-        setApiError(result.error);
-      }
+    if (!result.success) {
+      setApiError(result.error);
     }
   }
   return (

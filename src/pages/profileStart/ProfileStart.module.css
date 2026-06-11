@@ -344,6 +344,76 @@
 .firstTimeContainer .section .info.error {
   color: var(--text-error);
 }
+
+@media (max-width: 768px) {
+  .firstTimeContainer {
+    position: relative;
+  }
+  .firstTimeContainer .left {
+    width: 100%;
+    padding: 0 12px;
+    align-items: center;
+  }
+  .firstTimeContainer .right {
+    width: 100%;
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: -1;
+  }
+  .firstTimeContainer .right :global(.illustratior) {
+    display: none;
+  }
+  .firstTimeContainer .left .title {
+    display: flex;
+    justify-content: center;
+  }
+  .firstTimeContainer .left .text {
+    margin: 0 auto;
+    width: 100%;
+    padding: 0;
+    max-width: 600px;
+  }
+  .firstTimeContainer .left .text p {
+    font-size: 14px;
+  }
+  .firstTimeContainer .left .text p.privacy {
+    font-size: 12px;
+  }
+  .firstTimeContainer .left .title h1 {
+    font-size: 38px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .firstTimeContainer .buttons {
+    justify-content: center;
+  }
+  .firstTimeContainer .welcome :global(.svg) {
+    display: none;
+  }
+  .firstTimeContainer .left.left.default .sections {
+    width: 100%;
+  }
+}
+@media (max-width: 425px) {
+  .firstTimeContainer .section .headder h1 {
+    font-size: 24px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .firstTimeContainer .section .options .option button :global(.illustratior) {
+    width: 120px;
+    height: 120px;
+  }
+  .firstTimeContainer .section .displayPicture .imageWrapper {
+    width: 200px;
+    height: 200px;
+  }
+  .firstTimeContainer .info {
+    font-size: 14px;
+    text-align: center;
+  }
+}
 /* This keyframe is no longer used, but can be kept for other purposes */
 @keyframes contentAnimation {
   from {

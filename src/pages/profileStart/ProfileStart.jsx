@@ -404,7 +404,7 @@ function DisplayName({ handleInputChange, formData, error }) {
           <input
             value={formData.displayName}
             type="text"
-            placeholder="ex. Alex Rotondi"
+            placeholder="ex. Lena Rotondi"
             onChange={(e) => handleInputChange("displayName", e.target.value)}
             onFocus={() =>
               handleInputChange("displayName", formData.displayName)

@@ -64,7 +64,7 @@ function EventBlock({
         width: `${event?.size?.width || 90}%`,
         height: `${event?.size?.height}px`,
         zIndex: zIndex,
-        backgroundColor: `${isMobileUnsaved || isGhostFromUnsaved ? `${event?.editing ? "#ffffff00" : mobileGhostBg(0.2)}` : event?.color}`,
+        backgroundColor: `${isMobileUnsaved || isGhostFromUnsaved ? `${event?.editing ? "#ffffff00" : mobileGhostBg(0.2)}` : `${event?.color}99`}`,
         cursor: isShared ? "pointer" : "grab",
         border:
           isGhostFromUnsaved || isMobileUnsaved
