@@ -19,7 +19,7 @@ import styles from "./ProfilePage.module.css";
 import CustomButton from "../../components/button/Button";
 import Loading from "../../components/loading/Loading";
 import { SearchIcon, CheckMarkIcon, CloseIcon } from "../../assets/icons/Icon";
-
+import defaultAvatar from "../../assets/svg/user-avatar.svg";
 export default function ProfilePage() {
   const { username: urlUsername } = useParams();
   const username = urlUsername?.startsWith("@")
@@ -72,7 +72,7 @@ export default function ProfilePage() {
             id: doc.id,
             username: data.username,
             displayName: data.displayName,
-            pfpUrl: data.pfpUrl || "src/assets/svg/user-avatar.svg",
+            pfpUrl: data.pfpUrl || defaultAvatar,
           });
         });
         setSearchResults(results.filter((u) => u.id !== currentUser.id));
@@ -102,7 +102,7 @@ export default function ProfilePage() {
               id: snapshot.docs[0].id,
               username: data.username,
               displayName: data.displayName,
-              pfpUrl: data.pfpUrl || "src/assets/svg/user-avatar.svg",
+              pfpUrl: data.pfpUrl || defaultAvatar,
               created_at: data.created_at,
               publicKey: data.publicKey,
             });
@@ -383,7 +383,7 @@ export default function ProfilePage() {
                       navigate(`/profile/@${u.username}`);
                     }}
                   >
-                    <img src={u.pfpUrl} alt={u.username} />
+                    <img src={u.pfpUrl || defaultAvatar} alt={u.username} />
                     <div className={styles.searchItemText}>
                       <p>{u.displayName}</p>
                       <span>@{u.username}</span>
@@ -405,7 +405,7 @@ export default function ProfilePage() {
             ) : (
               myNotifications.map((noti) => (
                 <div key={noti.docId} className={styles.notificationCard}>
-                  <img src={noti.user.pfpUrl} alt="" />
+                  <img src={noti.user.pfpUrl || defaultAvatar} alt="" />
                   <div className={styles.notiInfo}>
                     <p>
                       <strong>{noti.user.displayName}</strong> wants to connect!
@@ -437,7 +437,7 @@ export default function ProfilePage() {
       <div className={styles.rightColumn}>
         <div className={styles.profileCard}>
           <img
-            src={targetUser.pfpUrl || "src/assets/svg/user-avatar.svg"}
+            src={targetUser.pfpUrl || defaultAvatar}
             alt="Profile"
             className={styles.pfp}
           />
@@ -521,7 +521,10 @@ export default function ProfilePage() {
                   className={styles.friendCard}
                   onClick={() => navigate(`/profile/@${friend.username}`)}
                 >
-                  <img src={friend.pfpUrl} alt={friend.username} />
+                  <img
+                    src={friend.pfpUrl || defaultAvatar}
+                    alt={friend.username}
+                  />
                   <div>
                     <p>{friend.displayName}</p>
                     <span>@{friend.username}</span>

@@ -18,7 +18,7 @@ import {
   PersonIcon,
 } from "../../../../assets/icons/Icon";
 import CustomButton from "../../../../components/button/Button";
-
+import defaultAvatar from "../../../../assets/svg/user-avatar.svg";
 export default function EventInfoPopup({
   eventId,
   onClose,
@@ -200,7 +200,7 @@ export default function EventInfoPopup({
           {isShared && currentEvent.ownerPfp && (
             <div className={styles.sharedPfp}>
               <img
-                src={currentEvent.ownerPfp}
+                src={currentEvent.ownerPfp || defaultAvatar}
                 alt={`${currentEvent.ownerName}'s pfp`}
               />
               <p>Owned by {currentEvent.ownerName}</p>

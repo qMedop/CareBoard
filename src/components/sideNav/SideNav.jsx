@@ -20,6 +20,7 @@ import { useData } from "../../contexts/AuthContext";
 import { useTime } from "../../contexts/TimeContext";
 import CustomButton from "../button/Button";
 import { usePopup } from "../../contexts/PopupContext";
+import defaultAvatar from "../../assets/svg/user-avatar.svg";
 function SideNav() {
   const location = useLocation();
   const { currentUser } = useData();
@@ -133,7 +134,7 @@ function SideNav() {
                 href={"/profile"}
                 ClickEffect={isMobile ? "scale" : false}
               >
-                <img src={currentUser.pfpUrl} alt="" />
+                <img src={currentUser.pfpUrl || defaultAvatar} alt="" />
               </CustomButton>
             </div>
             <div className={styles.settings}>
@@ -208,7 +209,7 @@ function MobileMenu() {
           className={"default"}
           ClickEffect={"scale"}
         >
-          <img src={currentUser.pfpUrl} alt="" />
+          <img src={currentUser.pfpUrl || defaultAvatar} alt="" />
           <p>Profile</p>
         </CustomButton>
       </div>

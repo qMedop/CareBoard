@@ -45,7 +45,7 @@ import {
 } from "../../../../assets/icons/Icon";
 import Loading from "../../../../components/loading/Loading";
 import { db } from "../../../../../firebase";
-
+import defaultAvatar from "../../../../assets/svg/user-avatar.svg";
 const AddEditNewEvent = forwardRef(
   ({ eventId: incomingEventId, onClose }, ref) => {
     // 🟢 FIXED: If it's an unsaved draft ID string, turn it to null so the form activates Create Mode!
@@ -1395,11 +1395,7 @@ function VisibilityPopup({
             {eventData.invitedIds.slice(0, 3).map((id) => {
               const f = friends.find((x) => x.id === id);
               return f ? (
-                <img
-                  key={id}
-                  src={f.pfpUrl || "src/assets/svg/user-avatar.svg"}
-                  alt="friend"
-                />
+                <img key={id} src={f.pfpUrl || defaultAvatar} alt="friend" />
               ) : null;
             })}
             {eventData.invitedIds.length > 3 && (
@@ -1423,7 +1419,7 @@ function SpecificFriendsPopup({
   const items = friends.map((f) => ({
     id: f.id,
     label: f.displayName,
-    icon: f.pfpUrl || "src/assets/svg/user-avatar.svg",
+    icon: f.pfpUrl || defaultAvatar,
   }));
   const [selected, setSelected] = useState(eventData.invitedIds || []);
 

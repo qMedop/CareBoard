@@ -2085,7 +2085,7 @@ export const LoadingIcon = ({ className = "", size }) => {
           d="M16 8.00023L18.3642 5.63609M5.63631 18.364L8.00026 16M17.6566 12H21M3 12H6.34315M12 6.34342V3M12 21V17.6569M8.00023 8.00023L5.63609 5.63609M18.364 18.364L16 16"
           stroke="#F1F1F1"
           strokeWidth="1.5"
-          strokelinecap="round"
+          strokeLinecap="round"
           strokeLinejoin="round"
         />
       </svg>

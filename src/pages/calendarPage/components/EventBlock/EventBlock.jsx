@@ -3,7 +3,7 @@ import styles from "../../CalendarPage.module.css";
 import { useTime } from "../../../../contexts/TimeContext";
 import { DateTime } from "luxon";
 import { LockIcon, PlusIcon, RepeatIcon } from "../../../../assets/icons/Icon";
-
+import defaultAvatar from "../../../../assets/svg/user-avatar.svg";
 function EventBlock({
   event,
   handlePointerDown,
@@ -161,10 +161,7 @@ function EventBlock({
             )}
             {isShared && event.ownerPfp && (
               <div className={`${styles.sharedPfp}`}>
-                <img
-                  src={event.ownerPfp || "src/assets/svg/user-avatar.svg"}
-                  alt="shared"
-                />
+                <img src={event.ownerPfp || defaultAvatar} alt="shared" />
               </div>
             )}
           </div>

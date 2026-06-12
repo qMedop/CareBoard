@@ -1387,6 +1387,7 @@ export function AuthProvider({ children }) {
     if (!currentUser?.id) {
       return { success: false, error: "Not authenticated" };
     }
+
     try {
       const publicPayload = {};
       const privatePayload = {};
@@ -1395,19 +1396,32 @@ export function AuthProvider({ children }) {
         publicPayload.username = formData.username;
         publicPayload.username_lower = formData.username.toLowerCase();
       }
+
       if (isNonEmptyString(formData.displayName)) {
         publicPayload.displayName = formData.displayName;
       }
+
+      if (formData.displayPicture) {
+        publicPayload.pfpUrl = await fileToBase64(formData.displayPicture);
+      } else if (isNonEmptyString(formData.pfpUrl)) {
+        publicPayload.pfpUrl = formData.pfpUrl;
+      }
+
       publicPayload.isUserFirstTime = false;
 
       if (isNonEmptyString(formData.pin)) {
         if (!currentUser.userDek) {
-          return { success: false, error: "Encryption key unavailable." };
+          return {
+            success: false,
+            error: "Encryption key unavailable.",
+          };
         }
+
         const { ciphertext, iv } = await encryptWithDEK(
           currentUser.userDek,
           formData.pin,
         );
+
         privatePayload.pin = ciphertext;
         privatePayload.pin_iv = iv;
       }
@@ -1415,6 +1429,7 @@ export function AuthProvider({ children }) {
       if (Object.keys(publicPayload).length > 0) {
         await updateDoc(doc(db, "users", currentUser.id), publicPayload);
       }
+
       if (Object.keys(privatePayload).length > 0) {
         await updateDoc(
           doc(db, "usersPrivateData", currentUser.id),
@@ -1422,16 +1437,27 @@ export function AuthProvider({ children }) {
         );
       }
 
-      setCurrentUser((prev) => ({ ...prev, ...publicPayload }));
+      setCurrentUser((prev) => ({
+        ...prev,
+        ...publicPayload,
+      }));
+
       setAuthStatus("done");
-      return { success: true, message: "Profile updated successfully" };
+
+      return {
+        success: true,
+        message: "Profile updated successfully",
+      };
     } catch (err) {
       devLog("UPDATE_PROFILE", err);
-      const msg =
-        err instanceof AppError
-          ? err.message
-          : "Could not update your profile. Please try again.";
-      return { success: false, error: msg };
+
+      return {
+        success: false,
+        error:
+          err instanceof AppError
+            ? err.message
+            : "Could not update your profile. Please try again.",
+      };
     }
   }
 
@@ -1487,14 +1513,13 @@ export function AuthProvider({ children }) {
     if (!currentUser?.id || !currentUser.userDek) {
       return { success: false, error: "Not authenticated." };
     }
+
     try {
       if (onProgress) onProgress("encrypting");
 
       const start = eventData.start ?? eventData.timeRange?.start;
       const end = eventData.end ?? eventData.timeRange?.end;
 
-      // Event key: extractable here only so we can export its raw bytes to
-      // wrap under the DEK.
       const eventKey = await crypto.subtle.generateKey(
         { name: "AES-GCM", length: 256 },
         true,
@@ -1512,41 +1537,90 @@ export function AuthProvider({ children }) {
       const { ciphertext: encryptedEventData, iv: eventDataIv } =
         await encryptWithDEK(eventKey, eventPlaintext);
 
-      // Export raw event key bytes then wrap under DEK.
       const rawEventKey = await crypto.subtle.exportKey("raw", eventKey);
+
       const { ciphertext: encryptedEventKeyOwner, iv: eventKeyIvOwner } =
         await encryptWithDEK(currentUser.userDek, rawEventKey);
 
+      const participants = [currentUser.id];
+
+      const keys = {
+        [currentUser.id]: {
+          encrypted_event_key: encryptedEventKeyOwner,
+          event_key_iv: eventKeyIvOwner,
+        },
+      };
+
+      const sharedFriends = currentUser.userData?.sharedFriends || [];
+      console.log(sharedFriends);
+      for (const friend of sharedFriends) {
+        try {
+          if (!friend?.id || !friend?.publicKey) continue;
+
+          const friendPubKey = await crypto.subtle.importKey(
+            "spki",
+            base64ToArrayBuffer(friend.publicKey),
+            { name: "RSA-OAEP", hash: "SHA-256" },
+            false,
+            ["encrypt"],
+          );
+
+          const encryptedForFriend = await crypto.subtle.encrypt(
+            { name: "RSA-OAEP" },
+            friendPubKey,
+            rawEventKey,
+          );
+
+          keys[friend.id] = {
+            encrypted_event_key: arrayBufferToBase64(encryptedForFriend),
+          };
+
+          participants.push(friend.id);
+        } catch (err) {
+          devLog(
+            "ADD_EVENT",
+            `Failed to share event with friend ${friend.id}`,
+            err,
+          );
+        }
+      }
+
       if (onProgress) onProgress("uploading");
+
       const newGroupId = eventData.group_id ?? crypto.randomUUID();
 
       const eventPayload = {
         ownerId: currentUser.id,
-        participants: [currentUser.id],
+        participants,
         group_id: newGroupId,
         created_at: new Date().toISOString(),
         encrypted_event_data: encryptedEventData,
         event_data_iv: eventDataIv,
-        keys: {
-          [currentUser.id]: {
-            encrypted_event_key: encryptedEventKeyOwner,
-            event_key_iv: eventKeyIvOwner,
-          },
-        },
+        keys,
       };
 
       const docRef = await addDoc(collection(db, "events"), eventPayload);
+
       return {
         success: true,
-        event: { ...eventData, id: docRef.id, group_id: newGroupId },
+        event: {
+          ...eventData,
+          id: docRef.id,
+          group_id: newGroupId,
+        },
       };
     } catch (err) {
       devLog("ADD_EVENT", err);
+
       const msg =
         err instanceof AppError
           ? err.message
           : "Could not create the event. Please try again.";
-      return { success: false, error: msg };
+
+      return {
+        success: false,
+        error: msg,
+      };
     }
   }
 

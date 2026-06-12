@@ -47,7 +47,7 @@ import CalendarContentDay from "./components/CalendarContentDay/CalendarContentD
 import useCalendarEventHandlers from "./utils/useCalendarEventHandlers";
 import CheckboxGroup from "../../components/checkboxGroup/CheckboxGroup"; // 🔴 IMPORT NEW COMPONENT
 import MobileCalendarPager from "./components/MobileCalendarPager/MobileCalendarPager";
-
+import defaultAvatar from "../../assets/svg/user-avatar.svg";
 function CalendarPage() {
   const { notify } = useNotification();
   const {
@@ -1121,17 +1121,18 @@ function CalendarNavControlls() {
       usersMap.set(currentUser.id, {
         id: currentUser.id,
         label: "My Calendar",
-        icon: currentUser.pfpUrl || "src/assets/svg/user-avatar.svg",
+        icon: currentUser.pfpUrl || defaultAvatar,
       });
     }
 
     // Add friends from loadedEvents
     loadedEvents?.forEach((ev) => {
       if (ev.isShared && ev.ownerId && !usersMap.has(ev.ownerId)) {
+        console.log(ev.ownerPfp);
         usersMap.set(ev.ownerId, {
           id: ev.ownerId,
           label: ev.ownerName || "Friend",
-          icon: ev.ownerPfp || "src/assets/svg/user-avatar.svg",
+          icon: ev.ownerPfp || defaultAvatar,
         });
       }
     });
@@ -1144,7 +1145,7 @@ function CalendarNavControlls() {
     activeFilterIds?.length === 0
       ? availableUsers
       : availableUsers.filter((u) => activeFilterIds?.includes(u.id));
-
+  console.log(activeAvatars);
   const handleFilterClick = (e) => {
     openPopup(
       "centered",
@@ -1160,7 +1161,6 @@ function CalendarNavControlls() {
       "center",
     );
   };
-
   return (
     <div className={styles.navControls}>
       <div className={styles.left}>
@@ -1205,7 +1205,7 @@ function CalendarNavControlls() {
                 className={styles.filterAvatar}
                 style={{ zIndex: 3 - idx }}
               >
-                <img src={user.icon} alt={user.label} />
+                <img src={defaultAvatar} alt={user.label} />
               </div>
             ))}
             {activeAvatars.length > 3 && (

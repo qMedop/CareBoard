@@ -10,7 +10,7 @@ import { useData } from "./AuthContext";
 import { useNotification } from "./NotificationContext";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../firebase";
-
+import defaultAvatar from "../assets/svg/user-avatar.svg";
 const TimeContext = createContext();
 
 export const TimeProvider = ({ children }) => {
@@ -276,12 +276,12 @@ export const TimeProvider = ({ children }) => {
                 if (userSnap.exists()) {
                   const data = userSnap.data();
                   userProfileCache[ev.ownerId] = {
-                    pfp: data.pfpUrl || "src/assets/svg/user-avatar.svg",
+                    pfp: data.pfpUrl || defaultAvatar,
                     name: data.displayName || "A friend",
                   };
                 } else {
                   userProfileCache[ev.ownerId] = {
-                    pfp: "src/assets/svg/user-avatar.svg",
+                    pfp: defaultAvatar,
                     name: "A friend",
                   };
                 }
@@ -290,7 +290,7 @@ export const TimeProvider = ({ children }) => {
                 if (fetchErr.name === "AbortError") {
                   return {
                     ...ev,
-                    ownerPfp: "src/assets/svg/user-avatar.svg",
+                    ownerPfp: defaultAvatar,
                     ownerName: "A friend",
                     columnDate: ev.start?.split("T")[0],
                     position: { x: 0, y: 0 },
