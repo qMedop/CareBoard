@@ -1382,7 +1382,16 @@ export function AuthProvider({ children }) {
       return { available: false, message: "Error checking username" };
     }
   }
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
 
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+
+      reader.readAsDataURL(file);
+    });
+  }
   async function updateUserProfile(formData) {
     if (!currentUser?.id) {
       return { success: false, error: "Not authenticated" };

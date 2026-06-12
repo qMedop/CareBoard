@@ -23,6 +23,9 @@ import {
   WelcomeIllustratior,
 } from "../../assets/Illustrations/Illustrations";
 import { useData } from "../../contexts/AuthContext";
+import defaultAvatar from "../../assets/svg/user-avatar.svg";
+import maleAvatar from "../../assets/svg/male-avatar.svg";
+import femaleAvatar from "../../assets/svg/female-avatar.svg";
 
 const variants = {
   enter: (direction) => ({
@@ -113,10 +116,10 @@ function ProfileStart() {
       if (!finalFormData.displayPicture) {
         finalFormData.pfpUrl =
           formData.gender === "male"
-            ? "src/assets/svg/male-avatar.svg"
+            ? maleAvatar
             : formData.gender === "female"
-              ? "src/assets/svg/female-avatar.svg"
-              : "src/assets/svg/user-avatar.svg";
+              ? femaleAvatar
+              : defaultAvatar;
 
         // Delete displayPicture so AuthContext doesn't try to Base64 encode a text string
         delete finalFormData.displayPicture;
