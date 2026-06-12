@@ -1205,7 +1205,7 @@ function CalendarNavControlls() {
                 className={styles.filterAvatar}
                 style={{ zIndex: 3 - idx }}
               >
-                <img src={defaultAvatar} alt={user.label} />
+                <img src={user.icon ||  defaultAvatar} alt={user.label} />
               </div>
             ))}
             {activeAvatars.length > 3 && (
