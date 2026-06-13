@@ -25,6 +25,7 @@ import {
   arrayRemove,
   deleteField,
   onSnapshot,
+  runTransaction,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
@@ -1092,9 +1093,20 @@ export function AuthProvider({ children }) {
       const publicPayload = {};
       const privatePayload = {};
 
-      if (isNonEmptyString(formData.username)) {
-        publicPayload.username = formData.username;
-        publicPayload.username_lower = formData.username.toLowerCase();
+      // 1. Prep string logic
+      const newUsername = isNonEmptyString(formData.username)
+        ? formData.username
+        : null;
+      const newUsernameLower = newUsername ? newUsername.toLowerCase() : null;
+      const oldUsernameLower = currentUser.username_lower || null;
+
+      // Check if the user is actually requesting a name change
+      const isChangingUsername =
+        newUsernameLower && newUsernameLower !== oldUsernameLower;
+
+      if (newUsername) {
+        publicPayload.username = newUsername;
+        publicPayload.username_lower = newUsernameLower;
       }
 
       if (isNonEmptyString(formData.displayName)) {
@@ -1111,32 +1123,58 @@ export function AuthProvider({ children }) {
 
       if (isNonEmptyString(formData.pin)) {
         if (!currentUser.userDek) {
-          return {
-            success: false,
-            error: "Encryption key unavailable.",
-          };
+          return { success: false, error: "Encryption key unavailable." };
         }
-
         const { ciphertext, iv } = await encryptWithDEK(
           currentUser.userDek,
           formData.pin,
         );
-
         privatePayload.pin = ciphertext;
         privatePayload.pin_iv = iv;
       }
 
-      if (Object.keys(publicPayload).length > 0) {
-        await updateDoc(doc(db, "users", currentUser.id), publicPayload);
-      }
+      // 2. Execute the Transaction
+      await runTransaction(db, async (transaction) => {
+        let newUsernameRef;
 
-      if (Object.keys(privatePayload).length > 0) {
-        await updateDoc(
-          doc(db, "usersPrivateData", currentUser.id),
-          privatePayload,
-        );
-      }
+        // --- ALL READS MUST GO FIRST ---
+        if (isChangingUsername) {
+          newUsernameRef = doc(db, "usernames", newUsernameLower);
+          const newUsernameSnap = await transaction.get(newUsernameRef);
 
+          if (newUsernameSnap.exists()) {
+            // If the transaction finds it exists at the exact moment of saving, abort.
+            throw new Error("USERNAME_ALREADY_TAKEN");
+          }
+        }
+
+        // --- WRITES GO SECOND ---
+
+        // Update User Documents
+        const userRef = doc(db, "users", currentUser.id);
+        const privateRef = doc(db, "usersPrivateData", currentUser.id);
+
+        if (Object.keys(publicPayload).length > 0) {
+          transaction.update(userRef, publicPayload);
+        }
+        if (Object.keys(privatePayload).length > 0) {
+          transaction.update(privateRef, privatePayload);
+        }
+
+        // Handle the Username Registry
+        if (isChangingUsername) {
+          // Reserve the new name
+          transaction.set(newUsernameRef, { uid: currentUser.id });
+
+          // Release the old name so someone else can use it
+          if (oldUsernameLower) {
+            const oldUsernameRef = doc(db, "usernames", oldUsernameLower);
+            transaction.delete(oldUsernameRef);
+          }
+        }
+      });
+
+      // 3. Update Local State
       setCurrentUser((prev) => ({
         ...prev,
         ...publicPayload,
@@ -1150,6 +1188,14 @@ export function AuthProvider({ children }) {
       };
     } catch (err) {
       devLog("UPDATE_PROFILE", err);
+
+      // Catch our custom transaction error
+      if (err.message === "USERNAME_ALREADY_TAKEN") {
+        return {
+          success: false,
+          error: "This username was just taken. Please choose another.",
+        };
+      }
 
       return {
         success: false,
