@@ -10,7 +10,7 @@
   transition: 0.3s;
   font-family: "Roboto", Arial, sans-serif;
 }
-.button .effecctBgColor {
+.button .effectBgColor {
   z-index: -1;
 }
 .button.default {
@@ -157,7 +157,7 @@
   width: 24px;
   height: 24px;
 }
-.button .effecctBgColor {
+.button .effectBgColor {
   position: absolute;
   width: 100%;
   height: 100%;

@@ -11,7 +11,7 @@
 }
 
 .loadingAnim {
-  --uib-size: 70px;
+  --uib-size: var(--size);
   --uib-color: var(--icons-fill);
   --uib-speed: 1.25s;
   --uib-cube-size: calc(var(--uib-size) * 0.2);

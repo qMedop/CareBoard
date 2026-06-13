@@ -9,16 +9,16 @@ import {
   EyeIcon,
   LockIcon,
   PersonIcon,
-  WebsiteIcon,
 } from "../../assets/icons/Icon";
-import { useTime } from "../../contexts/TimeContext";
 import CustomButton from "../../components/button/Button";
 function LoginPage() {
   const { mode } = useParams();
   const containerRef = useRef(null);
   const { currentUser } = useData();
   const navigate = useNavigate();
-  const { isMobile } = useTime();
+
+  const [btnLoading, setBtnLoading] = useState(false);
+  const isLoading = btnLoading === "signIn" || btnLoading === "signUp";
   useEffect(() => {
     if (currentUser) navigate("/");
   }, [navigate, currentUser]);
@@ -44,9 +44,17 @@ function LoginPage() {
           mode === "sign-up" ? styles.signUp : ""
         } ${mode === "reset-password" ? styles.resetPassword : ""}`}
       >
-        <SignInForm resetTrigger={mode} />
-        <SignUpForm resetTrigger={mode} />
-        <ResetPassword resetTrigger={mode} />
+        <SignInForm
+          resetTrigger={mode}
+          btnLoading={btnLoading}
+          setBtnLoading={setBtnLoading}
+        />
+        <SignUpForm
+          resetTrigger={mode}
+          btnLoading={btnLoading}
+          setBtnLoading={setBtnLoading}
+        />
+        <ResetPassword />
 
         <div className={`${styles.overlayContainer}`}>
           <div className={`${styles.overlay}`}>
@@ -57,9 +65,10 @@ function LoginPage() {
               </p>
               <CustomButton
                 ClickEffect={"scaleDown"}
-                className={`${styles.navigateBtn} default`}
+                className={`${styles.navigateBtn} default ${isLoading ? "disabled" : ""}`}
                 link={true}
-                href="/login/sign-up"
+                href={`/login/sign-up`}
+                disabled={isLoading}
               >
                 <p>Sign up</p>
               </CustomButton>
@@ -69,9 +78,10 @@ function LoginPage() {
               <p>Enter your personal details and start journey with us.</p>
               <CustomButton
                 ClickEffect={"scaleDown"}
-                className={`${styles.navigateBtn} default`}
+                className={`${styles.navigateBtn} default ${isLoading ? "disabled" : ""}`}
                 link={true}
-                href="/login/sign-in"
+                href={`/login/sign-in`}
+                disabled={isLoading}
               >
                 <p>Sign in</p>
               </CustomButton>
@@ -87,6 +97,7 @@ function LoginPage() {
                     className={`${styles.navigateBtn} default `}
                     link={true}
                     href="/login/sign-in"
+                    disabled={isLoading}
                   >
                     <p>Sign in</p>
                   </CustomButton>
@@ -95,6 +106,7 @@ function LoginPage() {
                     className={`${styles.navigateBtn} default`}
                     link={true}
                     href="/login/sign-up"
+                    disabled={isLoading}
                   >
                     <p>Sign up</p>
                   </CustomButton>
@@ -108,7 +120,7 @@ function LoginPage() {
   );
 }
 
-function SignInForm({ resetTrigger }) {
+function SignInForm({ resetTrigger, btnLoading, setBtnLoading }) {
   const [signInEmail, setSignInEmail] = useState("");
   const [signInPassword, setSignInPassword] = useState("");
   const [signInshowPass, setSignInshowPass] = useState(false);
@@ -125,6 +137,7 @@ function SignInForm({ resetTrigger }) {
     setSignInPassErr(null);
     setSignInshowPass(false);
     setInputType("text");
+    setApiError(null);
   }, [resetTrigger]);
 
   function handleChange(e) {
@@ -185,13 +198,22 @@ function SignInForm({ resetTrigger }) {
     const passwordValid = handlePasswordValidate();
 
     if (!usernameValid || !passwordValid) return;
-    const result = await signIn(signInEmail, signInPassword);
 
-    if (!result.success) {
-      console.log(result.error);
-      setApiError(result.error);
+    setBtnLoading("signIn");
+
+    try {
+      const result = await signIn(signInEmail, signInPassword);
+
+      if (!result.success) {
+        setApiError(result.error || "Invalid login credentials.");
+        setBtnLoading(null);
+      }
+    } catch (err) {
+      setApiError(err.message || "An unexpected error occurred.");
+      setBtnLoading(null);
     }
   }
+
   return (
     <div className={`${styles.signInContainer} ${styles.formContainer}`}>
       <h2>Sign in</h2>
@@ -263,6 +285,7 @@ function SignInForm({ resetTrigger }) {
 
         <div className={styles.submit}>
           <CustomButton
+            loading={btnLoading === "signIn" ? "active" : true}
             ClickEffect={"scaleDown"}
             className={`${styles.signUp} default`}
             type="submit"
@@ -276,7 +299,8 @@ function SignInForm({ resetTrigger }) {
             className="default"
             ClickEffect={false}
             link={true}
-            href="/login/reset-password"
+            href={`/login/reset-password`}
+            disabled={btnLoading === "signIn" || btnLoading === "signUp"}
           >
             <p>Forgot your password?</p>
           </CustomButton>
@@ -286,6 +310,7 @@ function SignInForm({ resetTrigger }) {
           className={`${styles.smallScreenBtn} default `}
           link={true}
           href="/login/sign-up"
+          disabled={btnLoading === "signIn" || btnLoading === "signUp"}
         >
           <p>Sign up</p>
         </CustomButton>
@@ -293,7 +318,7 @@ function SignInForm({ resetTrigger }) {
     </div>
   );
 }
-function SignUpForm({ resetTrigger }) {
+function SignUpForm({ resetTrigger, btnLoading, setBtnLoading }) {
   const [signUpEmail, setSignUpEmail] = useState("");
   const [signUpPassword, setSignUpPassword] = useState("");
   const [signUpPassword2, setSignUpPassword2] = useState("");
@@ -319,66 +344,74 @@ function SignUpForm({ resetTrigger }) {
   function handleEmailValidate() {
     if (!signUpEmail || signUpEmail.length === 0) {
       setSignUpUsernameErr(true);
-      return;
+      return false; // Return false on error
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(signUpEmail)) {
       setSignUpUsernameErr("Invalid email format.");
-      return;
+      return false; // Return false on error
     }
     setSignUpUsernameErr(null);
+    return true; // Return true if valid
   }
 
   function handlePasswordValidate() {
     if (signUpPassword.length === 0) {
       setSignUpPassErr(true);
+      return false;
     } else if (signUpPassword.length < 8) {
       setSignUpPassErr("Password must be at least 8 characters.");
-    } else {
-      setSignUpPassErr(null);
+      return false;
     }
+    setSignUpPassErr(null);
+    return true;
   }
+
   function handlePasswordValidate2() {
     if (signUpPassword2.length === 0) {
       setSignUpPassMatchErr(true);
+      return false;
     } else if (
       signUpPassword2.length > 0 &&
       signUpPassword !== signUpPassword2
     ) {
       setSignUpPassMatchErr("Password does not match.");
-    } else {
-      setSignUpPassMatchErr(null);
+      return false;
     }
+    setSignUpPassMatchErr(null);
+    return true;
   }
 
   async function handleSignUpSubmit(e) {
     e.preventDefault();
 
-    // run validations
-    handleEmailValidate();
-    handlePasswordValidate();
-    handlePasswordValidate2();
+    const isEmailValid = handleEmailValidate();
+    const isPassValid = handlePasswordValidate();
+    const isPass2Valid = handlePasswordValidate2();
 
-    // Wait a tiny bit for states to update, or just check the current values
-    if (!signUpUsernameErr && !signUpPassErr && !signUpPassMatchErr) {
-      try {
-        // 1️⃣ Run the Firebase registration flow (generates keys & saves to Firestore)
-        const result = await registrationFlow(signUpEmail, signUpPassword);
+    if (!isEmailValid || !isPassValid || !isPass2Valid) {
+      return;
+    }
 
-        if (result.success) {
-          alert("Signup successful! Please sign in with your new account.");
-          // Redirect to the sign-in tab so they can generate their initial device keys
-          navigate("/login/sign-in");
-        }
-      } catch (err) {
-        console.error("Error during registration:", err);
+    setBtnLoading("signUp");
+    try {
+      const result = await registrationFlow(signUpEmail, signUpPassword);
 
-        // Handle specific Firebase errors nicely
-        if (err.code === "auth/email-already-in-use") {
-          setSignUpUsernameErr("This email is already registered.");
-        } else {
-          alert("Signup failed: " + (err.message || "Unknown error"));
-        }
+      if (result.success) {
+        navigate("/login/sign-in");
+        setBtnLoading(null);
+      } else {
+        setBtnLoading(null);
+      }
+    } catch (err) {
+      console.error("Error during registration:", err);
+      setBtnLoading(null);
+      if (err.code === "auth/email-already-in-use") {
+        setSignUpUsernameErr("This email is already registered.");
+      } else {
+        setSignUpUsernameErr(
+          "Signup failed: " + (err.message || "Unknown error"),
+        );
       }
     }
   }
@@ -484,8 +517,9 @@ function SignUpForm({ resetTrigger }) {
 
         <div className={styles.submit}>
           <CustomButton
+            loading={btnLoading === "signUp" ? "active" : true}
             ClickEffect={"scaleDown"}
-            className={`${styles.signUp} default`}
+            className={`${styles.signUp} default ${btnLoading === "signIn" || btnLoading === "signUp" ? "disabled" : ""}`}
             type="submit"
           >
             <p>Sign up</p>
@@ -496,6 +530,7 @@ function SignUpForm({ resetTrigger }) {
           className={`default ${styles.smallScreenBtn}`}
           link={true}
           href="/login/sign-in"
+          disabled={btnLoading === "signIn" || btnLoading === "signUp"}
         >
           <p>Sign in</p>
         </CustomButton>
@@ -503,16 +538,10 @@ function SignUpForm({ resetTrigger }) {
     </div>
   );
 }
-function ResetPassword({ resetTrigger }) {
-  const [signUpEmail, setSignUpEmail] = useState("");
-
-  useEffect(() => {
-    setSignUpEmail("");
-  }, [resetTrigger]);
-
+function ResetPassword() {
   return (
     <div className={`${styles.resetPasswordContainer} ${styles.formContainer}`}>
-      <h2>password Recovery</h2>
+      <h2>Password Recovery</h2>
       <div className={styles.securityNotice}>
         <p>
           Your data is protected with end-to-end encryption and secured using a

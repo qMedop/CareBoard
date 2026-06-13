@@ -6,7 +6,6 @@ import {
   useCallback,
 } from "react";
 import styles from "./ProfileStart.module.css";
-
 import PinInput from "../../components/pinInput/PinInput";
 import CustomButton from "../../components/button/Button";
 import {
@@ -44,7 +43,6 @@ const variants = {
   }),
 };
 
-// --- Main Component ---
 function ProfileStart() {
   const [step, setStep] = useState(0);
   const [formData, setFormData] = useState({
@@ -58,10 +56,8 @@ function ProfileStart() {
   const [direction, setDirection] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Mock functions, replace with your actual context hooks
-  const { updateUserProfile } = useData();
+  const { updateUserProfile, checkUsernameAvailability } = useData();
 
-  const { checkUsernameAvailability } = useData();
   useEffect(() => {
     if (step < components.length - 1) {
       setIsSubmitting(false);
@@ -86,6 +82,7 @@ function ProfileStart() {
   const handleNext = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
+
     if (step === 0) {
       setDirection(1);
       setStep(1);
@@ -106,13 +103,35 @@ function ProfileStart() {
     }
 
     setErrors({});
+
     if (step < components.length - 1) {
       setDirection(1);
       setStep((s) => s + 1);
-    } else {
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      let finalErrors = {};
+
+      for (let i = 1; i <= 5; i++) {
+        const stepErrors = await validate(
+          i,
+          formData,
+          checkUsernameAvailability,
+        );
+        if (Object.keys(stepErrors).length > 0) {
+          finalErrors = { ...finalErrors, ...stepErrors };
+          setErrors(finalErrors);
+          setDirection(-1);
+          setStep(i);
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       let finalFormData = { ...formData };
 
-      // If they didn't upload a File, bypass the displayPicture key and set the URL directly
       if (!finalFormData.displayPicture) {
         finalFormData.pfpUrl =
           formData.gender === "male"
@@ -121,26 +140,23 @@ function ProfileStart() {
               ? femaleAvatar
               : defaultAvatar;
 
-        // Delete displayPicture so AuthContext doesn't try to Base64 encode a text string
         delete finalFormData.displayPicture;
       }
 
       const result = await updateUserProfile(finalFormData);
       if (result.success) {
-        // You don't even need to call navigate("/") here!
-        // AuthContext changes setAuthStatus("done"), which will automatically unmount
-        // this FirstTimeUserRoute and load your dashboard.
       } else {
         console.error(result.error);
       }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setIsSubmitting(false);
   };
 
   const handleFormSubmit = (e) => {
     e.preventDefault();
-
     handleNext();
   };
 
@@ -157,7 +173,6 @@ function ProfileStart() {
       validate={validate}
       setErrors={setErrors}
       checkUsernameAvailability={checkUsernameAvailability}
-      setIsSubmitting={setIsSubmitting}
     />,
     <DisplayName
       formData={formData}
@@ -225,7 +240,9 @@ function ProfileStart() {
                 <div style={{ marginLeft: "auto" }}>
                   <CustomButton
                     ClickEffect={"scale"}
-                    onClick={handleNext}
+                    onClick={
+                      step === components.length - 1 ? undefined : handleNext
+                    }
                     className={`default ${styles.nextButton} ${
                       isNextDisabled() && styles.disabled
                     }`}
@@ -258,7 +275,7 @@ function ProfileStart() {
     </form>
   );
 }
-// --- Validation Logic ---
+
 const validate = async (step, formData, checkUsernameAvailability) => {
   const { username, displayName, gender, pin } = formData;
   const newErrors = {};
@@ -317,9 +334,6 @@ const validate = async (step, formData, checkUsernameAvailability) => {
   return newErrors;
 };
 
-// --- Sub Components ---
-// (The sub-components like WelcomeSection, UserName, etc., remain unchanged from the previous version)
-
 function WelcomeSection() {
   return (
     <div className={styles.welcome}>
@@ -331,7 +345,7 @@ function WelcomeSection() {
           We’re excited to have you on board! Let’s set up your account so you
           can start using CareBoard right away.
         </p>
-        <p className={styles.privacy}>
+        <div className={styles.privacy}>
           Your privacy matters to us. Learn more on our{" "}
           <CustomButton
             ClickEffect={false}
@@ -342,7 +356,7 @@ function WelcomeSection() {
             Privacy & Security page
           </CustomButton>
           . By continuing, you agree to our Privacy Policy.
-        </p>
+        </div>
       </div>
     </div>
   );
@@ -355,19 +369,55 @@ function UserName({
   validate,
   setErrors,
   checkUsernameAvailability,
-  setIsSubmitting,
 }) {
-  const handleBlur = async () => {
+  const typingTimer = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, []);
+  useEffect(() => {
+    return () => {
+      if (typingTimer.current) {
+        clearTimeout(typingTimer.current);
+      }
+    };
+  }, []);
+  const triggerValidation = async (value) => {
     const validationErrors = await validate(
       1,
-      formData,
+      { ...formData, username: value },
       checkUsernameAvailability,
     );
     setErrors(validationErrors);
   };
+
+  const handleChange = (e) => {
+    const newValue = e.target.value;
+    handleInputChange("username", newValue);
+
+    if (typingTimer.current) {
+      clearTimeout(typingTimer.current);
+    }
+
+    typingTimer.current = setTimeout(() => {
+      triggerValidation(newValue);
+    }, 500);
+  };
+
+  const handleBlur = () => {
+    if (typingTimer.current) {
+      clearTimeout(typingTimer.current);
+    }
+    triggerValidation(formData.username);
+  };
+
   const handleFocus = () => {
     setErrors((prev) => ({ ...prev, username: null }));
   };
+
   return (
     <div className={styles.username}>
       <div className={styles.headder}>
@@ -379,10 +429,11 @@ function UserName({
             <UsernameIcon />
           </div>
           <input
+            ref={inputRef}
             value={formData.username}
             type="text"
             placeholder="username"
-            onChange={(e) => handleInputChange("username", e.target.value)}
+            onChange={handleChange}
             onBlur={handleBlur}
             onFocus={handleFocus}
           />
@@ -394,6 +445,14 @@ function UserName({
 }
 
 function DisplayName({ handleInputChange, formData, error }) {
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, []);
+
   return (
     <div className={styles.displayName}>
       <div className={styles.headder}>
@@ -405,6 +464,7 @@ function DisplayName({ handleInputChange, formData, error }) {
             <UsernameIcon />
           </div>
           <input
+            ref={inputRef}
             value={formData.displayName}
             type="text"
             placeholder="ex. Lena Rotondi"
@@ -486,10 +546,10 @@ function CustomPfp({ handleInputChange, formData }) {
     } else {
       const defaultPicture =
         formData.gender === "male"
-          ? "src/assets/svg/male-avatar.svg"
+          ? maleAvatar
           : formData.gender === "female"
-            ? "src/assets/svg/female-avatar.svg"
-            : "src/assets/svg/user-avatar.svg";
+            ? femaleAvatar
+            : defaultAvatar;
       setImagePreview(defaultPicture);
     }
 
@@ -552,13 +612,28 @@ function CustomPfp({ handleInputChange, formData }) {
 }
 
 function Pin({ handleInputChange, error, onFocus }) {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      const input = containerRef.current.querySelector("input");
+      if (input) {
+        input.focus();
+      }
+    }
+  }, []);
+
   return (
     <div className={styles.pin}>
       <div className={styles.headder}>
         <h1>Add a 4-digit PIN for quick security.</h1>
       </div>
       <div className={styles.content}>
-        <div className={styles.pinContainer} onFocus={onFocus}>
+        <div
+          className={styles.pinContainer}
+          onFocus={onFocus}
+          ref={containerRef}
+        >
           <PinInput
             onChange={(pin) => handleInputChange("pin", pin)}
             error={!!error}
@@ -576,7 +651,6 @@ function Pin({ handleInputChange, error, onFocus }) {
   );
 }
 
-// --- Utility Components ---
 function AutoHeight({ children }) {
   const ref = useRef(null);
   const [h, setH] = useState(0);
@@ -607,4 +681,5 @@ function AutoHeight({ children }) {
     </motion.div>
   );
 }
+
 export default ProfileStart;

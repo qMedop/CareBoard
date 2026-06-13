@@ -295,7 +295,6 @@
   width: 100%;
   height: 42px;
   border-radius: 26px;
-  padding: 8px 0;
   font-size: 16px;
 }
 .container form .field .showHidePassword .icon {
@@ -337,8 +336,10 @@
 }
 .container form .forgotPassword {
   margin-top: 8px;
+  display: flex;
+  justify-content: center;
 }
-.container form .forgotPassword:hover p {
+.container form .forgotPassword a:hover p {
   text-decoration: underline;
 }
 .container .verification {

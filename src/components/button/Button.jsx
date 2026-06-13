@@ -1,5 +1,3 @@
-// src/components/CustomButton.jsx
-
 import { NavLink } from "react-router-dom";
 import useClickEffect from "../../hooks/useClickEffect";
 import btnStyles from "./Button.module.css";
@@ -7,7 +5,6 @@ import clikableStyles from "./clikable.module.css";
 import { ArrowDownIcon } from "../../assets/icons/Icon";
 import { useEffect, useRef, useState } from "react";
 import { useInfoTrigger } from "../../hooks/useInfoTrigger";
-
 function CustomButton({
   link = false,
   href = "",
@@ -18,8 +15,9 @@ function CustomButton({
   ariaLabel = "",
   ClickEffect = true,
   dataInfo,
-  infoClassName, // Prop for custom tooltip styling
-  infoPosition, // Prop for preferred position ('top', 'bottom', 'left', 'right')
+  infoClassName,
+  infoPosition,
+  loading = false,
   ...props
 }) {
   const { ref, isMouseDown, isMousePressed, handleMouseDown } = useClickEffect(
@@ -29,15 +27,12 @@ function CustomButton({
   const [ripples, setRipples] = useState([]);
   const { getInfoTriggerProps } = useInfoTrigger();
 
-  // Generate the hover/click props for the tooltip from our custom hook
   const infoTriggerProps = getInfoTriggerProps(dataInfo, {
     className: infoClassName,
     position: infoPosition,
   });
 
-  // Handle scale / scaleDown effects
   const handleScaleDown = (e) => {
-    // scaleDown: simple shrink on pointer down, reset on pointer up (document)
     if (ClickEffect === "scaleDown") {
       const button = scaleRef.current;
       if (!button) return;
@@ -46,7 +41,6 @@ function CustomButton({
       return;
     }
 
-    // scale: ripple-style effect
     if (ClickEffect === "scale") {
       const button = scaleRef.current;
       const rect = button.getBoundingClientRect();
@@ -56,7 +50,7 @@ function CustomButton({
       setRipples((prev) => [
         ...prev,
         {
-          key: Date.now() + Math.random(),
+          key: crypto.randomUUID(),
           x,
           y,
           size,
@@ -65,12 +59,9 @@ function CustomButton({
       ]);
       return;
     }
-
-    // fallback: use hook behaviour
     handleMouseDown(e);
   };
 
-  // Mouse up effect on document for scale effect
   useEffect(() => {
     if (ClickEffect !== "scale") return;
     const handleScaleUp = () => {
@@ -88,7 +79,6 @@ function CustomButton({
     };
   }, [ClickEffect]);
 
-  // Mouse up effect on document for scaleDown effect: remove transform
   useEffect(() => {
     if (ClickEffect !== "scaleDown") return;
     const handleScaleDownUp = () => {
@@ -112,13 +102,17 @@ function CustomButton({
     setRipples((prev) => prev.filter((r) => r.key !== key));
   };
   const handleMouseEnter = (e) => {
-    e.currentTarget.querySelector(".effecctBgColor").style.backgroundColor =
-      "var(--bg-click-effect)";
+    const bg = e.currentTarget.querySelector(".effectBgColor");
+    if (bg) {
+      bg.style.backgroundColor = "var(--bg-click-effect)";
+    }
   };
 
   const handleMouseLeave = (e) => {
-    e.currentTarget.querySelector(".effecctBgColor").style.backgroundColor =
-      null;
+    const bg = e.currentTarget.querySelector(".effectBgColor");
+    if (bg) {
+      bg.style.backgroundColor = null;
+    }
   };
   const customClasses = className
     .split(" ")
@@ -157,72 +151,124 @@ function CustomButton({
         ))
       : null;
 
-  // choose ref: scale or scaleDown both use scaleRef, others use hook ref
   const elementRef =
     ClickEffect === "scale" || ClickEffect === "scaleDown" ? scaleRef : ref;
 
   if (link) {
-    // Render as NavLink
     return (
       <NavLink
         ref={elementRef}
         to={href}
-        onPointerDown={handleScaleDown}
+        onPointerDown={(e) => {
+          if (loading === "active") return;
+          handleScaleDown(e);
+        }}
         className={`${btnStyles.button} ${commonClasses} ${
           type === "select" ? btnStyles.select : ""
         }`}
         aria-label={ariaLabel}
         draggable="false"
         onClick={(e) => {
-          infoTriggerProps.onClick?.(e); // hide tooltip
-          onClick?.(e); // call user-provided click
+          if (loading === "active" || props.disabled) {
+            e.preventDefault();
+            return;
+          }
+          infoTriggerProps.onClick?.(e);
+          onClick?.(e);
         }}
         onMouseEnter={infoTriggerProps.onMouseEnter}
         onMouseLeave={infoTriggerProps.onMouseLeave}
+        style={{
+          opacity: loading === "active" ? 0.6 : 1,
+          cursor: loading === "active" ? "not-allowed" : null,
+        }}
         {...props}
       >
-        <>
+        <ButtonChildren
+          type={type}
+          loading={loading}
+          ClickEffect={ClickEffect}
+          rippleSpans={rippleSpans}
+        >
           {children}
-          {rippleSpans}
-          {ClickEffect && ClickEffect !== "scale" && (
-            <div className={clikableStyles.interactions}>
-              <div className={clikableStyles.stroke}></div>
-            </div>
-          )}
-        </>
+        </ButtonChildren>
       </NavLink>
     );
   }
 
-  // Render as Button
   return (
     <button
       onPointerEnter={handleMouseEnter}
       onPointerLeave={handleMouseLeave}
       ref={elementRef}
       type={type}
-      onPointerDown={handleScaleDown}
+      onPointerDown={(e) => {
+        if (loading === "active") return;
+        handleScaleDown(e);
+      }}
       className={`${btnStyles.button} ${commonClasses} ${
         type === "select" ? btnStyles.select : ""
       }`}
       aria-label={ariaLabel}
       onClick={(e) => {
-        infoTriggerProps.onClick?.(e); // hide tooltip
-        onClick?.(e); // call user-provided click
+        if (loading === "active") {
+          e.preventDefault();
+          return;
+        }
+        infoTriggerProps.onClick?.(e);
+        onClick?.(e);
       }}
       onMouseEnter={infoTriggerProps.onMouseEnter}
       onMouseLeave={infoTriggerProps.onMouseLeave}
       {...props}
+      disabled={loading === "active" ? true : props.disabled}
+      style={{
+        opacity: loading === "active" ? 0.6 : 1,
+        cursor: loading === "active" ? "not-allowed" : null,
+      }}
     >
-      {type === "select" && <span className={btnStyles.select}></span>}
+      <ButtonChildren
+        type={type}
+        loading={loading}
+        ClickEffect={ClickEffect}
+        rippleSpans={rippleSpans}
+      >
+        {children}
+      </ButtonChildren>
+    </button>
+  );
+}
 
-      {type === "list" ? (
-        <>
-          {children}
-          <ArrowDownIcon className={`arrow ${btnStyles.arrowDown}`} />
-        </>
-      ) : (
-        children
+function ButtonChildren({ children, type, loading, ClickEffect, rippleSpans }) {
+  return (
+    <>
+      {type === "select" && <span className={btnStyles.select}></span>}
+      {!loading && children}
+      {loading && (
+        <div className={clikableStyles.contentWrapper}>
+          <div
+            className={`${clikableStyles.childContent} ${
+              loading === "active" ? clikableStyles.loadingActive : ""
+            }`}
+          >
+            {children}
+          </div>
+          <div
+            className={`${clikableStyles.loadingIcon} ${
+              loading === "active" ? clikableStyles.loadingActive : ""
+            }`}
+          >
+            <div className={clikableStyles.loader}>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {type === "list" && (
+        <ArrowDownIcon className={`arrow ${btnStyles.arrowDown}`} />
       )}
       {rippleSpans}
       {ClickEffect && ClickEffect !== "scale" && (
@@ -230,8 +276,8 @@ function CustomButton({
           <div className={clikableStyles.stroke}></div>
         </div>
       )}
-      <div className={`${btnStyles.effecctBgColor} effecctBgColor`}></div>
-    </button>
+      <div className={`${btnStyles.effectBgColor} effectBgColor`}></div>
+    </>
   );
 }
 
