@@ -1,0 +1,6 @@
+these are some limitations i can't do due to the firebase free plan.
+
+- Notifications
+- isFirstTime & createAt getting set by default
+- Users uploading their own PFP (bucket)
+- Making sure there is no duplicated usernames from the server side

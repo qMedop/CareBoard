@@ -793,7 +793,6 @@ export function AuthProvider({ children }) {
       }).catch((err) =>
         devLog("SESSION_RESTORE", "lastUsedAt update failed", err),
       );
-      console.log("RESTORE SUCCESS", userDek);
       return { ok: true, userDek, privateKey };
     } catch (err) {
       devLog("SESSION_RESTORE", "Unexpected error", err);
@@ -827,7 +826,6 @@ export function AuthProvider({ children }) {
   }
 
   async function registrationFlow(email, password) {
-    console.log("REGISTRATION START");
     isAuthenticatingRef.current = true;
     try {
       const salt = crypto.getRandomValues(new Uint8Array(32));
@@ -867,7 +865,6 @@ export function AuthProvider({ children }) {
       );
 
       let firebaseUser;
-      console.log("CREATE USER");
       try {
         const credential = await createUserWithEmailAndPassword(
           auth,
@@ -882,7 +879,6 @@ export function AuthProvider({ children }) {
           err,
         );
       }
-      console.log("AUTH USER CREATED", firebaseUser.uid);
 
       const initialUserData = { sharedFriends: [], settings: {} };
       const { ciphertext: encryptedUserData, iv: userDataIv } =
@@ -902,7 +898,6 @@ export function AuthProvider({ children }) {
           err,
         );
       }
-      console.log("PRIVATE DOC SAVED");
 
       try {
         await setDoc(doc(db, "usersPrivateData", firebaseUser.uid), {
@@ -1076,6 +1071,7 @@ export function AuthProvider({ children }) {
       return { available: false, message: "Error checking username" };
     }
   }
+
   function fileToBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -1086,6 +1082,7 @@ export function AuthProvider({ children }) {
       reader.readAsDataURL(file);
     });
   }
+
   async function updateUserProfile(formData) {
     if (!currentUser?.id) {
       return { success: false, error: "Not authenticated" };
@@ -1216,8 +1213,14 @@ export function AuthProvider({ children }) {
         title: eventData.title ?? "",
         description: eventData.description ?? "",
         color: eventData.color ?? "#FFD4A9",
+        emoji: eventData.emoji ?? "",
+        visibility: eventData.visibility ?? "visible",
+        availability: eventData.availability ?? "busy",
         start,
         end,
+        isFullDay: eventData.isFullDay ?? false,
+        recurrence: eventData.recurrence ?? { type: "NONE" },
+        exdate: eventData.exdate ?? [],
       };
 
       const { ciphertext: encryptedEventData, iv: eventDataIv } =
@@ -1228,18 +1231,26 @@ export function AuthProvider({ children }) {
       const { ciphertext: encryptedEventKeyOwner, iv: eventKeyIvOwner } =
         await encryptWithDEK(currentUser.userDek, rawEventKey);
 
-      const participants = [currentUser.id];
+      let participants = [currentUser.id];
 
-      const keys = {
+      let keys = {
         [currentUser.id]: {
           encrypted_event_key: encryptedEventKeyOwner,
           event_key_iv: eventKeyIvOwner,
         },
       };
 
-      const sharedFriends = currentUser.userData?.sharedFriends || [];
-      console.log(sharedFriends);
-      for (const friend of sharedFriends) {
+      let targetFriends = [];
+      if (eventData.visibility === "visible") {
+        targetFriends = currentUser.userData?.sharedFriends || [];
+      } else if (
+        eventData.visibility === "specific" &&
+        eventData.invitedFriendsFull?.length > 0
+      ) {
+        targetFriends = eventData.invitedFriendsFull;
+      }
+
+      for (const friend of targetFriends) {
         try {
           if (!friend?.id || !friend?.publicKey) continue;
 
@@ -1298,12 +1309,15 @@ export function AuthProvider({ children }) {
       if (onProgress) onProgress("uploading");
 
       const newGroupId = eventData.group_id ?? crypto.randomUUID();
+      const createdAt = new Date().toISOString();
 
       const eventPayload = {
         ownerId: currentUser.id,
         participants,
         group_id: newGroupId,
-        created_at: new Date().toISOString(),
+        created_at: createdAt,
+        visibility: eventData.visibility || "visible",
+        reminderMinutes: parseInt(eventData.notification, 10) || 0,
         encrypted_event_data: encryptedEventData,
         event_data_iv: eventDataIv,
         keys,
@@ -1317,11 +1331,12 @@ export function AuthProvider({ children }) {
           ...eventData,
           id: docRef.id,
           group_id: newGroupId,
+          timeRange: { start, end },
+          created_at: createdAt,
         },
       };
     } catch (err) {
       devLog("ADD_EVENT", err);
-
       const msg =
         err instanceof AppError
           ? err.message
@@ -1403,7 +1418,10 @@ export function AuthProvider({ children }) {
             base64ToArrayBuffer(myKeyData.hkdf_salt),
           );
           eventKeyRaw = await crypto.subtle.decrypt(
-            { name: "AES-GCM", iv: base64ToArrayBuffer(myKeyData.shared_iv) },
+            {
+              name: "AES-GCM",
+              iv: base64ToArrayBuffer(myKeyData.shared_iv),
+            },
             sharedAesKey,
             base64ToArrayBuffer(myKeyData.encrypted_event_key),
           );
@@ -1426,17 +1444,109 @@ export function AuthProvider({ children }) {
 
       const start = eventData.start ?? eventData.timeRange?.start;
       const end = eventData.end ?? eventData.timeRange?.end;
-      const { ciphertext, iv } = await encryptWithDEK(eventKey, {
+
+      const eventPlaintext = {
         title: eventData.title ?? "",
+        description: eventData.description ?? "",
+        color: eventData.color ?? "#FFD4A9",
+        emoji: eventData.emoji ?? "",
+        visibility: eventData.visibility ?? "visible",
+        availability: eventData.availability ?? "busy",
         start,
         end,
-      });
+        isFullDay: eventData.isFullDay ?? false,
+        recurrence: eventData.recurrence ?? { type: "NONE" },
+        exdate: eventData.exdate ?? [],
+      };
 
-      if (onProgress) onProgress("uploading");
-      await updateDoc(eventRef, {
+      const { ciphertext, iv } = await encryptWithDEK(eventKey, eventPlaintext);
+
+      const updatePayload = {
+        reminderMinutes: parseInt(eventData.notification, 10) || 0,
+        visibility: eventData.visibility || "visible",
         encrypted_event_data: ciphertext,
         event_data_iv: iv,
-      });
+      };
+
+      if (data.ownerId === currentUser.id) {
+        let participants = [currentUser.id];
+        let keys = {
+          [currentUser.id]: data.keys[currentUser.id],
+        };
+
+        let targetFriends = [];
+        if (eventData.visibility === "visible") {
+          targetFriends = currentUser.userData?.sharedFriends || [];
+        } else if (
+          eventData.visibility === "specific" &&
+          eventData.invitedFriendsFull?.length > 0
+        ) {
+          targetFriends = eventData.invitedFriendsFull;
+        }
+
+        for (const friend of targetFriends) {
+          participants.push(friend.id);
+
+          if (!data.keys[friend.id]) {
+            try {
+              const friendPubKey = await crypto.subtle.importKey(
+                "spki",
+                base64ToArrayBuffer(friend.publicKey),
+                { name: "X25519" },
+                false,
+                [],
+              );
+
+              const ephemeralKeyPair = await crypto.subtle.generateKey(
+                { name: "X25519" },
+                true,
+                ["deriveBits"],
+              );
+
+              const sharedSecret = await crypto.subtle.deriveBits(
+                { name: "X25519", public: friendPubKey },
+                ephemeralKeyPair.privateKey,
+                256,
+              );
+
+              const hkdfSalt = crypto.getRandomValues(new Uint8Array(16));
+              const sharedAesKey = await deriveHKDFAesKey(
+                sharedSecret,
+                hkdfSalt,
+              );
+
+              const sharedIv = crypto.getRandomValues(new Uint8Array(12));
+              const encryptedForFriend = await crypto.subtle.encrypt(
+                { name: "AES-GCM", iv: sharedIv },
+                sharedAesKey,
+                eventKeyRaw,
+              );
+
+              const ephemeralPubRaw = await crypto.subtle.exportKey(
+                "spki",
+                ephemeralKeyPair.publicKey,
+              );
+
+              keys[friend.id] = {
+                ephemeral_public_key: arrayBufferToBase64(ephemeralPubRaw),
+                encrypted_event_key: arrayBufferToBase64(encryptedForFriend),
+                shared_iv: arrayBufferToBase64(sharedIv),
+                hkdf_salt: arrayBufferToBase64(hkdfSalt),
+              };
+            } catch (e) {
+              devLog("UPDATE_EVENT", "Error securing new key for friend", e);
+            }
+          } else {
+            keys[friend.id] = data.keys[friend.id];
+          }
+        }
+
+        updatePayload.participants = participants;
+        updatePayload.keys = keys;
+      }
+
+      if (onProgress) onProgress("uploading");
+      await updateDoc(eventRef, updatePayload);
 
       return { success: true, event: eventData };
     } catch (err) {
@@ -1480,6 +1590,23 @@ export function AuthProvider({ children }) {
     }
   }
 
+  function updateParticipantsAndKeys(
+    batch,
+    ref,
+    { addUserId, removeUserId, keyData },
+  ) {
+    const updateData = {};
+    if (addUserId) {
+      updateData.participants = arrayUnion(addUserId);
+      updateData[`keys.${addUserId}`] = keyData;
+    }
+    if (removeUserId) {
+      updateData.participants = arrayRemove(removeUserId);
+      updateData[`keys.${removeUserId}`] = deleteField();
+    }
+    batch.update(ref, updateData);
+  }
+
   async function shareVisibleEventsWithFriend(friendId, friendPublicKeyBase64) {
     if (!currentUser?.userDek) {
       return { success: false, error: "Not authenticated" };
@@ -1520,7 +1647,11 @@ export function AuthProvider({ children }) {
       }
 
       const snap = await getDocs(
-        query(collection(db, "events"), where("ownerId", "==", currentUser.id)),
+        query(
+          collection(db, "events"),
+          where("ownerId", "==", currentUser.id),
+          where("visibility", "==", "visible"),
+        ),
       );
 
       const BATCH_LIMIT = 400;
@@ -1595,9 +1726,9 @@ export function AuthProvider({ children }) {
           continue;
         }
 
-        batch.update(docSnap.ref, {
-          participants: arrayUnion(friendId),
-          [`keys.${friendId}`]: {
+        updateParticipantsAndKeys(batch, docSnap.ref, {
+          addUserId: friendId,
+          keyData: {
             ephemeral_public_key: arrayBufferToBase64(ephemeralPubRaw),
             encrypted_event_key: arrayBufferToBase64(encryptedForFriend),
             shared_iv: arrayBufferToBase64(sharedIv),
@@ -1649,9 +1780,8 @@ export function AuthProvider({ children }) {
       let opCount = 0;
 
       for (const docSnap of snap.docs) {
-        batch.update(docSnap.ref, {
-          participants: arrayRemove(friendId),
-          [`keys.${friendId}`]: deleteField(),
+        updateParticipantsAndKeys(batch, docSnap.ref, {
+          removeUserId: friendId,
         });
         opCount++;
         if (opCount >= BATCH_LIMIT) {
@@ -1675,21 +1805,60 @@ export function AuthProvider({ children }) {
   function subscribeToEvents(onEventsUpdate) {
     if (!currentUser?.id || !currentUser.userDek) return () => {};
 
-    const q = query(
+    const qEvents = query(
       collection(db, "events"),
       where("participants", "array-contains", currentUser.id),
     );
 
     return onSnapshot(
-      q,
+      qEvents,
       { includeMetadataChanges: true },
       async (snapshot) => {
         if (snapshot.metadata.hasPendingWrites) return;
 
         try {
+          const friendshipsRef = collection(db, "friendships");
+          const qFriends = query(
+            friendshipsRef,
+            where("users", "array-contains", currentUser.id),
+            where("status", "==", "accepted"),
+          );
+          const friendSnaps = await getDocs(qFriends);
+          const activeFriendIds = friendSnaps.docs.map((d) =>
+            d.data().users.find((id) => id !== currentUser.id),
+          );
+
           const decryptedEvents = [];
+          const batch = writeBatch(db);
+          let needsCleanup = false;
+
           for (const document of snapshot.docs) {
             const data = document.data();
+
+            if (data.ownerId === currentUser.id) {
+              const staleParticipants = data.participants.filter(
+                (pId) =>
+                  pId !== currentUser.id && !activeFriendIds.includes(pId),
+              );
+              if (staleParticipants.length > 0) {
+                const updateData = {};
+                let updatedParticipants = [...data.participants];
+                staleParticipants.forEach((staleId) => {
+                  updatedParticipants = updatedParticipants.filter(
+                    (id) => id !== staleId,
+                  );
+                  updateData[`keys.${staleId}`] = deleteField();
+                });
+                updateData.participants = updatedParticipants;
+                batch.update(document.ref, updateData);
+                needsCleanup = true;
+              }
+            } else {
+              if (!activeFriendIds.includes(data.ownerId)) {
+                continue;
+              }
+            }
+
             try {
               const myKeyData = data.keys?.[currentUser.id];
               if (!myKeyData) continue;
@@ -1778,13 +1947,13 @@ export function AuthProvider({ children }) {
                 );
                 continue;
               }
-              console.log("EVENT DATA", data);
+
               const eventPlaintext = await decryptJson(
                 eventKey,
                 data.encrypted_event_data,
                 data.event_data_iv,
               );
-              console.log("EVENT DECRYPTED", eventPlaintext);
+
               decryptedEvents.push({
                 ...eventPlaintext,
                 id: document?.id,
@@ -1808,6 +1977,9 @@ export function AuthProvider({ children }) {
               );
             }
           }
+
+          if (needsCleanup) await batch.commit();
+
           onEventsUpdate({ success: true, events: decryptedEvents });
         } catch (error) {
           devLog("SUBSCRIBE", "Snapshot handler threw", error);
