@@ -133,13 +133,6 @@ function ProfileStart() {
       let finalFormData = { ...formData };
 
       if (!finalFormData.displayPicture) {
-        finalFormData.pfpUrl =
-          formData.gender === "male"
-            ? maleAvatar
-            : formData.gender === "female"
-              ? femaleAvatar
-              : defaultAvatar;
-
         delete finalFormData.displayPicture;
       }
 
