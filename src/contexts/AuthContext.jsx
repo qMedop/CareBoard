@@ -105,8 +105,8 @@ function validatePrivateDoc(data) {
     "argonSalt",
     "dekCiphertext",
     "dekIv",
-    "x25519PrivateKeyCiphertext",
-    "x25519PrivateKeyIv",
+    "privateKeyCiphertext",
+    "privateKeyIv",
   ];
   for (const field of required) {
     if (!isBase64(data?.[field])) {
@@ -124,8 +124,8 @@ function validateDeviceDoc(data) {
     "deviceId",
     "wrappedDek",
     "deviceIv",
-    "wrappedX25519PrivateKey",
-    "x25519PrivateKeyIv",
+    "wrappedPrivateKey",
+    "privateKeyIv",
   ];
   for (const field of required) {
     if (!isBase64(data?.[field]) && field !== "deviceId") {
@@ -553,11 +553,11 @@ export function AuthProvider({ children }) {
       try {
         privateKey = await crypto.subtle.unwrapKey(
           "pkcs8",
-          base64ToArrayBuffer(authDetails.x25519PrivateKeyCiphertext),
+          base64ToArrayBuffer(authDetails.privateKeyCiphertext),
           pdk,
           {
             name: "AES-GCM",
-            iv: base64ToArrayBuffer(authDetails.x25519PrivateKeyIv),
+            iv: base64ToArrayBuffer(authDetails.privateKeyIv),
           },
           { name: "X25519" },
           true,
@@ -698,8 +698,8 @@ export function AuthProvider({ children }) {
           lastUsedAt: new Date().toISOString(),
           wrappedDek: arrayBufferToBase64(wrappedDeviceDek),
           deviceIv: arrayBufferToBase64(deviceDekIv),
-          wrappedX25519PrivateKey: arrayBufferToBase64(wrappedPrivKey),
-          x25519PrivateKeyIv: arrayBufferToBase64(privKeyDeviceIv),
+          wrappedPrivateKey: arrayBufferToBase64(wrappedPrivKey),
+          privateKeyIv: arrayBufferToBase64(privKeyDeviceIv),
         },
         { merge: false },
       );
@@ -767,24 +767,24 @@ export function AuthProvider({ children }) {
 
       let privateKey = null;
       if (
-        isBase64(deviceData.wrappedX25519PrivateKey) &&
-        isBase64(deviceData.x25519PrivateKeyIv)
+        isBase64(deviceData.wrappedPrivateKey) &&
+        isBase64(deviceData.privateKeyIv)
       ) {
         try {
           privateKey = await crypto.subtle.unwrapKey(
             "pkcs8",
-            base64ToArrayBuffer(deviceData.wrappedX25519PrivateKey),
+            base64ToArrayBuffer(deviceData.wrappedPrivateKey),
             userDek,
             {
               name: "AES-GCM",
-              iv: base64ToArrayBuffer(deviceData.x25519PrivateKeyIv),
+              iv: base64ToArrayBuffer(deviceData.privateKeyIv),
             },
             { name: "X25519" },
             true,
             ["deriveBits"],
           );
         } catch (err) {
-          devLog("SESSION_RESTORE", "X25519 private key unwrap failed", err);
+          devLog("SESSION_RESTORE", "private key unwrap failed", err);
         }
       }
 
@@ -805,8 +805,6 @@ export function AuthProvider({ children }) {
     setCurrentUser(null);
     setAuthStatus("not_logged_in");
 
-    await clearAllFromDB();
-
     try {
       const deviceId = await loadFromDB(IDB_METADATA_NAME).catch(() => null);
       const uid = auth.currentUser?.uid;
@@ -816,6 +814,8 @@ export function AuthProvider({ children }) {
     } catch (err) {
       devLog("SIGN_OUT", "Device record deletion failed (non-fatal)", err);
     }
+
+    await clearAllFromDB();
 
     try {
       await firebaseSignOut(auth);
@@ -891,7 +891,7 @@ export function AuthProvider({ children }) {
       try {
         await setDoc(doc(db, "users", firebaseUser.uid), {
           email,
-          x25519PublicKey: arrayBufferToBase64(exportedPublicKey),
+          publicKey: arrayBufferToBase64(exportedPublicKey),
           isUserFirstTime: true,
           createdAt: new Date().toISOString(),
         });
@@ -909,8 +909,8 @@ export function AuthProvider({ children }) {
           argonSalt: arrayBufferToBase64(salt),
           dekCiphertext: arrayBufferToBase64(wrappedDekBuffer),
           dekIv: arrayBufferToBase64(dekIv),
-          x25519PrivateKeyCiphertext: arrayBufferToBase64(wrappedPrivateKey),
-          x25519PrivateKeyIv: arrayBufferToBase64(privateKeyIv),
+          privateKeyCiphertext: arrayBufferToBase64(wrappedPrivateKey),
+          privateKeyIv: arrayBufferToBase64(privateKeyIv),
           encrypted_user_data: encryptedUserData,
           user_data_iv: userDataIv,
         });
@@ -1241,11 +1241,11 @@ export function AuthProvider({ children }) {
       console.log(sharedFriends);
       for (const friend of sharedFriends) {
         try {
-          if (!friend?.id || !friend?.x25519PublicKey) continue;
+          if (!friend?.id || !friend?.publicKey) continue;
 
           const friendPubKey = await crypto.subtle.importKey(
             "spki",
-            base64ToArrayBuffer(friend.x25519PublicKey),
+            base64ToArrayBuffer(friend.publicKey),
             { name: "X25519" },
             false,
             [],
@@ -1263,13 +1263,8 @@ export function AuthProvider({ children }) {
             256,
           );
 
-          const sharedAesKey = await crypto.subtle.importKey(
-            "raw",
-            sharedSecret,
-            { name: "AES-GCM" },
-            false,
-            ["encrypt"],
-          );
+          const hkdfSalt = crypto.getRandomValues(new Uint8Array(16));
+          const sharedAesKey = await deriveHKDFAesKey(sharedSecret, hkdfSalt);
 
           const sharedIv = crypto.getRandomValues(new Uint8Array(12));
           const encryptedForFriend = await crypto.subtle.encrypt(
@@ -1287,6 +1282,7 @@ export function AuthProvider({ children }) {
             ephemeral_public_key: arrayBufferToBase64(ephemeralPubRaw),
             encrypted_event_key: arrayBufferToBase64(encryptedForFriend),
             shared_iv: arrayBufferToBase64(sharedIv),
+            hkdf_salt: arrayBufferToBase64(hkdfSalt),
           };
 
           participants.push(friend.id);
@@ -1381,7 +1377,8 @@ export function AuthProvider({ children }) {
         }
         if (
           !isBase64(myKeyData.ephemeral_public_key) ||
-          !isBase64(myKeyData.shared_iv)
+          !isBase64(myKeyData.shared_iv) ||
+          !isBase64(myKeyData.hkdf_salt)
         ) {
           throw new AppError(
             AuthErrorCode.CORRUPTED_CIPHERTEXT,
@@ -1401,12 +1398,9 @@ export function AuthProvider({ children }) {
             currentUser.privateKey,
             256,
           );
-          const sharedAesKey = await crypto.subtle.importKey(
-            "raw",
+          const sharedAesKey = await deriveHKDFAesKey(
             sharedSecret,
-            { name: "AES-GCM" },
-            false,
-            ["decrypt"],
+            base64ToArrayBuffer(myKeyData.hkdf_salt),
           );
           eventKeyRaw = await crypto.subtle.decrypt(
             { name: "AES-GCM", iv: base64ToArrayBuffer(myKeyData.shared_iv) },
@@ -1486,17 +1480,14 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function shareVisibleEventsWithFriend(
-    friendId,
-    friendX25519PublicKeyBase64,
-  ) {
+  async function shareVisibleEventsWithFriend(friendId, friendPublicKeyBase64) {
     if (!currentUser?.userDek) {
       return { success: false, error: "Not authenticated" };
     }
     if (!isNonEmptyString(friendId)) {
       return { success: false, error: "Invalid friend ID." };
     }
-    if (!isBase64(friendX25519PublicKeyBase64)) {
+    if (!isBase64(friendPublicKeyBase64)) {
       return { success: false, error: "Invalid public key format." };
     }
 
@@ -1506,7 +1497,7 @@ export function AuthProvider({ children }) {
         await updateUserData({
           sharedFriends: [
             ...currentShared,
-            { id: friendId, x25519PublicKey: friendX25519PublicKeyBase64 },
+            { id: friendId, publicKey: friendPublicKeyBase64 },
           ],
         });
       }
@@ -1515,10 +1506,10 @@ export function AuthProvider({ children }) {
       try {
         friendPubKey = await crypto.subtle.importKey(
           "spki",
-          base64ToArrayBuffer(friendX25519PublicKeyBase64),
+          base64ToArrayBuffer(friendPublicKeyBase64),
           { name: "X25519" },
           false,
-          [""],
+          [],
         );
       } catch (err) {
         throw new AppError(
@@ -1569,7 +1560,7 @@ export function AuthProvider({ children }) {
           continue;
         }
 
-        let encryptedForFriend, ephemeralPubRaw, sharedIv;
+        let encryptedForFriend, ephemeralPubRaw, sharedIv, hkdfSalt;
         try {
           const ephemeralKeyPair = await crypto.subtle.generateKey(
             { name: "X25519" },
@@ -1581,13 +1572,10 @@ export function AuthProvider({ children }) {
             ephemeralKeyPair.privateKey,
             256,
           );
-          const sharedAesKey = await crypto.subtle.importKey(
-            "raw",
-            sharedSecret,
-            { name: "AES-GCM" },
-            false,
-            ["encrypt"],
-          );
+
+          hkdfSalt = crypto.getRandomValues(new Uint8Array(16));
+          const sharedAesKey = await deriveHKDFAesKey(sharedSecret, hkdfSalt);
+
           sharedIv = crypto.getRandomValues(new Uint8Array(12));
           encryptedForFriend = await crypto.subtle.encrypt(
             { name: "AES-GCM", iv: sharedIv },
@@ -1613,6 +1601,7 @@ export function AuthProvider({ children }) {
             ephemeral_public_key: arrayBufferToBase64(ephemeralPubRaw),
             encrypted_event_key: arrayBufferToBase64(encryptedForFriend),
             shared_iv: arrayBufferToBase64(sharedIv),
+            hkdf_salt: arrayBufferToBase64(hkdfSalt),
           },
         });
         opCount++;
@@ -1727,7 +1716,8 @@ export function AuthProvider({ children }) {
                 if (
                   !isBase64(myKeyData.encrypted_event_key) ||
                   !isBase64(myKeyData.ephemeral_public_key) ||
-                  !isBase64(myKeyData.shared_iv)
+                  !isBase64(myKeyData.shared_iv) ||
+                  !isBase64(myKeyData.hkdf_salt)
                 ) {
                   devLog(
                     "SUBSCRIBE",
@@ -1748,12 +1738,9 @@ export function AuthProvider({ children }) {
                     currentUser.privateKey,
                     256,
                   );
-                  const sharedAesKey = await crypto.subtle.importKey(
-                    "raw",
+                  const sharedAesKey = await deriveHKDFAesKey(
                     sharedSecret,
-                    { name: "AES-GCM" },
-                    false,
-                    ["decrypt"],
+                    base64ToArrayBuffer(myKeyData.hkdf_salt),
                   );
                   eventKeyRaw = await crypto.subtle.decrypt(
                     {
@@ -1890,4 +1877,27 @@ function base64ToArrayBuffer(base64) {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
+}
+
+async function deriveHKDFAesKey(sharedSecret, salt) {
+  const hkdfKey = await crypto.subtle.importKey(
+    "raw",
+    sharedSecret,
+    { name: "HKDF" },
+    false,
+    ["deriveKey"],
+  );
+
+  return await crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: salt,
+      info: new Uint8Array(0),
+    },
+    hkdfKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
 }

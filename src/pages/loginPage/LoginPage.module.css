@@ -262,6 +262,9 @@
   border-color: var(--text-error);
   margin-bottom: 0px;
 }
+.container form .userData > .field.invalidError {
+  margin-bottom: 0px;
+}
 .container form .options {
   display: flex;
   justify-content: end;

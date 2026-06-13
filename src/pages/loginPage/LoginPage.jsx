@@ -115,7 +115,7 @@ function SignInForm({ resetTrigger }) {
   const [inputType, setInputType] = useState("text");
   const [signInUsernameErr, setSignInUsernameErr] = useState(null);
   const [signInPassErr, setSignInPassErr] = useState(null);
-  const [apiError, setApiError] = useState(null); // For server errors
+  const [apiError, setApiError] = useState(null);
   const { signIn } = useData();
   // Reset state when switching tabs
   useEffect(() => {
@@ -184,11 +184,11 @@ function SignInForm({ resetTrigger }) {
     const usernameValid = handleUsernameValidate();
     const passwordValid = handlePasswordValidate();
 
-    console.log(passwordValid, usernameValid);
     if (!usernameValid || !passwordValid) return;
     const result = await signIn(signInEmail, signInPassword);
 
     if (!result.success) {
+      console.log(result.error);
       setApiError(result.error);
     }
   }
@@ -223,7 +223,7 @@ function SignInForm({ resetTrigger }) {
           <div
             className={`${styles.password} ${styles.field} ${
               signInPassErr && styles.error
-            } ${signInPassErr?.length > 1 && styles.errorMess}`}
+            } ${signInPassErr?.length > 1 && styles.errorMess} ${apiError && styles.invalidError}`}
           >
             <div className={styles.icon}>
               <LockIcon />
@@ -252,6 +252,11 @@ function SignInForm({ resetTrigger }) {
           {signInPassErr?.length > 0 && (
             <div className={styles.errorMessage}>
               <span>{signInPassErr}</span>
+            </div>
+          )}
+          {apiError && (
+            <div className={styles.errorMessage}>
+              <span>{apiError}</span>
             </div>
           )}
         </div>
