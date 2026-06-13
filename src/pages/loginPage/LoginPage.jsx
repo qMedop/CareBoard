@@ -237,6 +237,7 @@ function SignInForm({ resetTrigger }) {
               onBlur={handlePasswordValidate}
             />
             <CustomButton
+              tabIndex={-1}
               dataInfo={signInshowPass ? "Hide password" : "Show password"}
               ClickEffect={false}
               className={`${styles.showHidePassword} default`}
@@ -422,6 +423,7 @@ function SignUpForm({ resetTrigger }) {
               onBlur={handlePasswordValidate}
             />
             <CustomButton
+              tabIndex={-1}
               dataInfo={signUpshowPass ? "Hide password" : "Show password"}
               ClickEffect={false}
               className={`${styles.showHidePassword} default`}
@@ -456,6 +458,7 @@ function SignUpForm({ resetTrigger }) {
               onBlur={handlePasswordValidate2}
             />
             <CustomButton
+              tabIndex={-1}
               dataInfo={signUpshowPass ? "Hide password" : "Show password"}
               ClickEffect={false}
               className={`${styles.showHidePassword} default`}

@@ -1,23 +1,7 @@
-/**
- * AuthContext.jsx — Security-Hardened Refactor
- *
- * Changes from original are annotated with [SEC-NNN] tags.
- * See SECURITY_AUDIT.md for the full analysis of each finding.
- *
- * Architecture:
- *  - PBKDF2-SHA256 / 600 000 iterations → PDK (password-derived key)
- *  - PDK wraps DEK (AES-256-GCM, non-extractable)
- *  - PDK wraps RSA-3072-OAEP private key (non-extractable)
- *  - Per-device AES-256-GCM key (non-extractable, lives only in IndexedDB)
- *    wraps the DEK for session restoration → stored in Firestore
- *  - DEK wraps RSA private key for session restoration → stored in Firestore
- *  - Per-event AES-256-GCM key, wrapped with DEK (owner) or RSA-OAEP (shared)
- *  - Firebase / Firestore never sees any plaintext or raw key material
- */
-
 import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Loading from "../components/loading/Loading";
+import { argon2id } from "hash-wasm";
 
 import {
   signInWithEmailAndPassword,
@@ -44,18 +28,10 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// [SEC-001] CENTRALISED ERROR TAXONOMY
-// All thrown errors carry a `code` from this enum so callers can branch on
-// type without parsing human-readable strings.
-// ─────────────────────────────────────────────────────────────────────────────
 export const AuthErrorCode = Object.freeze({
-  // Auth layer
   INVALID_CREDENTIALS: "AUTH_INVALID_CREDENTIALS",
   USER_NOT_FOUND: "AUTH_USER_NOT_FOUND",
   FIREBASE_AUTH: "AUTH_FIREBASE_AUTH",
-
-  // Crypto layer
   CRYPTO_UNAVAILABLE: "CRYPTO_UNAVAILABLE",
   DECRYPTION_FAILED: "CRYPTO_DECRYPTION_FAILED",
   CORRUPTED_CIPHERTEXT: "CRYPTO_CORRUPTED_CIPHERTEXT",
@@ -64,59 +40,39 @@ export const AuthErrorCode = Object.freeze({
   KEY_UNWRAP_FAILED: "CRYPTO_KEY_UNWRAP_FAILED",
   MISSING_PRIVATE_KEY: "CRYPTO_MISSING_PRIVATE_KEY",
   MISSING_DEK: "CRYPTO_MISSING_DEK",
-
-  // Device / session layer
   DEVICE_NOT_REGISTERED: "DEVICE_NOT_REGISTERED",
   DEVICE_RECORD_CORRUPT: "DEVICE_RECORD_CORRUPT",
   DEVICE_REGISTRATION_FAILED: "DEVICE_REGISTRATION_FAILED",
   SESSION_RESTORE_FAILED: "SESSION_RESTORE_FAILED",
   MISSING_DEVICE_KEY: "DEVICE_MISSING_KEY",
-
-  // Storage layer
   IDB_UNAVAILABLE: "IDB_UNAVAILABLE",
   IDB_READ_FAILED: "IDB_READ_FAILED",
   IDB_WRITE_FAILED: "IDB_WRITE_FAILED",
   IDB_DELETE_FAILED: "IDB_DELETE_FAILED",
   IDB_CORRUPT: "IDB_CORRUPT",
-
-  // Network / Firestore layer
   FIRESTORE_READ_FAILED: "FIRESTORE_READ_FAILED",
   FIRESTORE_WRITE_FAILED: "FIRESTORE_WRITE_FAILED",
   NETWORK_UNAVAILABLE: "NETWORK_UNAVAILABLE",
-
-  // Schema / validation layer
   SCHEMA_INVALID: "SCHEMA_INVALID",
   MISSING_REQUIRED_FIELD: "MISSING_REQUIRED_FIELD",
-
-  // Unknown
   UNKNOWN: "UNKNOWN",
 });
 
-/**
- * [SEC-001] Typed application error.
- * `userMessage` is always safe to display; `cause` is never surfaced to users.
- */
 class AppError extends Error {
   constructor(code, userMessage, cause = null) {
     super(userMessage);
     this.name = "AppError";
     this.code = code;
-    this.cause = cause; // keep for dev logging only
+    this.cause = cause;
   }
 }
 
-/** Log full diagnostic details only in development. */
 function devLog(label, ...args) {
   if (process.env.NODE_ENV !== "production") {
     console.error(`[E2EE:${label}]`, ...args);
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// [SEC-002] BROWSER CAPABILITY GUARD
-// Checked once at module load; throws immediately if the environment cannot
-// provide the cryptographic primitives this application requires.
-// ─────────────────────────────────────────────────────────────────────────────
 function assertCryptoAvailable() {
   if (
     typeof window === "undefined" ||
@@ -134,12 +90,6 @@ function assertCryptoAvailable() {
 
 assertCryptoAvailable();
 
-// ─────────────────────────────────────────────────────────────────────────────
-// [SEC-003] FIRESTORE SCHEMA VALIDATORS
-// Every Firestore document is validated before its fields are used so that a
-// corrupted or maliciously-crafted record cannot cause silent misbehaviour or
-// allow a confused-deputy attack.
-// ─────────────────────────────────────────────────────────────────────────────
 const B64_RE = /^[A-Za-z0-9+/]+=*$/;
 
 function isNonEmptyString(v) {
@@ -150,17 +100,13 @@ function isBase64(v) {
   return isNonEmptyString(v) && B64_RE.test(v);
 }
 
-/**
- * Validates the `usersPrivateData/{uid}` document.
- * Throws AppError(SCHEMA_INVALID) on any failure.
- */
 function validatePrivateDoc(data) {
   const required = [
-    "pdkSalt",
+    "argonSalt",
     "dekCiphertext",
     "dekIv",
-    "privateKeyCiphertext",
-    "privateKeyIv",
+    "x25519PrivateKeyCiphertext",
+    "x25519PrivateKeyIv",
   ];
   for (const field of required) {
     if (!isBase64(data?.[field])) {
@@ -173,17 +119,13 @@ function validatePrivateDoc(data) {
   }
 }
 
-/**
- * Validates a device sub-document.
- * Throws AppError(DEVICE_RECORD_CORRUPT) on any failure.
- */
 function validateDeviceDoc(data) {
   const required = [
     "deviceId",
     "wrappedDek",
     "deviceIv",
-    "wrappedPrivateKey",
-    "privateKeyIv",
+    "wrappedX25519PrivateKey",
+    "x25519PrivateKeyIv",
   ];
   for (const field of required) {
     if (!isBase64(data?.[field]) && field !== "deviceId") {
@@ -203,9 +145,6 @@ function validateDeviceDoc(data) {
   }
 }
 
-/**
- * Validates per-event key slot in Firestore.
- */
 function validateEventKeySlot(slot, context = "") {
   if (!slot || !isBase64(slot.encrypted_event_key)) {
     throw new AppError(
@@ -214,40 +153,20 @@ function validateEventKeySlot(slot, context = "") {
       new Error(`Invalid event key slot ${context}`),
     );
   }
-  // Owner path includes event_key_iv; shared path (RSA) does not.
-  // Validation of the owner iv happens at call sites that need it.
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// [SEC-004] INDEXED-DB LAYER — FIXED DATABASE CONNECTION MANAGEMENT
-//
-// Original bug: every IDB helper called initKeyDB() independently, opening a
-// *new* IDBDatabase handle each time. Concurrent writes with different handles
-// trigger "The database connection is closing" or silent data loss in some
-// browsers. The fix is a module-level singleton promise.
-//
-// [SEC-005] CRASHLOOP GUARD
-// If the DB open request fires onblocked or is held open by another tab the
-// promise rejects with IDB_UNAVAILABLE rather than hanging forever.
-//
-// [SEC-006] VERSION-UPGRADE SAFETY
-// The upgrade handler is idempotent — it checks before creating the store.
-// ─────────────────────────────────────────────────────────────────────────────
 const IDB_DB_NAME = "E2EE_SecureKeyStore";
 const IDB_STORE_NAME = "DeviceKeys";
 const IDB_DB_VERSION = 1;
-// Well-known key names (not secrets — they only locate where secrets live).
 const IDB_KEY_NAME = "localDeviceKey";
 const IDB_METADATA_NAME = "localDeviceMeta";
 
-let _idbPromise = null; // singleton, reset on versionchange
+let _idbPromise = null;
 
 function getIDB() {
   if (_idbPromise) return _idbPromise;
 
   _idbPromise = new Promise((resolve, reject) => {
-    // [SEC-005] Wrap in try-catch in case indexedDB itself is unavailable
-    // (e.g. Firefox private browsing on some versions).
     let request;
     try {
       request = indexedDB.open(IDB_DB_NAME, IDB_DB_VERSION);
@@ -262,7 +181,6 @@ function getIDB() {
       );
     }
 
-    // [SEC-006] Idempotent upgrade handler.
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
       if (!db.objectStoreNames.contains(IDB_STORE_NAME)) {
@@ -272,8 +190,6 @@ function getIDB() {
 
     request.onsuccess = () => {
       const db = request.result;
-      // Reset singleton if this connection is superseded (e.g. another tab
-      // opened a higher version).
       db.onversionchange = () => {
         db.close();
         _idbPromise = null;
@@ -292,7 +208,6 @@ function getIDB() {
       );
     };
 
-    // [SEC-005] A blocked event means another tab holds an old connection.
     request.onblocked = () => {
       _idbPromise = null;
       reject(
@@ -307,30 +222,6 @@ function getIDB() {
   return _idbPromise;
 }
 
-/**
- * [SEC-007] STORING CryptoKey OBJECTS IN INDEXEDDB — DECISION + TRADEOFFS
- *
- * The Web Cryptography API spec and Chromium/Firefox/Safari all support storing
- * non-extractable CryptoKey objects directly via the structured-clone algorithm.
- * This is the *preferred* pattern because:
- *   • The key material never leaves the browser's secure key store.
- *   • The JS heap never holds raw bytes that could be captured by a memory
- *     dump or GC scan.
- *   • It is strictly safer than exporting to raw bytes and storing those.
- *
- * Compatibility as of 2024: Chrome 43+, Firefox 34+, Safari 15+, Edge 18+.
- * These cover >99 % of current active users.  A compatibility check is
- * performed at startup (assertCryptoAvailable).
- *
- * The original code already stored CryptoKey objects in IDB — this is CORRECT.
- * No change needed except the connection-management fixes above.
- *
- * TRADEOFF: IDB is accessible to same-origin JS, so an XSS attacker can call
- * crypto.subtle.decrypt() with the stored key.  This is unavoidable for any
- * browser-based E2EE solution.  The mitigation is a strong CSP and keeping
- * the key non-extractable, which prevents the attacker from *exporting* the
- * key and using it outside the browser.
- */
 async function saveToDB(key, value) {
   const db = await getIDB();
   return new Promise((resolve, reject) => {
@@ -338,7 +229,6 @@ async function saveToDB(key, value) {
     try {
       tx = db.transaction(IDB_STORE_NAME, "readwrite");
     } catch (err) {
-      // Transaction creation can fail if the DB is closing.
       _idbPromise = null;
       return reject(
         new AppError(
@@ -408,7 +298,6 @@ async function deleteFromDB(key) {
       tx = db.transaction(IDB_STORE_NAME, "readwrite");
     } catch (err) {
       _idbPromise = null;
-      // Non-fatal on logout — resolve anyway.
       devLog("IDB_DELETE", `Could not delete key ${key}`, err);
       return resolve();
     }
@@ -417,16 +306,11 @@ async function deleteFromDB(key) {
     request.onsuccess = () => resolve();
     request.onerror = () => {
       devLog("IDB_DELETE", `Delete failed for key ${key}`, request.error);
-      resolve(); // non-fatal
+      resolve();
     };
   });
 }
 
-/**
- * [SEC-008] FULL IDB WIPE — used during logout to guarantee no key material
- * survives.  Clears the entire object store rather than individual keys so
- * that any future key names added by developers are also purged.
- */
 async function clearAllFromDB() {
   try {
     const db = await getIDB();
@@ -437,25 +321,44 @@ async function clearAllFromDB() {
       } catch (err) {
         _idbPromise = null;
         devLog("IDB_CLEAR", "Could not open clear transaction", err);
-        return resolve(); // non-fatal on logout
+        return resolve();
       }
       const store = tx.objectStore(IDB_STORE_NAME);
       const request = store.clear();
       request.onsuccess = () => resolve();
       request.onerror = () => {
         devLog("IDB_CLEAR", "Store clear failed", request.error);
-        resolve(); // non-fatal
+        resolve();
       };
     });
   } catch (err) {
     devLog("IDB_CLEAR", "getIDB failed during logout", err);
-    // Still non-fatal — we proceed with Firebase sign-out.
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CONTEXT + PROVIDER
-// ─────────────────────────────────────────────────────────────────────────────
+async function deriveArgon2idKey(passwordStr, saltBytes) {
+  const hexHash = await argon2id({
+    password: passwordStr,
+    salt: saltBytes,
+    parallelism: 1,
+    iterations: 3,
+    memorySize: 65536,
+    hashLength: 32,
+    outputType: "hex",
+  });
+  const keyBytes = new Uint8Array(Math.ceil(hexHash.length / 2));
+  for (let i = 0; i < keyBytes.length; i++) {
+    keyBytes[i] = parseInt(hexHash.substring(i * 2, i * 2 + 2), 16);
+  }
+  return await crypto.subtle.importKey(
+    "raw",
+    keyBytes,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt", "wrapKey", "unwrapKey"],
+  );
+}
+
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
@@ -464,15 +367,12 @@ export function AuthProvider({ children }) {
   const [activePage, setActivePage] = useState(location.pathname);
   const [currentUser, setCurrentUser] = useState(undefined);
   const [authStatus, setAuthStatus] = useState(null);
-  // Prevents the onAuthStateChanged listener from firing session-restore logic
-  // while an explicit sign-in / register is in progress.
   const isAuthenticatingRef = useRef(false);
 
   useEffect(() => {
     setActivePage(location.pathname);
   }, [location.pathname]);
 
-  // ── Session restoration via onAuthStateChanged ───────────────────────────
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (isAuthenticatingRef.current) return;
@@ -502,7 +402,6 @@ export function AuthProvider({ children }) {
         }
 
         if (!userSnap.exists() || !privateSnap.exists()) {
-          // Account exists in Firebase Auth but not in Firestore → orphaned.
           devLog(
             "SESSION",
             "Firestore documents missing for uid",
@@ -517,25 +416,19 @@ export function AuthProvider({ children }) {
           id: firebaseUser.uid,
           email: firebaseUser.email,
           ...userSnap.data(),
-          // [SEC-009] Do NOT spread privateSnap.data() into the user object here.
-          // Private fields (wrappedDek, etc.) must not reach component trees.
         };
 
-        // [SEC-010] Attempt session key restoration from IndexedDB + Firestore.
         const restorationResult = await restoreDeviceSession(
           baseUser.id,
           privateSnap.data(),
         );
 
         if (!restorationResult.ok) {
-          // Device not registered or keys corrupted → graceful degradation.
           devLog(
             "SESSION",
             "Device session unavailable:",
             restorationResult.reason,
           );
-          // [SEC-011] Sign out from Firebase too so the user gets a clean login
-          // screen rather than an inconsistent half-authenticated state.
           await firebaseSignOut(auth).catch(() => {});
           setAuthStatus("not_logged_in");
           setCurrentUser(null);
@@ -544,7 +437,6 @@ export function AuthProvider({ children }) {
 
         const { userDek, privateKey } = restorationResult;
 
-        // [SEC-012] Decrypt stored user data only after key restoration.
         let userData = { sharedFriends: [], settings: {} };
         const pd = privateSnap.data();
         if (isBase64(pd.encrypted_user_data) && isBase64(pd.user_data_iv)) {
@@ -555,8 +447,6 @@ export function AuthProvider({ children }) {
               pd.user_data_iv,
             );
           } catch (err) {
-            // [SEC-013] Decryption failure here is non-fatal; user data is a
-            // convenience cache.  Log in dev, fall back to empty state.
             devLog(
               "SESSION",
               "Failed to decrypt userData, using empty default",
@@ -579,20 +469,9 @@ export function AuthProvider({ children }) {
     return () => unsubscribe();
   }, []);
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ENCODING HELPERS
-  // [SEC-014] These are pure functions defined outside the component so they
-  // are not recreated on every render.  Moved below as module-level functions.
-  // Inside the component we keep thin wrappers for ergonomics.
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // SIGN IN
-  // ─────────────────────────────────────────────────────────────────────────
   async function signIn(identifier, password) {
     isAuthenticatingRef.current = true;
     try {
-      // ── 1. Resolve email from username or direct email ──────────────────
       let loginEmail = identifier;
 
       if (!identifier.includes("@")) {
@@ -600,7 +479,6 @@ export function AuthProvider({ children }) {
         try {
           email = await resolveEmailFromUsername(identifier);
         } catch (err) {
-          // [SEC-015] Generic message regardless of whether the username exists.
           return { success: false, error: "Invalid username or password." };
         }
         if (!email) {
@@ -609,7 +487,6 @@ export function AuthProvider({ children }) {
         loginEmail = email;
       }
 
-      // ── 2. Firebase authentication ──────────────────────────────────────
       let firebaseUser;
       try {
         const credential = await signInWithEmailAndPassword(
@@ -623,7 +500,6 @@ export function AuthProvider({ children }) {
         return { success: false, error: "Invalid username or password." };
       }
 
-      // ── 3. Load Firestore documents ─────────────────────────────────────
       let userSnap, privateSnap;
       try {
         [userSnap, privateSnap] = await Promise.all([
@@ -647,35 +523,14 @@ export function AuthProvider({ children }) {
 
       const authDetails = privateSnap.data();
 
-      // [SEC-016] Validate schema before touching any fields.
       validatePrivateDoc(authDetails);
 
-      // ── 4. Key derivation ───────────────────────────────────────────────
-      const passwordBytes = normalizeAndEncodePassword(password);
-      const pdkSaltBytes = base64ToArrayBuffer(authDetails.pdkSalt);
-
-      const baseKey = await crypto.subtle.importKey(
-        "raw",
-        passwordBytes,
-        "PBKDF2",
-        false,
-        ["deriveKey"],
+      const argonSaltBytes = base64ToArrayBuffer(authDetails.argonSalt);
+      const pdk = await deriveArgon2idKey(
+        password,
+        new Uint8Array(argonSaltBytes),
       );
 
-      const pdk = await crypto.subtle.deriveKey(
-        {
-          name: "PBKDF2",
-          salt: pdkSaltBytes,
-          iterations: 600000,
-          hash: "SHA-256",
-        },
-        baseKey,
-        { name: "AES-GCM", length: 256 },
-        false, // non-extractable
-        ["encrypt", "decrypt", "wrapKey", "unwrapKey"],
-      );
-
-      // ── 5. Unwrap DEK and RSA private key ───────────────────────────────
       let dek, privateKey;
       try {
         dek = await crypto.subtle.unwrapKey(
@@ -684,13 +539,13 @@ export function AuthProvider({ children }) {
           pdk,
           { name: "AES-GCM", iv: base64ToArrayBuffer(authDetails.dekIv) },
           { name: "AES-GCM", length: 256 },
-          true, // extractable
+          true,
           ["encrypt", "decrypt", "wrapKey", "unwrapKey"],
         );
       } catch (err) {
         throw new AppError(
           AuthErrorCode.KEY_UNWRAP_FAILED,
-          "Invalid username or password.", // safe user message
+          "Invalid username or password.",
           err,
         );
       }
@@ -698,15 +553,15 @@ export function AuthProvider({ children }) {
       try {
         privateKey = await crypto.subtle.unwrapKey(
           "pkcs8",
-          base64ToArrayBuffer(authDetails.privateKeyCiphertext),
+          base64ToArrayBuffer(authDetails.x25519PrivateKeyCiphertext),
           pdk,
           {
             name: "AES-GCM",
-            iv: base64ToArrayBuffer(authDetails.privateKeyIv),
+            iv: base64ToArrayBuffer(authDetails.x25519PrivateKeyIv),
           },
-          { name: "RSA-OAEP", hash: "SHA-256" },
-          true, // non-extractable
-          ["decrypt"],
+          { name: "X25519" },
+          true,
+          ["deriveBits"],
         );
       } catch (err) {
         throw new AppError(
@@ -716,14 +571,12 @@ export function AuthProvider({ children }) {
         );
       }
 
-      // ── 6. Provision or refresh device key record ────────────────────────
       const deviceId = await provisionDeviceRecord(
         firebaseUser.uid,
         dek,
         privateKey,
       );
 
-      // ── 7. Build session ─────────────────────────────────────────────────
       let userData = { sharedFriends: [], settings: {} };
       if (
         isBase64(authDetails.encrypted_user_data) &&
@@ -775,43 +628,10 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // DEVICE KEY PROVISIONING
-  // [SEC-017] Extracted from signIn into its own function for clarity and
-  // so it can be called independently by registrationFlow.
-  //
-  // [SEC-018] DUPLICATE DEVICE HANDLING
-  // Original code called setDoc unconditionally, overwriting any existing
-  // device record on every login.  This causes data races if the same device
-  // signs in concurrently (e.g. two tabs) and silently discards the old
-  // wrapped keys, breaking session restoration for the first tab.
-  //
-  // New behaviour:
-  //   • Load existing deviceId from IDB.
-  //   • If a valid record already exists in Firestore for that ID, update
-  //     only the `lastUsedAt` timestamp — do NOT re-wrap and overwrite.
-  //   • Only generate a new device key + write a new record when no valid
-  //     record exists (first login on this device, or after logout/revocation).
-  //
-  // [SEC-019] STALE DEVICE RECORDS
-  // Old device docs left by logout are cleaned up by signOut.  However, if
-  // the user clears IDB without signing out (e.g. browser data wipe), the
-  // Firestore record becomes an orphan.  These orphans are harmless because
-  // the wrapped DEK they contain can only be decrypted by the device key that
-  // lived in IDB — which is now gone.  They can be pruned by an admin or a
-  // Cloud Function.
-  //
-  // [SEC-020] DEVICE REVOCATION
-  // Revocation is achieved by deleting the Firestore device sub-document
-  // (admin or from another authenticated session).  The next session restore
-  // attempt on the revoked device fails at getDoc → user is signed out.
-  // ─────────────────────────────────────────────────────────────────────────
   async function provisionDeviceRecord(uid, dek, privateKey) {
-    // [SEC-021] Check for an existing device ID in IDB first.
     let deviceId = await loadFromDB(IDB_METADATA_NAME);
 
     if (deviceId) {
-      // Check whether a valid Firestore record already exists for this device.
       let existingSnap;
       try {
         existingSnap = await getDoc(
@@ -822,37 +642,21 @@ export function AuthProvider({ children }) {
       }
 
       if (existingSnap?.exists()) {
-        // [SEC-022] Record still valid — just refresh the timestamp and
-        // overwrite the device-local key (in case the IDB was wiped but the
-        // Firestore record survived, which indicates a partial clear; we need
-        // to re-wrap with a new device key).
-        //
-        // We always re-provision on an explicit signIn because:
-        //  (a) the IDB device key may have been lost (browser wipe);
-        //  (b) re-wrapping is cheap and keeps the device key fresh;
-        //  (c) it does not break any other concurrent tab because they
-        //      reload the wrapped DEK from their own IDB keys, not Firestore.
-        //
-        // This is safe: we replace the *wrapped* DEK (same plaintext, new
-        // wrapper key), not the DEK itself.  All encrypted data remains valid.
+        // Record valid; proceed to overwrite
       }
-      // Fall through to generate a fresh device key and overwrite the record.
     } else {
       deviceId = crypto.randomUUID();
       await saveToDB(IDB_METADATA_NAME, deviceId);
     }
 
-    // Generate a fresh non-extractable device-local wrapping key.
     const deviceKey = await crypto.subtle.generateKey(
       { name: "AES-GCM", length: 256 },
-      false, // non-extractable: cannot leave IDB
+      false,
       ["encrypt", "decrypt", "wrapKey", "unwrapKey"],
     );
 
-    // Persist it to IDB (structured-clone stores the CryptoKey opaquely).
     await saveToDB(IDB_KEY_NAME, deviceKey);
 
-    // Wrap the DEK with the device key.
     const deviceDekIv = crypto.getRandomValues(new Uint8Array(12));
     let wrappedDeviceDek;
     try {
@@ -868,14 +672,6 @@ export function AuthProvider({ children }) {
       );
     }
 
-    // Wrap the RSA private key with the DEK.
-    // [SEC-023] WHY WRAP WITH DEK NOT DEVICE KEY:
-    // The DEK is the trust anchor for this user's data.  Using it to wrap the
-    // private key means the private key can be recovered from Firestore by any
-    // session that has the DEK, without needing the per-device key.  This is
-    // intentional: the DEK is already non-extractable, and using it as a
-    // second-layer wrapper here provides the same security as the device key
-    // while keeping the Firestore schema symmetrical.
     const privKeyDeviceIv = crypto.getRandomValues(new Uint8Array(12));
     let wrappedPrivKey;
     try {
@@ -891,24 +687,21 @@ export function AuthProvider({ children }) {
       );
     }
 
-    // Write to Firestore.  setDoc is idempotent (merges on same deviceId).
     try {
       await setDoc(
         doc(db, "usersPrivateData", uid, "devices", deviceId),
         {
           deviceId,
-          // [SEC-024] userAgent is a low-fidelity label for the admin UI only.
-          // It is not used in any security-critical path.
           deviceName: navigator.userAgent.slice(0, 200),
           platform: navigator.platform || "unknown",
           createdAt: new Date().toISOString(),
           lastUsedAt: new Date().toISOString(),
           wrappedDek: arrayBufferToBase64(wrappedDeviceDek),
           deviceIv: arrayBufferToBase64(deviceDekIv),
-          wrappedPrivateKey: arrayBufferToBase64(wrappedPrivKey),
-          privateKeyIv: arrayBufferToBase64(privKeyDeviceIv),
+          wrappedX25519PrivateKey: arrayBufferToBase64(wrappedPrivKey),
+          x25519PrivateKeyIv: arrayBufferToBase64(privKeyDeviceIv),
         },
-        { merge: false }, // Always a full overwrite on login.
+        { merge: false },
       );
     } catch (err) {
       throw new AppError(
@@ -921,11 +714,6 @@ export function AuthProvider({ children }) {
     return deviceId;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SESSION RESTORATION (onAuthStateChanged path)
-  // [SEC-025] Returns { ok, userDek, privateKey } or { ok: false, reason }.
-  // Never throws — callers check the `ok` flag.
-  // ─────────────────────────────────────────────────────────────────────────
   async function restoreDeviceSession(uid) {
     try {
       const deviceKey = await loadFromDB(IDB_KEY_NAME);
@@ -946,7 +734,6 @@ export function AuthProvider({ children }) {
       }
 
       if (!deviceSnap.exists()) {
-        // [SEC-026] Record deleted (revocation) or orphaned.
         return {
           ok: false,
           reason: "Device record missing (possibly revoked)",
@@ -955,7 +742,6 @@ export function AuthProvider({ children }) {
 
       const deviceData = deviceSnap.data();
 
-      // [SEC-027] Validate schema before using any fields.
       try {
         validateDeviceDoc(deviceData);
       } catch (err) {
@@ -963,7 +749,6 @@ export function AuthProvider({ children }) {
         return { ok: false, reason: "Device record corrupt" };
       }
 
-      // Unwrap DEK.
       let userDek;
       try {
         userDek = await crypto.subtle.unwrapKey(
@@ -980,34 +765,29 @@ export function AuthProvider({ children }) {
         return { ok: false, reason: "DEK unwrap failed" };
       }
 
-      // Unwrap RSA private key.
       let privateKey = null;
       if (
-        isBase64(deviceData.wrappedPrivateKey) &&
-        isBase64(deviceData.privateKeyIv)
+        isBase64(deviceData.wrappedX25519PrivateKey) &&
+        isBase64(deviceData.x25519PrivateKeyIv)
       ) {
         try {
           privateKey = await crypto.subtle.unwrapKey(
             "pkcs8",
-            base64ToArrayBuffer(deviceData.wrappedPrivateKey),
+            base64ToArrayBuffer(deviceData.wrappedX25519PrivateKey),
             userDek,
             {
               name: "AES-GCM",
-              iv: base64ToArrayBuffer(deviceData.privateKeyIv),
+              iv: base64ToArrayBuffer(deviceData.x25519PrivateKeyIv),
             },
-            { name: "RSA-OAEP", hash: "SHA-256" },
+            { name: "X25519" },
             true,
-            ["decrypt"],
+            ["deriveBits"],
           );
         } catch (err) {
-          // [SEC-028] Private key failure is non-fatal for the owner path.
-          // The user can still decrypt their own events (DEK path).
-          // Shared events will silently be skipped by subscribeToEvents.
-          devLog("SESSION_RESTORE", "RSA private key unwrap failed", err);
+          devLog("SESSION_RESTORE", "X25519 private key unwrap failed", err);
         }
       }
 
-      // [SEC-029] Fire-and-forget timestamp refresh — must not block session.
       updateDoc(doc(db, "usersPrivateData", uid, "devices", deviceId), {
         lastUsedAt: new Date().toISOString(),
       }).catch((err) =>
@@ -1021,21 +801,12 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SIGN OUT
-  // [SEC-030] clearAllFromDB() instead of deleting only two named keys.
-  // [SEC-031] Firebase sign-out happens AFTER clearing IDB so keys are gone
-  // even if Firebase sign-out throws.
-  // ─────────────────────────────────────────────────────────────────────────
   async function signOut() {
-    // [SEC-032] Zero out in-memory keys first.
     setCurrentUser(null);
     setAuthStatus("not_logged_in");
 
-    // [SEC-008] Nuke all local key material.
     await clearAllFromDB();
 
-    // Remove device Firestore record (best-effort — does not block logout).
     try {
       const deviceId = await loadFromDB(IDB_METADATA_NAME).catch(() => null);
       const uid = auth.currentUser?.uid;
@@ -1055,74 +826,31 @@ export function AuthProvider({ children }) {
     navigate("/login/sign-in");
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // REGISTRATION
-  // [SEC-033] registrationFlow now always explicitly signs in afterwards so
-  // the device key is provisioned through provisionDeviceRecord — keeping a
-  // single authoritative code path for that logic.
-  //
-  // [SEC-034] DEK is marked extractable: false at generation time.
-  // This was a bug in the original — the DEK was generated with
-  // extractable: false, which prevents wrapKey from working because wrapKey
-  // needs to export the key material to encrypt it.
-  //
-  // CORRECTION: wrapKey DOES work with non-extractable keys in the Web Crypto
-  // API — "extractable:false" prevents exportKey/exportKey but NOT wrapKey,
-  // because wrapKey is a combined export+encrypt that the browser mediates.
-  // The browser spec allows wrapKey on non-extractable keys.
-  // The original code was actually CORRECT here.  We keep extractable: false.
-  // ─────────────────────────────────────────────────────────────────────────
   async function registrationFlow(email, password) {
     console.log("REGISTRATION START");
     isAuthenticatingRef.current = true;
     try {
-      const passwordBytes = normalizeAndEncodePassword(password);
-      const salt = crypto.getRandomValues(new Uint8Array(32)); // [SEC-035] 32 bytes vs 16
+      const salt = crypto.getRandomValues(new Uint8Array(32));
+      const pdk = await deriveArgon2idKey(password, salt);
 
-      const baseKey = await crypto.subtle.importKey(
-        "raw",
-        passwordBytes,
-        "PBKDF2",
-        false,
-        ["deriveKey"],
-      );
-      const pdk = await crypto.subtle.deriveKey(
-        { name: "PBKDF2", salt, iterations: 600000, hash: "SHA-256" },
-        baseKey,
-        { name: "AES-GCM", length: 256 },
-        false,
-        ["encrypt", "decrypt", "wrapKey", "unwrapKey"],
-      );
-
-      // Generate DEK (non-extractable — wrapKey still works per spec).
       const dek = await crypto.subtle.generateKey(
         { name: "AES-GCM", length: 256 },
         true,
         ["encrypt", "decrypt", "wrapKey", "unwrapKey"],
       );
 
-      // Wrap DEK with PDK.
       const dekIv = crypto.getRandomValues(new Uint8Array(12));
       const wrappedDekBuffer = await crypto.subtle.wrapKey("raw", dek, pdk, {
         name: "AES-GCM",
         iv: dekIv,
       });
 
-      // Generate RSA-3072-OAEP key pair.
-      // [SEC-036] privateKey extractable: true is required HERE only so that
-      // wrapKey("pkcs8", privateKey, pdk, ...) can proceed.  The key is
-      // immediately wrapped and the unwrapped form is never stored.
-      // In signIn and restoreDeviceSession the unwrapped private key is always
-      // imported as extractable: false.
       const identityKeyPair = await crypto.subtle.generateKey(
         {
-          name: "RSA-OAEP",
-          modulusLength: 3072,
-          publicExponent: new Uint8Array([1, 0, 1]),
-          hash: "SHA-256",
+          name: "X25519",
         },
-        true, // must be extractable to wrapKey("pkcs8") below
-        ["encrypt", "decrypt"],
+        true,
+        ["deriveBits"],
       );
 
       const exportedPublicKey = await crypto.subtle.exportKey(
@@ -1130,7 +858,6 @@ export function AuthProvider({ children }) {
         identityKeyPair.publicKey,
       );
 
-      // Wrap private key with PDK.
       const privateKeyIv = crypto.getRandomValues(new Uint8Array(12));
       const wrappedPrivateKey = await crypto.subtle.wrapKey(
         "pkcs8",
@@ -1139,7 +866,6 @@ export function AuthProvider({ children }) {
         { name: "AES-GCM", iv: privateKeyIv },
       );
 
-      // Create Firebase Auth user.
       let firebaseUser;
       console.log("CREATE USER");
       try {
@@ -1157,16 +883,15 @@ export function AuthProvider({ children }) {
         );
       }
       console.log("AUTH USER CREATED", firebaseUser.uid);
-      // Encrypt initial user data.
+
       const initialUserData = { sharedFriends: [], settings: {} };
       const { ciphertext: encryptedUserData, iv: userDataIv } =
         await encryptWithDEK(dek, initialUserData);
 
-      // Commit public profile.
       try {
         await setDoc(doc(db, "users", firebaseUser.uid), {
           email,
-          publicKey: arrayBufferToBase64(exportedPublicKey),
+          x25519PublicKey: arrayBufferToBase64(exportedPublicKey),
           isUserFirstTime: true,
           createdAt: new Date().toISOString(),
         });
@@ -1178,14 +903,14 @@ export function AuthProvider({ children }) {
         );
       }
       console.log("PRIVATE DOC SAVED");
-      // Commit private credential record.
+
       try {
         await setDoc(doc(db, "usersPrivateData", firebaseUser.uid), {
-          pdkSalt: arrayBufferToBase64(salt),
+          argonSalt: arrayBufferToBase64(salt),
           dekCiphertext: arrayBufferToBase64(wrappedDekBuffer),
           dekIv: arrayBufferToBase64(dekIv),
-          privateKeyCiphertext: arrayBufferToBase64(wrappedPrivateKey),
-          privateKeyIv: arrayBufferToBase64(privateKeyIv),
+          x25519PrivateKeyCiphertext: arrayBufferToBase64(wrappedPrivateKey),
+          x25519PrivateKeyIv: arrayBufferToBase64(privateKeyIv),
           encrypted_user_data: encryptedUserData,
           user_data_iv: userDataIv,
         });
@@ -1197,7 +922,6 @@ export function AuthProvider({ children }) {
         );
       }
 
-      // [SEC-037] Sign in (which provisions the device record) then return.
       return await signIn(email, password);
     } catch (error) {
       devLog("REGISTRATION", error);
@@ -1211,9 +935,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // USERNAME RESOLUTION
-  // ─────────────────────────────────────────────────────────────────────────
   async function resolveEmailFromUsername(username) {
     try {
       const usersRef = collection(db, "users");
@@ -1224,7 +945,6 @@ export function AuthProvider({ children }) {
       let snap = await getDocs(q);
       if (!snap.empty) return snap.docs[0].data().email;
 
-      // Fallback: case-sensitive match (legacy accounts).
       const fallbackQ = query(usersRef, where("username", "==", username));
       snap = await getDocs(fallbackQ);
       return snap.empty ? null : snap.docs[0].data().email;
@@ -1237,29 +957,7 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ENCRYPTION / DECRYPTION UTILITIES
-  //
-  // [SEC-038] AES-GCM IV REVIEW
-  // Every call to encryptWithDEK generates a fresh random 96-bit (12-byte) IV
-  // using crypto.getRandomValues — correct.  The same IV is never reused with
-  // the same key because each call generates a new one independently.
-  //
-  // RISK: With a single long-lived DEK there is a theoretical birthday problem
-  // at ~2^32 encryptions (~4 billion events).  In practice this application
-  // creates at most thousands of records — well within safe limits.
-  //
-  // [SEC-039] AES-GCM TAG LENGTH
-  // The default tag length (128 bits) is used implicitly.  This is the
-  // strongest available and the correct choice — no change needed.
-  //
-  // [SEC-040] decryptJson SAFE PARSING
-  // Added try-catch around JSON.parse to distinguish decryption failures
-  // (wrong key / corrupted ciphertext) from parsing failures (valid decrypt
-  // but malformed JSON — indicates data corruption post-write).
-  // ─────────────────────────────────────────────────────────────────────────
   async function encryptWithDEK(key, plaintext) {
-    // [SEC-041] Input validation before touching crypto.
     if (!key) {
       throw new AppError(
         AuthErrorCode.MISSING_DEK,
@@ -1309,7 +1007,6 @@ export function AuthProvider({ children }) {
   }
 
   async function decryptRawBuffer(key, ciphertextB64, ivB64) {
-    // [SEC-042] Validate inputs.
     if (!key) {
       throw new AppError(
         AuthErrorCode.MISSING_DEK,
@@ -1360,9 +1057,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PROFILE & USER DATA
-  // ─────────────────────────────────────────────────────────────────────────
   async function checkUsernameAvailability(username) {
     try {
       if (!isNonEmptyString(username?.trim())) {
@@ -1501,23 +1195,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // EVENTS
-  //
-  // [SEC-043] EVENT KEY EXTRACTABILITY
-  // In addEvent the event key is generated with extractable: true so that
-  // exportKey("raw") can be called to wrap it under the DEK.  This is
-  // necessary — once wrapped and discarded, the raw key material is no longer
-  // accessible.  The wrapped form stored in Firestore is encrypted ciphertext.
-  //
-  // In subscribeToEvents and updateEvent the unwrapped event key is imported
-  // with extractable: false / only the needed usage (["decrypt"] or
-  // ["encrypt"]) to minimise exposure.
-  //
-  // [SEC-044] updateEvent: the shared-event path imported the event key with
-  // extractable: true and usage ["encrypt"] — that was unnecessarily
-  // permissive.  Changed to extractable: false.
-  // ─────────────────────────────────────────────────────────────────────────
   async function addEvent(eventData, onProgress) {
     if (!currentUser?.id || !currentUser.userDek) {
       return { success: false, error: "Not authenticated." };
@@ -1564,24 +1241,52 @@ export function AuthProvider({ children }) {
       console.log(sharedFriends);
       for (const friend of sharedFriends) {
         try {
-          if (!friend?.id || !friend?.publicKey) continue;
+          if (!friend?.id || !friend?.x25519PublicKey) continue;
 
           const friendPubKey = await crypto.subtle.importKey(
             "spki",
-            base64ToArrayBuffer(friend.publicKey),
-            { name: "RSA-OAEP", hash: "SHA-256" },
+            base64ToArrayBuffer(friend.x25519PublicKey),
+            { name: "X25519" },
+            false,
+            [],
+          );
+
+          const ephemeralKeyPair = await crypto.subtle.generateKey(
+            { name: "X25519" },
+            true,
+            ["deriveBits"],
+          );
+
+          const sharedSecret = await crypto.subtle.deriveBits(
+            { name: "X25519", public: friendPubKey },
+            ephemeralKeyPair.privateKey,
+            256,
+          );
+
+          const sharedAesKey = await crypto.subtle.importKey(
+            "raw",
+            sharedSecret,
+            { name: "AES-GCM" },
             false,
             ["encrypt"],
           );
 
+          const sharedIv = crypto.getRandomValues(new Uint8Array(12));
           const encryptedForFriend = await crypto.subtle.encrypt(
-            { name: "RSA-OAEP" },
-            friendPubKey,
+            { name: "AES-GCM", iv: sharedIv },
+            sharedAesKey,
             rawEventKey,
           );
 
+          const ephemeralPubRaw = await crypto.subtle.exportKey(
+            "spki",
+            ephemeralKeyPair.publicKey,
+          );
+
           keys[friend.id] = {
+            ephemeral_public_key: arrayBufferToBase64(ephemeralPubRaw),
             encrypted_event_key: arrayBufferToBase64(encryptedForFriend),
+            shared_iv: arrayBufferToBase64(sharedIv),
           };
 
           participants.push(friend.id);
@@ -1656,7 +1361,6 @@ export function AuthProvider({ children }) {
 
       let eventKeyRaw;
       if (data.ownerId === currentUser.id) {
-        // Owner path: key wrapped with DEK.
         if (!isBase64(myKeyData.event_key_iv)) {
           throw new AppError(
             AuthErrorCode.CORRUPTED_CIPHERTEXT,
@@ -1669,17 +1373,44 @@ export function AuthProvider({ children }) {
           myKeyData.event_key_iv,
         );
       } else {
-        // Shared path: key wrapped with our RSA public key.
         if (!currentUser.privateKey) {
           throw new AppError(
             AuthErrorCode.MISSING_PRIVATE_KEY,
-            "Your RSA private key is not available for this session.",
+            "Your identity private key is not available for this session.",
+          );
+        }
+        if (
+          !isBase64(myKeyData.ephemeral_public_key) ||
+          !isBase64(myKeyData.shared_iv)
+        ) {
+          throw new AppError(
+            AuthErrorCode.CORRUPTED_CIPHERTEXT,
+            "Shared event key slot is malformed.",
           );
         }
         try {
-          eventKeyRaw = await crypto.subtle.decrypt(
-            { name: "RSA-OAEP" },
+          const ephemeralPubKey = await crypto.subtle.importKey(
+            "spki",
+            base64ToArrayBuffer(myKeyData.ephemeral_public_key),
+            { name: "X25519" },
+            false,
+            [],
+          );
+          const sharedSecret = await crypto.subtle.deriveBits(
+            { name: "X25519", public: ephemeralPubKey },
             currentUser.privateKey,
+            256,
+          );
+          const sharedAesKey = await crypto.subtle.importKey(
+            "raw",
+            sharedSecret,
+            { name: "AES-GCM" },
+            false,
+            ["decrypt"],
+          );
+          eventKeyRaw = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: base64ToArrayBuffer(myKeyData.shared_iv) },
+            sharedAesKey,
             base64ToArrayBuffer(myKeyData.encrypted_event_key),
           );
         } catch (err) {
@@ -1691,12 +1422,11 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // [SEC-044] Import as non-extractable, encrypt-only.
       const eventKey = await crypto.subtle.importKey(
         "raw",
         eventKeyRaw,
         { name: "AES-GCM" },
-        false, // non-extractable
+        false,
         ["encrypt"],
       );
 
@@ -1756,32 +1486,27 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SHARING
-  // [SEC-045] shareVisibleEventsWithFriend: validate friendPublicKeyBase64
-  // before importing to avoid feeding garbage into importKey.
-  // [SEC-046] Batch size guard: Firestore batches are capped at 500 ops.
-  //           Added chunking to handle users with >500 events.
-  // ─────────────────────────────────────────────────────────────────────────
-  async function shareVisibleEventsWithFriend(friendId, friendPublicKeyBase64) {
+  async function shareVisibleEventsWithFriend(
+    friendId,
+    friendX25519PublicKeyBase64,
+  ) {
     if (!currentUser?.userDek) {
       return { success: false, error: "Not authenticated" };
     }
     if (!isNonEmptyString(friendId)) {
       return { success: false, error: "Invalid friend ID." };
     }
-    if (!isBase64(friendPublicKeyBase64)) {
+    if (!isBase64(friendX25519PublicKeyBase64)) {
       return { success: false, error: "Invalid public key format." };
     }
 
     try {
-      // Update friend list (idempotent).
       const currentShared = currentUser.userData?.sharedFriends ?? [];
       if (!currentShared.some((f) => f.id === friendId)) {
         await updateUserData({
           sharedFriends: [
             ...currentShared,
-            { id: friendId, publicKey: friendPublicKeyBase64 },
+            { id: friendId, x25519PublicKey: friendX25519PublicKeyBase64 },
           ],
         });
       }
@@ -1790,10 +1515,10 @@ export function AuthProvider({ children }) {
       try {
         friendPubKey = await crypto.subtle.importKey(
           "spki",
-          base64ToArrayBuffer(friendPublicKeyBase64),
-          { name: "RSA-OAEP", hash: "SHA-256" },
+          base64ToArrayBuffer(friendX25519PublicKeyBase64),
+          { name: "X25519" },
           false,
-          ["encrypt"],
+          [""],
         );
       } catch (err) {
         throw new AppError(
@@ -1807,14 +1532,13 @@ export function AuthProvider({ children }) {
         query(collection(db, "events"), where("ownerId", "==", currentUser.id)),
       );
 
-      // [SEC-046] Chunk into batches of 400 (safe margin under 500).
       const BATCH_LIMIT = 400;
       let batch = writeBatch(db);
       let opCount = 0;
 
       for (const docSnap of snap.docs) {
         const data = docSnap.data();
-        if (data.keys?.[friendId]) continue; // already shared
+        if (data.keys?.[friendId]) continue;
 
         const myKey = data.keys?.[currentUser.id];
         if (
@@ -1845,17 +1569,39 @@ export function AuthProvider({ children }) {
           continue;
         }
 
-        let encryptedForFriend;
+        let encryptedForFriend, ephemeralPubRaw, sharedIv;
         try {
+          const ephemeralKeyPair = await crypto.subtle.generateKey(
+            { name: "X25519" },
+            true,
+            ["deriveBits"],
+          );
+          const sharedSecret = await crypto.subtle.deriveBits(
+            { name: "X25519", public: friendPubKey },
+            ephemeralKeyPair.privateKey,
+            256,
+          );
+          const sharedAesKey = await crypto.subtle.importKey(
+            "raw",
+            sharedSecret,
+            { name: "AES-GCM" },
+            false,
+            ["encrypt"],
+          );
+          sharedIv = crypto.getRandomValues(new Uint8Array(12));
           encryptedForFriend = await crypto.subtle.encrypt(
-            { name: "RSA-OAEP" },
-            friendPubKey,
+            { name: "AES-GCM", iv: sharedIv },
+            sharedAesKey,
             rawKey,
+          );
+          ephemeralPubRaw = await crypto.subtle.exportKey(
+            "spki",
+            ephemeralKeyPair.publicKey,
           );
         } catch (err) {
           devLog(
             "SHARE",
-            `Skipping event ${docSnap.id}: RSA encrypt failed`,
+            `Skipping event ${docSnap.id}: ECDH setup failed`,
             err,
           );
           continue;
@@ -1864,7 +1610,9 @@ export function AuthProvider({ children }) {
         batch.update(docSnap.ref, {
           participants: arrayUnion(friendId),
           [`keys.${friendId}`]: {
+            ephemeral_public_key: arrayBufferToBase64(ephemeralPubRaw),
             encrypted_event_key: arrayBufferToBase64(encryptedForFriend),
+            shared_iv: arrayBufferToBase64(sharedIv),
           },
         });
         opCount++;
@@ -1935,9 +1683,6 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // REAL-TIME SUBSCRIPTION
-  // ─────────────────────────────────────────────────────────────────────────
   function subscribeToEvents(onEventsUpdate) {
     if (!currentUser?.id || !currentUser.userDek) return () => {};
 
@@ -1979,7 +1724,11 @@ export function AuthProvider({ children }) {
                 );
               } else {
                 if (!currentUser.privateKey) continue;
-                if (!isBase64(myKeyData.encrypted_event_key)) {
+                if (
+                  !isBase64(myKeyData.encrypted_event_key) ||
+                  !isBase64(myKeyData.ephemeral_public_key) ||
+                  !isBase64(myKeyData.shared_iv)
+                ) {
                   devLog(
                     "SUBSCRIBE",
                     `Malformed shared key slot for event ${document.id}`,
@@ -1987,15 +1736,37 @@ export function AuthProvider({ children }) {
                   continue;
                 }
                 try {
-                  eventKeyRaw = await crypto.subtle.decrypt(
-                    { name: "RSA-OAEP" },
+                  const ephemeralPubKey = await crypto.subtle.importKey(
+                    "spki",
+                    base64ToArrayBuffer(myKeyData.ephemeral_public_key),
+                    { name: "X25519" },
+                    false,
+                    [],
+                  );
+                  const sharedSecret = await crypto.subtle.deriveBits(
+                    { name: "X25519", public: ephemeralPubKey },
                     currentUser.privateKey,
+                    256,
+                  );
+                  const sharedAesKey = await crypto.subtle.importKey(
+                    "raw",
+                    sharedSecret,
+                    { name: "AES-GCM" },
+                    false,
+                    ["decrypt"],
+                  );
+                  eventKeyRaw = await crypto.subtle.decrypt(
+                    {
+                      name: "AES-GCM",
+                      iv: base64ToArrayBuffer(myKeyData.shared_iv),
+                    },
+                    sharedAesKey,
                     base64ToArrayBuffer(myKeyData.encrypted_event_key),
                   );
                 } catch (err) {
                   devLog(
                     "SUBSCRIBE",
-                    `RSA decrypt failed for event ${document.id}`,
+                    `ECDH decrypt failed for event ${document.id}`,
                     err,
                   );
                   continue;
@@ -2043,8 +1814,6 @@ export function AuthProvider({ children }) {
                 participants: data?.participants,
               });
             } catch (decryptError) {
-              // [SEC-047] Per-event errors are logged and skipped — they do
-              // not abort the entire snapshot.
               devLog(
                 "SUBSCRIBE",
                 `Event ${document.id} decryption failed`,
@@ -2059,16 +1828,12 @@ export function AuthProvider({ children }) {
         }
       },
       (error) => {
-        // Firestore listener error callback.
         devLog("SUBSCRIBE", "onSnapshot error", error);
         onEventsUpdate({ success: false, error: "Event stream disconnected." });
       },
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PROVIDER OUTPUT
-  // ─────────────────────────────────────────────────────────────────────────
   return (
     <AuthContext.Provider
       value={{
@@ -2090,7 +1855,6 @@ export function AuthProvider({ children }) {
         subscribeToEvents,
         shareVisibleEventsWithFriend,
         revokeFriendAccess,
-        // [SEC-048] Expose error codes so consumers can branch on type.
         AuthErrorCode,
       }}
     >
@@ -2103,15 +1867,9 @@ export function useData() {
   return useContext(AuthContext);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MODULE-LEVEL PURE HELPERS
-// [SEC-014] Defined outside the component so they are stable references and
-// not re-created on every render.
-// ─────────────────────────────────────────────────────────────────────────────
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
   let binary = "";
-  // [SEC-049] Process in chunks to avoid stack overflow on large buffers.
   const CHUNK = 8192;
   for (let i = 0; i < bytes.byteLength; i += CHUNK) {
     binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
@@ -2120,7 +1878,6 @@ function arrayBufferToBase64(buffer) {
 }
 
 function base64ToArrayBuffer(base64) {
-  // [SEC-050] Validate input before atob to produce a clear error.
   if (typeof base64 !== "string" || !B64_RE.test(base64)) {
     throw new AppError(
       AuthErrorCode.CORRUPTED_CIPHERTEXT,
@@ -2133,14 +1890,4 @@ function base64ToArrayBuffer(base64) {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
-}
-
-function normalizeAndEncodePassword(password) {
-  if (typeof password !== "string" || password.length === 0) {
-    throw new AppError(
-      AuthErrorCode.SCHEMA_INVALID,
-      "Password must be a non-empty string.",
-    );
-  }
-  return new TextEncoder().encode(password.normalize("NFKC"));
 }
