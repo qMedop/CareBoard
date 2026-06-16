@@ -11,22 +11,17 @@ import { useNotification } from "./NotificationContext";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 import defaultAvatar from "../assets/svg/user-avatar.svg";
+import maleAvatar from "../assets/svg/male-avatar.svg";
+import maleAvatar from "../assets/svg/female-avatar.svg";
+
 const TimeContext = createContext();
 
 export const TimeProvider = ({ children }) => {
-  const {
-    currentUser,
-    authStatus,
-    accessToken,
-    decryptJson,
-    decryptRawBuffer,
-    subscribeToEvents,
-  } = useData();
+  const { currentUser, authStatus } = useData();
 
   const { notify } = useNotification();
 
   const [today, setTodayState] = useState(new Date());
-  // 🔴 KEEP THIS: Immediate state purely for the mobile swiper's adjacent slides
   const [swipingDate, setSwipingDate] = useState(today);
 
   const [direction, setDirection] = useState("next");
@@ -49,6 +44,16 @@ export const TimeProvider = ({ children }) => {
   const [dayTasksDiv, setDayTasksDiv] = useState(null);
   const [draggableRef, setDraggableRef] = useState(null);
   const resizeRef = useRef(null);
+
+  const defaultAvatarUrl = (user) => {
+    if (user && user.pfpUrl) return user.pfpUrl;
+    if (user && user.gender) {
+      if (user.gender.toLowerCase() === "male") return maleAvatar;
+      if (user.gender.toLowerCase() === "female") return femaleAvatar;
+      if (user.gender.toLowerCase() === "other") return defaultAvatar;
+    }
+    if (!user) return defaultAvatar;
+  };
 
   const [lists, setLists] = useState([
     { id: 1, title: "My Tasks", is_default: true, view: true, sort_by: "date" },
@@ -86,14 +91,11 @@ export const TimeProvider = ({ children }) => {
     },
   ]);
 
-  // 🔴 FIX: Clean setter keeps both global and swiping trackers identical on PC updates
   const setToday = useCallback((newDate) => {
     setTodayState(newDate);
     setSwipingDate(newDate);
   }, []);
 
-  // 🔴 FIX: This deferred handler lets the mobile pager shift its virtual slides instantly
-  // without overriding or delaying the global 'direction' state used by PC button clicks.
   const setTodayDeferred = useCallback((newDate, delay = 0) => {
     setSwipingDate(newDate);
     if (delay === 0) {
@@ -225,7 +227,6 @@ export const TimeProvider = ({ children }) => {
                   });
                 })
                 .catch((err) => {
-                  // 🔴 Silently ignore connection pipeline abort errors safely
                   if (err.name !== "AbortError") console.error(err);
                 });
             } else {
@@ -271,7 +272,6 @@ export const TimeProvider = ({ children }) => {
           if (ev.ownerId && ev.ownerId !== currentUser.id) {
             if (!userProfileCache[ev.ownerId]) {
               try {
-                // 🔴 Wrap the internal background fetch statement inside a clean catch block
                 const userSnap = await getDoc(doc(db, "users", ev.ownerId));
                 if (userSnap.exists()) {
                   const data = userSnap.data();
@@ -286,7 +286,6 @@ export const TimeProvider = ({ children }) => {
                   };
                 }
               } catch (fetchErr) {
-                // Return default placeholders if connection is aborted mid-flight
                 if (fetchErr.name === "AbortError") {
                   return {
                     ...ev,
@@ -352,9 +351,8 @@ export const TimeProvider = ({ children }) => {
     <TimeContext.Provider
       value={{
         today,
-        swipingDate, // 🔴 Provided securely for the mobile swiper input bridge
-        setToday,
-        setTodayDeferred, // 🔴 Handles mobile slide buffering
+        swipingDate,
+        setTodayDeferred,
         direction,
         setDirection,
         moveDate,
