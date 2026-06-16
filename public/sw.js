@@ -1,5 +1,3 @@
-/* cite: uploaded:public/sw.js */
-// 1. IMPORT FIREBASE BACKGROUND ENGINE WORKERS
 importScripts(
   "https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js",
 );
@@ -7,11 +5,16 @@ importScripts(
   "https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js",
 );
 
-const CACHE_NAME = "calendar-app-cache-v1";
-const ASSETS_TO_CACHE = ["/", "/index.html", "/manifest.json", "/favicon.ico"];
+const APP_VERSION = "1.0.1";
+const CACHE_NAME = `calendar-app-${APP_VERSION}`;
+const ASSETS_TO_CACHE = [
+  "/",
+  "/index.html",
+  "/manifest.json",
+  "/favicon.ico",
+  "/logo192.png",
+];
 
-// 2. INITIALIZE BACKGROUND FIREBASE INTERFACE
-// Paste your exact CareBoard config details here:
 firebase.initializeApp({
   apiKey: "AIzaSyDbiUbGkHFooDFPOp_oRwJC8Tsju_2ioLI",
   authDomain: "careboard-firebase-b39e5.firebaseapp.com",
@@ -24,36 +27,56 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// 3. THE MAGIC PAYLOAD PARSER: Catches Firebase Dashboard Campaigns perfectly
-messaging.onBackgroundMessage((payload) => {
-  console.log("FCM background message payload caught:", payload);
+const allowedPaths = [
+  "/",
+  "/calendar",
+  "/home",
+  "/login",
+  "/settings",
+  "/games",
+  "/money",
+  "/time",
+  "/profile",
+  "/notes",
+  "/to-do",
+];
 
-  const notificationTitle = payload?.notification?.title || "CareBoard Alert";
+messaging.onBackgroundMessage((payload) => {
+  const notificationTitle =
+    typeof payload?.notification?.title === "string"
+      ? payload.notification.title.slice(0, 100)
+      : "CareBoard Alert";
+  const targetUrl = allowedPaths.includes(payload?.data?.url)
+    ? payload.data.url
+    : "/calendar";
+  const body =
+    typeof payload?.notification?.body === "string"
+      ? payload.notification.body.slice(0, 300)
+      : "You have a new background event update!";
   const notificationOptions = {
-    body:
-      payload?.notification?.body || "You have a new background event update!",
+    body: body,
+    tag: "calendar-events",
+    renotify: true,
+
     icon: "/logo192.png",
     badge: "/favicon.ico",
     vibrate: [200, 100, 200],
     data: {
-      url: "/calendar", // Keeps your layout redirect path running smoothly
+      url: targetUrl,
     },
   };
-
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  return self.registration
+    .showNotification(notificationTitle, notificationOptions)
+    .catch((err) => {
+      console.error("Notification error:", err);
+    });
 });
 
-// ==========================================
-// KEEP ALL YOUR EXISTING PWA CACHING LOGIC UNTOUCHED Below:
-// ==========================================
-
-// Install Event: Caches base application layers gracefully
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
       .then((cache) => {
-        console.log("Service Worker: Caching App Shell Assets individually...");
         const cachePromises = ASSETS_TO_CACHE.map((asset) => {
           return cache.add(asset).catch((err) => {
             console.warn(
@@ -68,7 +91,6 @@ self.addEventListener("install", (event) => {
   );
 });
 
-// Activate Event: Clears old caches and hooks service system control
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
@@ -77,7 +99,6 @@ self.addEventListener("activate", (event) => {
         return Promise.all(
           cacheNames.map((cache) => {
             if (cache !== CACHE_NAME) {
-              console.log("Service Worker: Clearing Old Cache Data");
               return caches.delete(cache);
             }
           }),
@@ -87,48 +108,50 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Fetch Event: Serve cached items offline if network drops
 self.addEventListener("fetch", (event) => {
   if (
+    event.request.method !== "GET" ||
     event.request.url.includes("chrome-extension") ||
     event.request.url.includes("hot-update")
   ) {
     return;
   }
+
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match("/index.html")),
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request).catch(() => {});
+      return cachedResponse || fetch(event.request);
     }),
   );
 });
 
-// Handle Notification Click event (Keeps your clean refocus-tab layout feature alive)
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = event.notification.data?.url || "/calendar";
 
   event.waitUntil(
-    clients.matchAll({ type: "window" }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url.includes(targetUrl) && "focus" in client) {
-          return client.focus();
+    clients
+      .matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      })
+      .then((clientList) => {
+        for (const client of clientList) {
+          const clientPath = new URL(client.url).pathname;
+
+          if (clientPath === targetUrl && "focus" in client) {
+            return client.focus();
+          }
         }
-      }
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
-      }
-    }),
+        if (clients.openWindow) {
+          return clients.openWindow(targetUrl);
+        }
+      }),
   );
-});
-self.addEventListener("periodicsync", (event) => {
-  if (event.tag === "sync-calendar-events") {
-    event.waitUntil(
-      console.log(
-        "Android background synchronization handshake opened successfully!",
-      ),
-      // NOTE: Because cryptographic private keys live inside React memory context (not in sw.js),
-      // your background service worker will cleanly fetch the newly matched event rows,
-      // ready to decrypt them instantly the moment the user taps open the app container shell!
-    );
-  }
 });

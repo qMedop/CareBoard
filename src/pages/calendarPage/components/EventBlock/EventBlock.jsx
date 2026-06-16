@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import React, { useRef } from "react";
 import styles from "../../CalendarPage.module.css";
 import { useTime } from "../../../../contexts/TimeContext";
 import { DateTime } from "luxon";
@@ -16,7 +16,7 @@ function EventBlock({
   const { timeZoneOffset, isMobile, newEvent } = useTime();
   const realId = event.sourceEventId || event.id;
   const isShared = event.isShared;
-  const isUnsaved = realId.toString().startsWith("unsaved");
+  const isUnsaved = realId != null && String(realId).startsWith("unsaved");
   const isEditing = String(editingEventId) === String(realId);
   const isInfoOpen = String(infoPopupEventId) === String(realId);
 
@@ -32,7 +32,7 @@ function EventBlock({
 
   const isGhostFromUnsaved =
     !!newEvent?.id && normalizedId === String(newEvent.id);
-  console.log(realId.toString());
+
   const mobileGhostBg = (opacity) => `rgb(0 233 225 / ${opacity})`;
   const hasShadow = isActive && !isGhost && !isDraggedOriginal;
   const zIndex = isGhost ? 50 : isUnsaved ? 30 : isActive ? 20 : 10;
@@ -57,7 +57,6 @@ function EventBlock({
       ref={innerRef || blockRef}
       style={{
         "--MobileGhostcolor": mobileGhostBg(1),
-
         position: "absolute",
         top: `${event?.position?.y}px`,
         left: `${event?.position?.x}%`,
@@ -171,4 +170,4 @@ function EventBlock({
   );
 }
 
-export default EventBlock;
+export default React.memo(EventBlock);
