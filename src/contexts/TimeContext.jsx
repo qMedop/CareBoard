@@ -12,7 +12,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 import defaultAvatar from "../assets/svg/user-avatar.svg";
 import maleAvatar from "../assets/svg/male-avatar.svg";
-import maleAvatar from "../assets/svg/female-avatar.svg";
+import femaleAvatar from "../assets/svg/female-avatar.svg";
 
 const TimeContext = createContext();
 
