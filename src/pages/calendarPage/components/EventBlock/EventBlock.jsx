@@ -32,7 +32,6 @@ function EventBlock({
 
   const isGhostFromUnsaved =
     !!newEvent?.id && normalizedId === String(newEvent.id);
-  console.log(realId.toString());
   const mobileGhostBg = (opacity) => `rgb(0 233 225 / ${opacity})`;
   const hasShadow = isActive && !isGhost && !isDraggedOriginal;
   const zIndex = isGhost ? 50 : isUnsaved ? 30 : isActive ? 20 : 10;
@@ -57,7 +56,6 @@ function EventBlock({
       ref={innerRef || blockRef}
       style={{
         "--MobileGhostcolor": mobileGhostBg(1),
-
         position: "absolute",
         top: `${event?.position?.y}px`,
         left: `${event?.position?.x}%`,

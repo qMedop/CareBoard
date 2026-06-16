@@ -1128,7 +1128,6 @@ function CalendarNavControlls() {
     // Add friends from loadedEvents
     loadedEvents?.forEach((ev) => {
       if (ev.isShared && ev.ownerId && !usersMap.has(ev.ownerId)) {
-        console.log(ev.ownerPfp);
         usersMap.set(ev.ownerId, {
           id: ev.ownerId,
           label: ev.ownerName || "Friend",
@@ -1145,7 +1144,6 @@ function CalendarNavControlls() {
     activeFilterIds?.length === 0
       ? availableUsers
       : availableUsers.filter((u) => activeFilterIds?.includes(u.id));
-  console.log(activeAvatars);
   const handleFilterClick = (e) => {
     openPopup(
       "centered",
@@ -1205,7 +1203,7 @@ function CalendarNavControlls() {
                 className={styles.filterAvatar}
                 style={{ zIndex: 3 - idx }}
               >
-                <img src={user.icon ||  defaultAvatar} alt={user.label} />
+                <img src={user.icon || defaultAvatar} alt={user.label} />
               </div>
             ))}
             {activeAvatars.length > 3 && (
