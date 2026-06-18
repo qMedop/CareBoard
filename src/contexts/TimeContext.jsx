@@ -17,7 +17,7 @@ import femaleAvatar from "../assets/svg/female-avatar.svg";
 const TimeContext = createContext();
 
 export const TimeProvider = ({ children }) => {
-  const { currentUser, authStatus } = useData();
+  const { currentUser, authStatus, subscribeToEvents } = useData();
 
   const { notify } = useNotification();
 
