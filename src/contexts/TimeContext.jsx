@@ -39,6 +39,7 @@ export const TimeProvider = ({ children }) => {
     position: { x: 0, y: 0 },
     size: { width: 0, height: 0 },
   });
+  const [dragSourceId, setDragSourceId] = useState(null);
   const [timeZoneOffset, setTimeZoneOffset] = useState(0);
   const [topBottomHeight, setTopBottomHeight] = useState(0);
   const [dayTasksDiv, setDayTasksDiv] = useState(null);
@@ -208,7 +209,7 @@ export const TimeProvider = ({ children }) => {
       }
 
       const currentEvents = result.events;
-
+      console.log(currentEvents);
       if (!isInitialLoad) {
         currentEvents.forEach((newEvent) => {
           if (newEvent.isShared) {
@@ -389,6 +390,9 @@ export const TimeProvider = ({ children }) => {
         activeFilterIds,
         setActiveFilterIds,
         isMobile,
+        setDragSourceId,
+        dragSourceId,
+        defaultAvatarUrl,
       }}
     >
       {children}

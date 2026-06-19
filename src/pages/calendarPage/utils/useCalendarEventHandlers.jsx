@@ -24,6 +24,7 @@ function useCalendarEventHandlers(props = {}) {
     loadedEvents,
     isMobile,
     newEvent,
+    setDragSourceId,
   } = useTime();
   const { openPopup, closePopup, hidePopup, showPopup } = usePopup();
 
@@ -465,6 +466,7 @@ function useCalendarEventHandlers(props = {}) {
         },
         position: { x: relativeLeft + "px", y: relativeTop },
       });
+      setDragSourceId(event.sourceEventId);
     },
     [
       dayTasksDiv,
@@ -795,6 +797,7 @@ function useCalendarEventHandlers(props = {}) {
 
           const newState = { timeRange: newTimeRange, isFullDay: true };
           setDraggableEvent((prev) => ({ ...prev, ...newState }));
+
           draggableEventRef.current = {
             ...draggableEventRef.current,
             ...newState,
@@ -891,6 +894,7 @@ function useCalendarEventHandlers(props = {}) {
     if (isDragging.current && !hasDragged.current) {
       blockedPopupRef.current = true;
       setDraggableEvent((prev) => ({ ...prev, active: false }));
+      setDragSourceId(null);
       isDragging.current = false;
       return;
     }
@@ -988,6 +992,7 @@ function useCalendarEventHandlers(props = {}) {
 
     const currentEvent = draggableEventRef.current;
     setDraggableEvent((prev) => ({ ...prev, active: false }));
+    setDragSourceId(null);
     isDragging.current = false;
     hasDragged.current = false;
 
@@ -1053,6 +1058,7 @@ function useCalendarEventHandlers(props = {}) {
       size: { height: `${elementRect.height}`, width: `${colRect.width}px` },
       position: { x: relativeLeft + "px", y: relativeTop },
     });
+    setDragSourceId(event.sourceEventId);
     draggableEventRef.current = { ...event, _element: element };
   }
 
@@ -1160,7 +1166,7 @@ function useCalendarEventHandlers(props = {}) {
 
     const currentEvent = draggableEventRef.current;
     setDraggableEvent((prev) => ({ ...prev, active: false }));
-    setNewEvent((prev) => ({ ...prev, editing: false }));
+    setDragSourceId(null);
 
     isResizing.current = false;
 
@@ -1405,7 +1411,7 @@ function useCalendarEventHandlers(props = {}) {
           },
           position: { x: relativeLeft + "px", y: relativeTop },
         });
-        setNewEvent((prev) => ({ ...prev, editing: true }));
+        setDragSourceId(event.sourceEventId);
       }
 
       mobileEventRef.current = {
@@ -2218,7 +2224,7 @@ function useCalendarEventHandlers(props = {}) {
 
       if (!modeApplied) {
         setDraggableEvent((prev) => ({ ...prev, active: false }));
-        setNewEvent((prev) => ({ ...prev, editing: false }));
+        setDragSourceId(null);
 
         isDragging.current = false;
         isResizing.current = false;
@@ -2228,7 +2234,7 @@ function useCalendarEventHandlers(props = {}) {
 
       const currentEvent = draggableEventRef.current;
       setDraggableEvent((prev) => ({ ...prev, active: false }));
-      setNewEvent((prev) => ({ ...prev, editing: false }));
+      setDragSourceId(null);
       isDragging.current = false;
       isResizing.current = false;
       hasDragged.current = false;
@@ -2550,9 +2556,7 @@ function useCalendarEventHandlers(props = {}) {
                 _e: e,
               };
               setDraggableEvent({ ...mockEvent, active: true });
-              setNewEvent((prev) =>
-                prev && prev.id === draftId ? { ...prev, editing: true } : prev,
-              );
+              setDragSourceId(draftId);
               // 2. Fire the handler instantly with your manual override string
               // Passing a custom coordinate mock object ensures it calculates using down coords
               const mockTouchCoordinates = { clientX, clientY };

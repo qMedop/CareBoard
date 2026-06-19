@@ -28,6 +28,7 @@ import {
   runTransaction,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+import { DEFAULT_EVENT_BG } from "../constants/constants";
 
 export const AuthErrorCode = Object.freeze({
   INVALID_CREDENTIALS: "AUTH_INVALID_CREDENTIALS",
@@ -1258,7 +1259,7 @@ export function AuthProvider({ children }) {
       const eventPlaintext = {
         title: eventData.title ?? "",
         description: eventData.description ?? "",
-        color: eventData.color ?? "#FFD4A9",
+        color: eventData.color ?? DEFAULT_EVENT_BG,
         emoji: eventData.emoji ?? "",
         visibility: eventData.visibility ?? "visible",
         availability: eventData.availability ?? "busy",

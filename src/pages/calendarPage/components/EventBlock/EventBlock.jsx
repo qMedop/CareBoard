@@ -13,42 +13,57 @@ function EventBlock({
   infoPopupEventId,
 }) {
   const blockRef = useRef();
-  const { timeZoneOffset, isMobile, newEvent } = useTime();
-  const realId = event.sourceEventId || event.id;
-  const isShared = event.isShared;
-  const isUnsaved = realId != null && String(realId).startsWith("unsaved");
-  const isEditing = String(editingEventId) === String(realId);
-  const isInfoOpen = String(infoPopupEventId) === String(realId);
+  const { timeZoneOffset, isMobile, dragSourceId } = useTime();
 
-  const isGhost = event.id?.toString().startsWith("drag-");
-  const isDraggedOriginal = event.active === true;
+  const realId = String(event.id);
+
+  if (!event.position || !event.size || !realId) return null;
+
+  const isShared = event.isShared;
+  const isEditing = String(editingEventId) === realId;
+  const isInfoOpen = String(infoPopupEventId) === realId;
+
+  const isUnsaved = realId.includes("unsaved-");
+  const isGhost = event?.active === true;
+  const isGhostUnsaved = isGhost && isUnsaved;
   const isActive = isUnsaved || isEditing || isInfoOpen;
 
   const isMobileUnsaved = isMobile && isUnsaved;
   const isMobileGhost = isMobile && isGhost;
   const isMobileActive = isMobile && isActive;
-
-  const normalizedId = String(realId).replace(/^drag-/, "");
-
-  const isGhostFromUnsaved =
-    !!newEvent?.id && normalizedId === String(newEvent.id);
+  const isDraged = String(dragSourceId) === event.sourceEventId && !isGhost;
+  console.table({
+    realId,
+    sourceEventId: event.sourceEventId,
+    dragSourceId,
+    isShared,
+    isEditing,
+    isInfoOpen,
+    isUnsaved,
+    isGhost,
+    isGhostUnsaved,
+    isActive,
+    isMobileUnsaved,
+    isMobileGhost,
+    isMobileActive,
+    isDraged,
+  });
 
   const mobileGhostBg = (opacity) => `rgb(0 233 225 / ${opacity})`;
-  const hasShadow = isActive && !isGhost && !isDraggedOriginal;
+
+  const hasShadow = isActive || isGhost || isEditing || isInfoOpen;
   const zIndex = isGhost ? 50 : isUnsaved ? 30 : isActive ? 20 : 10;
-  const opacity = isGhost ? 0.7 : isDraggedOriginal ? 0.3 : 1;
+  const opacity = isDraged ? 0.7 : 1;
   const finalOpacity =
-    isMobileUnsaved && event.editing ? 0 : isGhostFromUnsaved ? 1 : opacity;
+    isMobileUnsaved && isDraged ? 0 : isGhostUnsaved ? 1 : opacity;
   const editingStyle =
     isActive || isGhost
       ? {
           pointerEvents: isGhost ? "none" : "auto",
-          opacity: finalOpacity,
+          opacity: opacity,
           zIndex: zIndex,
           boxShadow:
-            hasShadow || isGhostFromUnsaved
-              ? "0px 0px 8px 1px #000000b5"
-              : "none",
+            hasShadow || isGhostUnsaved ? "0px 0px 8px 1px #000000b5" : "none",
         }
       : {};
 
@@ -63,16 +78,17 @@ function EventBlock({
         width: `${event?.size?.width || 90}%`,
         height: `${event?.size?.height}px`,
         zIndex: zIndex,
-        backgroundColor: `${isMobileUnsaved || isGhostFromUnsaved ? `${event?.editing ? "#ffffff00" : mobileGhostBg(0.2)}` : `${event?.color}99`}`,
+        backgroundColor: `${isMobileUnsaved && isGhostUnsaved ? `${event?.editing ? "#ffffff00" : mobileGhostBg(0.2)}` : `${event?.color}99`}`,
         cursor: isShared ? "pointer" : "grab",
         border:
-          isGhostFromUnsaved || isMobileUnsaved
+          isGhostUnsaved && isMobileUnsaved
             ? `1px solid ${mobileGhostBg(1)}`
             : "none",
-        overflow: isGhostFromUnsaved || isMobileUnsaved ? "initial" : "hidden",
+        overflow: isGhostUnsaved && isMobileUnsaved ? "initial" : "hidden",
+        opacity: finalOpacity,
         ...editingStyle,
       }}
-      className={`${styles.eventBlock} ${event.active ? styles.dragging : ""} ${isMobileUnsaved && styles.mobileUnsaved}`}
+      className={`${styles.eventBlock} ${event?.active ? styles.dragging : ""} ${isMobileUnsaved && styles.mobileUnsaved}`}
       data-sourceid={realId}
       id={event.id}
       onPointerDown={(e) => {
@@ -83,7 +99,7 @@ function EventBlock({
         e.stopPropagation();
       }}
     >
-      {isMobileUnsaved || isGhostFromUnsaved ? (
+      {isMobileUnsaved && isGhostUnsaved ? (
         <div
           style={{
             opacity: event?.editing ? 0 : 1,
