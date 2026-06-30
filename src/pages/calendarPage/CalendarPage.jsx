@@ -45,9 +45,20 @@ import CalendarContentMonth from "./components/CalendarContentMonth/CalendarCont
 import CalendarContentWeek from "./components/CalendarContentWeek/CalendarContentWeek";
 import CalendarContentDay from "./components/CalendarContentDay/CalendarContentDay";
 import useCalendarEventHandlers from "./utils/useCalendarEventHandlers";
-import CheckboxGroup from "../../components/checkboxGroup/CheckboxGroup"; // 🔴 IMPORT NEW COMPONENT
+import CheckboxGroup from "../../components/checkboxGroup/CheckboxGroup";
 import MobileCalendarPager from "./components/MobileCalendarPager/MobileCalendarPager";
 import defaultAvatar from "../../assets/svg/user-avatar.svg";
+import {
+  DAYS_OF_WEEK,
+  EVENT_CELL_HEIGHT_MOBILE,
+  EVENT_CELL_HEIGHT_PC,
+  FULL_DAY_COLLAPSE_THRESHOLD,
+  FULL_DAY_ROW_GAP,
+  FULL_DAY_ROW_HEIGHT,
+  MONTHS_OF_THE_YEAR,
+} from "../../constants/constants";
+import { useUserSettings } from "../../contexts/UserSettingsContext";
+
 function CalendarPage() {
   const { notify } = useNotification();
   const {
@@ -59,11 +70,12 @@ function CalendarPage() {
     draggableEvent,
     setNewEvent,
     region = "EU",
-    activeFilterIds, // <--- PULL FROM CONTEXT
-    setActiveFilterIds, // <--- PULL FROM CONTEXT
+    activeFilterIds,
+    setActiveFilterIds,
     isMobile,
     swipingDate,
   } = useTime();
+  const navigate = useNavigate();
 
   const { view, year, month, day } = useParams();
 
@@ -75,9 +87,8 @@ function CalendarPage() {
   const [fullDayExpanded, setFullDayExpanded] = useState(false);
   const [timedEvents, setTimedEvents] = useState([]);
   const [isScrolling, setIsScrolling] = useState(false);
-  const scrollTimeoutRef = useRef(null);
 
-  const navigate = useNavigate();
+  const scrollTimeoutRef = useRef(null);
   const prevDateRef = useRef(today);
 
   const currentDate = useMemo(
@@ -106,10 +117,14 @@ function CalendarPage() {
     scrollTimeoutRef,
   });
 
+  const { userSettings } = useUserSettings();
+  const weekStartDay = userSettings.weekStartDay;
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  //here we calculate the start and end dates for the current view it changes depending on the user choice of the view and the start day of the week
   const { viewStart, viewEnd } = useMemo(() => {
     const start = new Date(currentDate);
     const end = new Date(currentDate);
@@ -119,11 +134,9 @@ function CalendarPage() {
       end.setHours(23, 59, 59, 999);
     } else if (view === "week") {
       const offset =
-        region === "EU"
-          ? start.getDay() === 0
-            ? -6
-            : 1 - start.getDay()
-          : -start.getDay();
+        weekStartDay <= start.getDay()
+          ? weekStartDay - start.getDay()
+          : weekStartDay - start.getDay() - 7;
       start.setDate(start.getDate() + offset);
       start.setHours(0, 0, 0, 0);
       end.setDate(start.getDate() + 6);
@@ -140,23 +153,25 @@ function CalendarPage() {
     return { viewStart: start, viewEnd: end };
   }, [currentDate, view, region]);
 
-  // 🔴 APPLY FILTER TO EVENTS BEFORE EXPANDING
-  const filteredEvents = useMemo(() => {
+  //filter the events based on the user choice of his friends
+  const visibleEvents = useMemo(() => {
     if (!loadedEvents) return [];
-    if (activeFilterIds.length === 0) return loadedEvents; // Show all if filter is empty
-    return loadedEvents.filter((ev) => activeFilterIds?.includes(ev.ownerId));
+    if (activeFilterIds.length === 0) return loadedEvents;
+    return loadedEvents.filter((ev) => activeFilterIds.includes(ev.ownerId));
   }, [loadedEvents, activeFilterIds]);
 
+  //expand recurring events to show them in the current view
   const expandedEvents = useMemo(() => {
-    if (!filteredEvents) return [];
+    if (!visibleEvents) return [];
     return expandRecurringEvents(
-      filteredEvents, // 🔴 Use filtered list
+      visibleEvents,
       viewStart,
       viewEnd,
       timeZoneOffset,
     );
-  }, [filteredEvents, viewStart, viewEnd, timeZoneOffset]);
+  }, [visibleEvents, viewStart, viewEnd, timeZoneOffset]);
 
+  //this function calculates the position and size of the events based on their start and end times and the current view
   const computePositionAndSize = (event) => {
     if (event.isFullDay) return [];
 
@@ -173,8 +188,9 @@ function CalendarPage() {
     let current = eventStart.startOf("day");
     const lastDay = eventEnd.startOf("day");
 
-    // Pre-calculated cell baseline constants to avoid browser layout recalculations entirely
-    const cellHeight = isMobile ? 64 : 52;
+    const cellHeight = isMobile
+      ? EVENT_CELL_HEIGHT_MOBILE
+      : EVENT_CELL_HEIGHT_PC;
 
     while (current <= lastDay) {
       const segmentStart = current < eventStart ? eventStart : current;
@@ -183,11 +199,9 @@ function CalendarPage() {
 
       const columnDate = segmentStart.toISODate();
 
-      // pure time calculation logic
       const startMinutes = segmentStart.hour * 60 + segmentStart.minute;
       let endMinutes = segmentEnd.hour * 60 + segmentEnd.minute;
 
-      // Handle midnight boundary cross conditions smoothly
       if (
         segmentEnd.toISODate() !== segmentStart.toISODate() &&
         endMinutes === 0
@@ -201,15 +215,15 @@ function CalendarPage() {
 
       segments.push({
         ...event,
-        id: `${event.id}-${columnDate}`,
-        sourceEventId: event.sourceEventId || event.id,
-        isSegment: true,
+        id: `${event.id}`,
+        segmentId: `${event.id}-${columnDate}`,
         columnDate,
         originalTimeRange: event.timeRange,
         timeRange: {
           start: segmentStart.toISO(),
           end: segmentEnd.toISO(),
         },
+        isSegment: true,
         position: { x: 0, y: yOffset },
         size: { height },
       });
@@ -219,11 +233,11 @@ function CalendarPage() {
 
     return segments;
   };
-
+  // same thing but for full day event
   const { fullDayEvents, topHeight, isCollapsible } = useMemo(() => {
-    const ROW_HEIGHT = 18;
-    const ROW_GAP = 2;
-    const COLLAPSE_THRESHOLD = 2;
+    const ROW_HEIGHT = FULL_DAY_ROW_HEIGHT;
+    const ROW_GAP = FULL_DAY_ROW_GAP;
+    const COLLAPSE_THRESHOLD = FULL_DAY_COLLAPSE_THRESHOLD;
 
     function adjustEndDateIfMidnight(dateStr) {
       let dt = DateTime.fromISO(dateStr, { zone: "utc" }).setZone(
@@ -234,33 +248,51 @@ function CalendarPage() {
     }
 
     const allEventsUnfiltered = [...expandedEvents];
+
     if (newEvent?.timeRange?.start) {
       allEventsUnfiltered.push(newEvent);
     }
+
     if (draggableEvent?.active && draggableEvent?.originalTimeRange) {
       const { isSegment, ...cleanedDraggableEvent } = draggableEvent;
       allEventsUnfiltered.push({
         ...cleanedDraggableEvent,
-        id: `drag-${draggableEvent.id}`,
+        id: `${draggableEvent.id}`,
         timeRange: { ...draggableEvent.timeRange },
+        isGhost: true,
       });
     }
 
-    const allEvents = Array.from(
-      new Map(allEventsUnfiltered.map((e) => [e.id, e])).values(),
+    const realEvents = [];
+    const ghostEvents = [];
+
+    allEventsUnfiltered.forEach((event) => {
+      if (event.isGhost) {
+        ghostEvents.push(event);
+      } else {
+        realEvents.push(event);
+      }
+    });
+
+    const uniqueRealEvents = Array.from(
+      new Map(realEvents.map((e) => [e.id, e])).values(),
     );
 
+    const allEvents = [...uniqueRealEvents, ...ghostEvents];
+
     const visibleColumnDates = [];
+
     if (view === "day") {
       visibleColumnDates.push(getLocalDateString(currentDate));
     } else if (view === "week") {
       const temp = new Date(currentDate);
+      const currentDay = temp.getDay();
+
       const offset =
-        region === "EU"
-          ? temp.getDay() === 0
-            ? -6
-            : 1 - temp.getDay()
-          : -temp.getDay();
+        weekStartDay <= currentDay
+          ? weekStartDay - currentDay
+          : weekStartDay - currentDay - 7;
+
       temp.setDate(temp.getDate() + offset);
 
       for (let i = 0; i < 7; i++) {
@@ -296,7 +328,7 @@ function CalendarPage() {
         viewEnd.setHours(23, 59, 59, 999);
 
         if (eventEnd >= viewStart && eventStart <= viewEnd) {
-          if (event.id?.toString().startsWith("drag-")) {
+          if (event.isGhost) {
             dragGhosts.push(event);
           } else {
             fullDayRaw.push(event);
@@ -306,12 +338,8 @@ function CalendarPage() {
     });
 
     fullDayRaw.sort((a, b) => {
-      const aId = (a.sourceEventId || a.id).toString();
-      const bId = (b.sourceEventId || b.id).toString();
-      const aIsTop =
-        aId.startsWith("unsaved") || aId === String(editingEventId);
-      const bIsTop =
-        bId.startsWith("unsaved") || bId === String(editingEventId);
+      const aIsTop = a.isUnsaved || a.id === String(editingEventId);
+      const bIsTop = b.isUnsaved || b.id === String(editingEventId);
 
       if (aIsTop && !bIsTop) return -1;
       if (!aIsTop && bIsTop) return 1;
@@ -395,10 +423,11 @@ function CalendarPage() {
       let targetRow = 0;
       while (true) {
         const row = allRows[targetRow] || [];
-        const hasConflict = row.some((ev) => {
-          const evRealId = ev.sourceEventId || ev.id;
-          if (evRealId === origId) return false;
-          return !(endIndex < ev._startIndex || startIndex > ev._endIndex);
+        const hasConflict = row.some((event) => {
+          if (event.id === ghost.id) return false;
+          return !(
+            endIndex < event._startIndex || startIndex > event._endIndex
+          );
         });
         if (!hasConflict) {
           break;
@@ -528,18 +557,33 @@ function CalendarPage() {
     if (newEvent?.timeRange?.start) {
       allEventsUnfiltered.push(newEvent);
     }
+
     if (draggableEvent?.active && draggableEvent?.originalTimeRange) {
       const { isSegment, ...cleanedDraggableEvent } = draggableEvent;
+
       allEventsUnfiltered.push({
         ...cleanedDraggableEvent,
-        id: `drag-${draggableEvent.id}`,
         timeRange: { ...draggableEvent.timeRange },
+        isGhost: true,
       });
     }
 
-    const allEvents = Array.from(
-      new Map(allEventsUnfiltered.map((e) => [e.id, e])).values(),
+    const realEvents = [];
+    const ghostEvents = [];
+
+    allEventsUnfiltered.forEach((event) => {
+      if (event.isGhost) {
+        ghostEvents.push(event);
+      } else {
+        realEvents.push(event);
+      }
+    });
+
+    const uniqueRealEvents = Array.from(
+      new Map(realEvents.map((e) => [e.id, e])).values(),
     );
+
+    const allEvents = [...uniqueRealEvents, ...ghostEvents];
     const timedRaw = [];
 
     allEvents.forEach((event) => {
@@ -567,9 +611,7 @@ function CalendarPage() {
     }
 
     Object.values(eventsByDate).forEach((eventsOnDay) => {
-      const staticEvents = eventsOnDay.filter(
-        (e) => !e.id?.startsWith("drag-"),
-      );
+      const staticEvents = eventsOnDay.filter((e) => !e.isGhost);
       if (staticEvents.length === 0) return;
 
       staticEvents.sort(
@@ -639,7 +681,7 @@ function CalendarPage() {
       }
 
       eventsOnDay
-        .filter((e) => e.id?.startsWith("drag-"))
+        .filter((e) => e.isGhost)
         .forEach((event) => {
           event.position.x = 0;
           event.size.width = MAX_WIDTH_PCT;
@@ -650,9 +692,6 @@ function CalendarPage() {
       setTimedEvents(timedWithSegments);
     }
 
-    // 🟢 ACCURATE PAINT HOOK DETECTOR
-    // requestAnimationFrame executes right before the browser paints.
-    // Nesting a second requestAnimationFrame guarantees execution immediately AFTER the paint cycle finishes.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {});
     });
@@ -748,7 +787,7 @@ function CalendarPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              style={{ position: "relative", height: "calc(100% - 6px)" }} // Adjusted height to account for Nav
+              style={{ position: "relative", height: "calc(100% - 6px)" }}
             >
               {dateTransitions((style, item) => (
                 <animated.div
@@ -873,9 +912,9 @@ function expandRecurringEvents(events, viewStart, viewEnd, timeZoneOffset) {
 
       let isValidInstance = true;
 
-      if (type === "WEEKLY" && daysOfWeek?.length > 0) {
+      if (type === "WEEKLY" && DAYS_OF_WEEK?.length > 0) {
         const jsWeekday = currentStart.weekday === 7 ? 0 : currentStart.weekday;
-        if (!daysOfWeek.includes(jsWeekday)) isValidInstance = false;
+        if (!DAYS_OF_WEEK.includes(jsWeekday)) isValidInstance = false;
       }
 
       if (exdateMillis.has(currentStart.toMillis())) {
@@ -899,9 +938,9 @@ function expandRecurringEvents(events, viewStart, viewEnd, timeZoneOffset) {
 
         if (
           type !== "WEEKLY" ||
-          !daysOfWeek ||
-          daysOfWeek.length === 0 ||
-          daysOfWeek.includes(
+          !DAYS_OF_WEEK ||
+          DAYS_OF_WEEK.length === 0 ||
+          DAYS_OF_WEEK.includes(
             currentStart.weekday === 7 ? 0 : currentStart.weekday,
           )
         ) {
@@ -912,12 +951,12 @@ function expandRecurringEvents(events, viewStart, viewEnd, timeZoneOffset) {
       if (type === "DAILY")
         currentStart = currentStart.plus({ days: interval });
       else if (type === "WEEKLY") {
-        if (daysOfWeek?.length > 0) {
+        if (DAYS_OF_WEEK?.length > 0) {
           do {
             currentStart = currentStart.plus({ days: 1 });
           } while (
             currentStart <= rangeEnd &&
-            !daysOfWeek.includes(
+            !DAYS_OF_WEEK.includes(
               currentStart.weekday === 7 ? 0 : currentStart.weekday,
             ) &&
             currentStart.diff(originalStart, "years").years < 5
@@ -936,7 +975,6 @@ function expandRecurringEvents(events, viewStart, viewEnd, timeZoneOffset) {
   return expanded;
 }
 
-// 🔴 EXTRACTED FILTER POPUP COMPONENT
 function CalendarFilterPopup({
   availableUsers,
   activeFilterIds,
@@ -950,7 +988,6 @@ function CalendarFilterPopup({
   );
 
   const handleApply = () => {
-    // If all are selected, just pass empty array (default state means 'show all')
     if (tempFilters.length === availableUsers.length) {
       setActiveFilterIds([]);
     } else {
@@ -989,7 +1026,6 @@ function CalendarNavControlls() {
     today,
     setToday,
     setDirection,
-    MonthsOfTheYear,
     loadedEvents,
     activeFilterIds,
     setActiveFilterIds,
@@ -1103,7 +1139,6 @@ function CalendarNavControlls() {
       });
       window.dispatchEvent(todayAnimationEvent);
     } else {
-      // 💻 Desktop handles transitions cleanly with @react-spring/web
       setToday(now);
       navigate(
         `/calendar/${view}/${now.getDate()}/${
@@ -1113,10 +1148,8 @@ function CalendarNavControlls() {
     }
   };
 
-  // 🔴 EXTRACT AVAILABLE USERS FOR FILTER
   const availableUsers = useMemo(() => {
     const usersMap = new Map();
-    // Add current user by default
     if (currentUser) {
       usersMap.set(currentUser.id, {
         id: currentUser.id,
@@ -1183,7 +1216,7 @@ function CalendarNavControlls() {
             </div>
             <div className={styles.currentDate}>
               <p className={styles.month}>
-                {MonthsOfTheYear[today.getMonth()]}
+                {MONTHS_OF_THE_YEAR[today.getMonth()]}
               </p>
               <p className={styles.year}>{today.getFullYear()}</p>
             </div>

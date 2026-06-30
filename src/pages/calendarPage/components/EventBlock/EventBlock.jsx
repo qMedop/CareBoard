@@ -4,6 +4,7 @@ import { useTime } from "../../../../contexts/TimeContext";
 import { DateTime } from "luxon";
 import { LockIcon, PlusIcon, RepeatIcon } from "../../../../assets/icons/Icon";
 import defaultAvatar from "../../../../assets/svg/user-avatar.svg";
+import { useUserSettings } from "../../../../contexts/UserSettingsContext";
 function EventBlock({
   event,
   handlePointerDown,
@@ -14,40 +15,28 @@ function EventBlock({
 }) {
   const blockRef = useRef();
   const { timeZoneOffset, isMobile, dragSourceId } = useTime();
+  const { userSettings } = useUserSettings();
 
   const realId = String(event.id);
 
   if (!event.position || !event.size || !realId) return null;
 
+  const timeFormat = userSettings?.timeFormat || "24h";
+
   const isShared = event.isShared;
   const isEditing = String(editingEventId) === realId;
   const isInfoOpen = String(infoPopupEventId) === realId;
 
-  const isUnsaved = realId.includes("unsaved-");
-  const isGhost = event?.active === true;
+  const isUnsaved = event.isUnsaved;
+  const isGhost = event.isGhost;
   const isGhostUnsaved = isGhost && isUnsaved;
   const isActive = isUnsaved || isEditing || isInfoOpen;
 
   const isMobileUnsaved = isMobile && isUnsaved;
   const isMobileGhost = isMobile && isGhost;
   const isMobileActive = isMobile && isActive;
-  const isDraged = String(dragSourceId) === event.sourceEventId && !isGhost;
-  console.table({
-    realId,
-    sourceEventId: event.sourceEventId,
-    dragSourceId,
-    isShared,
-    isEditing,
-    isInfoOpen,
-    isUnsaved,
-    isGhost,
-    isGhostUnsaved,
-    isActive,
-    isMobileUnsaved,
-    isMobileGhost,
-    isMobileActive,
-    isDraged,
-  });
+
+  const isDraged = String(dragSourceId) === event.id && !isGhost;
 
   const mobileGhostBg = (opacity) => `rgb(0 233 225 / ${opacity})`;
 
@@ -89,7 +78,7 @@ function EventBlock({
         ...editingStyle,
       }}
       className={`${styles.eventBlock} ${event?.active ? styles.dragging : ""} ${isMobileUnsaved && styles.mobileUnsaved}`}
-      data-sourceid={realId}
+      data-seventid={realId}
       id={event.id}
       onPointerDown={(e) => {
         e.stopPropagation();
@@ -116,7 +105,10 @@ function EventBlock({
                   const formatTime = (isoString) =>
                     DateTime.fromISO(isoString, { zone: "utc" })
                       .plus({ hours: timeZoneOffset })
-                      .toFormat("hh:mm a");
+                      .toFormat(
+                        `${timeFormat === "24h" ? "HH:mm" : "hh:mm a"}`,
+                      );
+
                   return `${formatTime(start)} - ${formatTime(end)}`;
                 })()}
             </div>
@@ -136,7 +128,9 @@ function EventBlock({
                   const formatTime = (isoString) =>
                     DateTime.fromISO(isoString, { zone: "utc" })
                       .plus({ hours: timeZoneOffset })
-                      .toFormat("hh:mm a");
+                      .toFormat(
+                        `${timeFormat === "24h" ? "HH:mm" : "hh:mm a"}`,
+                      );
                   return `${formatTime(start)} - ${formatTime(end)}`;
                 })()}
             </span>

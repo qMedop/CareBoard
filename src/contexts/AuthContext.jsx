@@ -28,7 +28,11 @@ import {
   runTransaction,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
-import { DEFAULT_EVENT_BG } from "../constants/constants";
+import {
+  EVENT_AVAILABILITY,
+  EVENT_BG,
+  EVENT_VISIBILITY,
+} from "../constants/constants";
 
 export const AuthErrorCode = Object.freeze({
   INVALID_CREDENTIALS: "AUTH_INVALID_CREDENTIALS",
@@ -1247,9 +1251,12 @@ export function AuthProvider({ children }) {
     try {
       if (onProgress) onProgress("encrypting");
 
-      const start = eventData.start ?? eventData.timeRange?.start;
-      const end = eventData.end ?? eventData.timeRange?.end;
-
+      if (!eventData?.timeRange?.start || !eventData?.timeRange?.end) {
+        return {
+          success: false,
+          error: "Invalid event time range",
+        };
+      }
       const eventKey = await crypto.subtle.generateKey(
         { name: "AES-GCM", length: 256 },
         true,
@@ -1259,17 +1266,17 @@ export function AuthProvider({ children }) {
       const eventPlaintext = {
         title: eventData.title ?? "",
         description: eventData.description ?? "",
-        color: eventData.color ?? DEFAULT_EVENT_BG,
+        color: eventData.color ?? EVENT_BG,
         emoji: eventData.emoji ?? "",
-        visibility: eventData.visibility ?? "visible",
-        availability: eventData.availability ?? "busy",
-        start,
-        end,
-        isFullDay: eventData.isFullDay ?? false,
+        visibility: eventData.visibility ?? EVENT_VISIBILITY,
+        availability: eventData.availability ?? EVENT_AVAILABILITY,
         recurrence: eventData.recurrence ?? { type: "NONE" },
         exdate: eventData.exdate ?? [],
+        timeRange: {
+          start: eventData.timeRange.start,
+          end: eventData.timeRange.end,
+        },
       };
-
       const { ciphertext: encryptedEventData, iv: eventDataIv } =
         await encryptWithDEK(eventKey, eventPlaintext);
 
@@ -1378,7 +1385,10 @@ export function AuthProvider({ children }) {
           ...eventData,
           id: docRef.id,
           group_id: newGroupId,
-          timeRange: { start, end },
+          timeRange: {
+            start: eventData.timeRange.start,
+            end: eventData.timeRange.end,
+          },
           created_at: createdAt,
         },
       };
@@ -1489,9 +1499,6 @@ export function AuthProvider({ children }) {
         ["encrypt"],
       );
 
-      const start = eventData.start ?? eventData.timeRange?.start;
-      const end = eventData.end ?? eventData.timeRange?.end;
-
       const eventPlaintext = {
         title: eventData.title ?? "",
         description: eventData.description ?? "",
@@ -1499,9 +1506,10 @@ export function AuthProvider({ children }) {
         emoji: eventData.emoji ?? "",
         visibility: eventData.visibility ?? "visible",
         availability: eventData.availability ?? "busy",
-        start,
-        end,
-        isFullDay: eventData.isFullDay ?? false,
+        timeRange: {
+          start: eventData.timeRange.start,
+          end: eventData.timeRange.end,
+        },
         recurrence: eventData.recurrence ?? { type: "NONE" },
         exdate: eventData.exdate ?? [],
       };
@@ -2008,8 +2016,8 @@ export function AuthProvider({ children }) {
                 isShared: data?.ownerId !== currentUser.id,
 
                 timeRange: {
-                  start: eventPlaintext?.start,
-                  end: eventPlaintext?.end,
+                  start: eventPlaintext?.timeRange?.start,
+                  end: eventPlaintext?.timeRange?.end,
                 },
 
                 created_at: data?.created_at,

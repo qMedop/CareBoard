@@ -20,7 +20,7 @@ import PickDay from "../../../../components/pickDay/pickDay";
 import CheckBox from "../../../../components/checkBox/checkBox";
 import ConfirmPopup from "../../../../components/confirmPopup/confirmPopup";
 import RecurrenceUpdatePopup from "../RecurrenceUpdatePopup/RecurrenceUpdatePopup";
-import CheckboxGroup from "../../../../components/checkboxGroup/CheckboxGroup"; // 🔴 IMPORT CHECKBOX
+import CheckboxGroup from "../../../../components/checkboxGroup/CheckboxGroup";
 import {
   collection,
   query,
@@ -46,14 +46,9 @@ import {
 import Loading from "../../../../components/loading/Loading";
 import { db } from "../../../../../firebase";
 import defaultAvatar from "../../../../assets/svg/user-avatar.svg";
+
 const AddEditNewEvent = forwardRef(
   ({ eventId: incomingEventId, onClose }, ref) => {
-    // 🟢 FIXED: If it's an unsaved draft ID string, turn it to null so the form activates Create Mode!
-    const eventId =
-      incomingEventId && incomingEventId.toString().startsWith("unsaved")
-        ? null
-        : incomingEventId;
-
     const { currentUser } = useData();
     const {
       newEvent,
@@ -64,6 +59,12 @@ const AddEditNewEvent = forwardRef(
       timeZoneOffset,
       isMobile,
     } = useTime();
+
+    // 🔴 BUGFIX #1: Draft Detection
+    // Safely identify if incomingEventId belongs to the current unsaved draft UUID
+    const isDraft = newEvent && incomingEventId === newEvent.id;
+    const eventId = isDraft ? null : incomingEventId;
+
     const { addEvent, updateEvent } = useData();
     const { openPopup, closePopup: closeContextPopup } = usePopup();
 
@@ -101,6 +102,7 @@ const AddEditNewEvent = forwardRef(
       }
       loadFriends();
     }, [currentUser]);
+
     // --- 1. RESOLVE SOURCE EVENT ---
     const sourceEvent = useMemo(() => {
       if (!eventId) return newEvent;
@@ -113,12 +115,15 @@ const AddEditNewEvent = forwardRef(
         if (parent) {
           const instanceStartMs = parseInt(timestamp, 10);
           if (!isNaN(instanceStartMs)) {
-            const parentStart = DateTime.fromISO(parent.timeRange.start, {
-              zone: "utc",
-            });
-            const parentEnd = DateTime.fromISO(parent.timeRange.end, {
-              zone: "utc",
-            });
+            // 🔴 BUGFIX #2: Fallback mapping if DB stripped timeRange
+            const parentStart = DateTime.fromISO(
+              parent.timeRange?.start || parent.start,
+              { zone: "utc" },
+            );
+            const parentEnd = DateTime.fromISO(
+              parent.timeRange?.end || parent.end,
+              { zone: "utc" },
+            );
             const duration = parentEnd.diff(parentStart);
 
             const instanceStart = DateTime.fromMillis(instanceStartMs).toUTC();
@@ -127,7 +132,7 @@ const AddEditNewEvent = forwardRef(
             return {
               ...parent,
               id: eventId,
-              sourceEventId: parent.id,
+              // sourceEventId REMOVED per Phase 2
               timeRange: {
                 start: instanceStart.toISO(),
                 end: instanceEnd.toISO(),
@@ -157,8 +162,8 @@ const AddEditNewEvent = forwardRef(
       emoji: "",
       recurrence: { type: "NONE" },
       group_id: null,
-      invitedIds: [], // 🔴 NEW: Track specific friends
-      invitedFriendsFull: [], // 🔴 NEW: Store full keys for encryption
+      invitedIds: [],
+      invitedFriendsFull: [],
     });
 
     const eventDataRef = useRef(eventData);
@@ -178,12 +183,18 @@ const AddEditNewEvent = forwardRef(
         if (!originalEventRef.current) {
           originalEventRef.current = JSON.parse(JSON.stringify(sourceEvent));
         }
+
+        // 🔴 BUGFIX #3: Prevent DB schema mismatch from creating { timeRange: { start: "", end: "" } }
+        const safeStart =
+          sourceEvent.timeRange?.start || sourceEvent.start || "";
+        const safeEnd = sourceEvent.timeRange?.end || sourceEvent.end || "";
+
         setEventData({
           title: sourceEvent.title || "",
           description: sourceEvent.description || "",
           timeRange: {
-            start: sourceEvent.timeRange?.start || "",
-            end: sourceEvent.timeRange?.end || "",
+            start: safeStart,
+            end: safeEnd,
           },
           color: sourceEvent.color || "#FFD4A9",
           visibility: sourceEvent.visibility || "visible",
@@ -221,11 +232,12 @@ const AddEditNewEvent = forwardRef(
         current.visibility !== (original.visibility || "visible") ||
         current.availability !== (original.availability || "busy") ||
         current.notification !== (original.notification || 0) ||
-        current.timeRange.start !== original.timeRange.start ||
-        current.timeRange.end !== original.timeRange.end ||
+        current.timeRange.start !==
+          (original.timeRange?.start || original.start) ||
+        current.timeRange.end !== (original.timeRange?.end || original.end) ||
         current.isFullDay !== (original.isFullDay || false) ||
         JSON.stringify(current.invitedIds) !==
-          JSON.stringify(original.invitedIds || []) || // 🔴 Detect invite changes
+          JSON.stringify(original.invitedIds || []) ||
         JSON.stringify(current.recurrence) !==
           JSON.stringify(original.recurrence || { type: "NONE" })
       );
@@ -304,7 +316,7 @@ const AddEditNewEvent = forwardRef(
               ...originalEventRef.current,
               ...newData,
               id: shadowIdRef.current,
-              sourceEventId: eventId,
+              // sourceEventId REMOVED per Phase 2
               recurrence: { type: "NONE" },
             };
             return [...filtered, shadowEvent];
@@ -322,8 +334,8 @@ const AddEditNewEvent = forwardRef(
         return;
       }
 
-      const realId =
-        originalEventRef.current.sourceEventId || originalEventRef.current.id;
+      // 🔴 BUGFIX #4: Safe ID extraction without `sourceEventId` reliance
+      const realId = originalEventRef.current.id.split("_")[0];
       const parentEvent = loadedEvents.find((ev) => ev.id === realId);
 
       if (!parentEvent) return;
@@ -343,10 +355,18 @@ const AddEditNewEvent = forwardRef(
                 : ev,
             ),
           );
-          const result = await updateEvent(
-            { sourceEventId: parentEvent.id, ...eventData, isFullDay },
-            onProgress,
-          );
+
+          // 🔴 BUGFIX #5: Enforce start/end on root for Updates too!
+          const updatePayload = {
+            id: parentEvent.id,
+            ...eventData,
+            isFullDay,
+            start: eventData.timeRange.start,
+            end: eventData.timeRange.end,
+          };
+          delete updatePayload.timeRange; // Strip UI state before DB push
+
+          const result = await updateEvent(updatePayload, onProgress);
           if (result.success) finishSuccess();
           else throw new Error("Update failed");
         } catch (e) {
@@ -357,11 +377,12 @@ const AddEditNewEvent = forwardRef(
       }
 
       const oldStart = DateTime.fromISO(
-        originalEventRef.current.timeRange.start,
+        originalEventRef.current.timeRange?.start ||
+          originalEventRef.current.start,
       ).toMillis();
       const newStart = DateTime.fromISO(eventData.timeRange.start).toMillis();
       const oldEnd = DateTime.fromISO(
-        originalEventRef.current.timeRange.end,
+        originalEventRef.current.timeRange?.end || originalEventRef.current.end,
       ).toMillis();
       const newEnd = DateTime.fromISO(eventData.timeRange.end).toMillis();
 
@@ -380,7 +401,7 @@ const AddEditNewEvent = forwardRef(
 
       const contextCurrentEvent = {
         ...originalEventRef.current,
-        originalTimeRange: originalEventRef.current.timeRange,
+        originalTimeRange: eventData.timeRange, // Fallback safe
       };
 
       openPopup(
@@ -419,11 +440,10 @@ const AddEditNewEvent = forwardRef(
 
       try {
         const payload = { ...eventData, isFullDay };
-        delete payload.timeRange;
-        payload.start = eventData.timeRange.start;
-        payload.end = eventData.timeRange.end;
 
         const result = await addEvent(payload, onProgress);
+
+        // --- DEBUG LOG (Trace 6) ---
 
         if (result.success) {
           const created = {
@@ -461,7 +481,6 @@ const AddEditNewEvent = forwardRef(
       const newIsFullDay = !isFullDay;
       setIsFullDay(newIsFullDay);
 
-      // We use Luxon DateTime to safely handle your userZone and UTC conversions
       const currentStartLocal = DateTime.fromISO(eventData.timeRange.start, {
         zone: "utc",
       }).setZone(userZone);
@@ -470,13 +489,11 @@ const AddEditNewEvent = forwardRef(
       }).setZone(userZone);
 
       if (newIsFullDay) {
-        // Save previous time before we squash it to midnight
         prevTimeRange.current = { ...eventData.timeRange };
 
         let newStart = currentStartLocal.startOf("day");
         let newEnd = currentEndLocal.startOf("day");
 
-        // If they are on the same day, full day means ending at midnight the NEXT day
         if (newEnd <= newStart) {
           newEnd = newEnd.plus({ days: 1 });
         }
@@ -494,7 +511,6 @@ const AddEditNewEvent = forwardRef(
         let newStart, newEnd;
 
         if (prevTimeRange.current) {
-          // Parse previous times in the local zone
           const prevS = DateTime.fromISO(prevTimeRange.current.start, {
             zone: "utc",
           }).setZone(userZone);
@@ -502,7 +518,6 @@ const AddEditNewEvent = forwardRef(
             zone: "utc",
           }).setZone(userZone);
 
-          // Restore previous hour/minute onto the CURRENT start day
           newStart = currentStartLocal.set({
             hour: prevS.hour,
             minute: prevS.minute,
@@ -510,16 +525,11 @@ const AddEditNewEvent = forwardRef(
             millisecond: 0,
           });
 
-          // End time is simply the new start time + the original duration!
-          // This completely prevents the "2 day" bug.
           const duration = prevE.diff(prevS);
           newEnd = newStart.plus(duration);
         } else {
-          // Fallback: Was full day from the beginning
-          // Get the actual current real-world time in the user's timezone
           const now = DateTime.now().setZone(userZone);
 
-          // Set the event's start date to match the current real-world hour and minute
           newStart = currentStartLocal.set({
             hour: now.hour,
             minute: now.minute,
@@ -527,11 +537,9 @@ const AddEditNewEvent = forwardRef(
             millisecond: 0,
           });
 
-          // End time is exactly 1 hour later
           newEnd = newStart.plus({ hours: 1 });
         }
 
-        // Convert safely back to UTC for saving
         updateGlobalState(
           {
             timeRange: {
@@ -789,7 +797,6 @@ const AddEditNewEvent = forwardRef(
       updateGlobalState({ description: newDescription });
     };
 
-    // 🔴 VISIBILITY CLICK HANDLER
     const handleVisibiltyClick = (e) => {
       openPopup(
         "contextual",
@@ -843,6 +850,7 @@ const AddEditNewEvent = forwardRef(
     const endDT = DateTime.fromISO(eventData.timeRange.end, {
       zone: "utc",
     }).setZone(userZone);
+
     const dateDisplay = startDT.isValid
       ? startDT.toFormat("cccc, MMMM d")
       : "Pick Date";
@@ -1139,7 +1147,6 @@ const AddEditNewEvent = forwardRef(
                 <div className={styles.icon}>
                   <EyeDashedIcon />
                 </div>
-                {/* 🔴 Dynamic Label based on Specific Friends */}
                 <span>
                   {eventData.visibility === "visible"
                     ? "Visible for friends"
@@ -1337,8 +1344,6 @@ const AddEditNewEvent = forwardRef(
   },
 );
 
-// 🔴 NEW HELPER POPUPS FOR SPECIFIC SHARING
-
 function VisibilityPopup({
   eventData,
   updateGlobalState,
@@ -1464,7 +1469,6 @@ function SpecificFriendsPopup({
   );
 }
 
-// ... original helper popups (Description, Recurrence, TimeList) remain the same ...
 function DescriptionPopup({ initialDescription, onSave }) {
   const [text, setText] = useState(initialDescription || "");
   const { closePopup } = usePopup();

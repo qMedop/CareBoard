@@ -13,6 +13,7 @@ import { db } from "../../firebase";
 import defaultAvatar from "../assets/svg/user-avatar.svg";
 import maleAvatar from "../assets/svg/male-avatar.svg";
 import femaleAvatar from "../assets/svg/female-avatar.svg";
+import { EVENT_TITLE } from "../constants/constants";
 
 const TimeContext = createContext();
 
@@ -27,8 +28,6 @@ export const TimeProvider = ({ children }) => {
   const [direction, setDirection] = useState("next");
   const [loadedEvents, setLoadedEvents] = useState([]);
   const [newEvent, setNewEvent] = useState(null);
-  const [renderEvents, setRenderEvents] = useState([]);
-  const [websiteTitle, setWebsiteTitle] = useState("CareBoard");
   const [activeFilterIds, setActiveFilterIds] = useState([]);
 
   const [draggableEvent, setDraggableEvent] = useState({
@@ -54,6 +53,7 @@ export const TimeProvider = ({ children }) => {
       if (user.gender.toLowerCase() === "other") return defaultAvatar;
     }
     if (!user) return defaultAvatar;
+    return defaultAvatar;
   };
 
   const [lists, setLists] = useState([
@@ -112,25 +112,6 @@ export const TimeProvider = ({ children }) => {
     const offsetInMinutes = new Date().getTimezoneOffset();
     setTimeZoneOffset(offsetInMinutes / -60);
   }, []);
-
-  const daysOfWeekEU = ["MON", "TUS", "WED", "THU", "FRI", "SAT", "SUN"];
-  const daysOfWeekUS = ["SUN", "MON", "TUS", "WED", "THU", "FRI", "SAT"];
-  const MonthsOfTheYear = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-  ];
-  const region = "EU";
-  const daysOfWeek = region === "EU" ? daysOfWeekEU : daysOfWeekUS;
 
   const [isMobile, setIsMobile] = useState(false);
 
@@ -197,6 +178,50 @@ export const TimeProvider = ({ children }) => {
     let isInitialLoad = true;
     let previousEvents = [];
     const userProfileCache = {};
+
+    const getUserData = async (userId) => {
+      if (!userId) {
+        return {
+          pfp: defaultAvatarUrl(null),
+          name: "A friend",
+        };
+      }
+
+      if (userProfileCache[userId]) {
+        return userProfileCache[userId];
+      }
+
+      try {
+        const userSnap = await getDoc(doc(db, "users", userId));
+
+        let userData;
+
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+
+          userData = {
+            pfp: defaultAvatarUrl(data),
+            name: data.displayName || "A friend",
+          };
+        } else {
+          userData = {
+            pfp: defaultAvatarUrl(null),
+            name: "A friend",
+          };
+        }
+
+        userProfileCache[userId] = userData;
+
+        return userData;
+      } catch (err) {
+        console.error(err);
+
+        return {
+          pfp: defaultAvatarUrl(null),
+          name: "A friend",
+        };
+      }
+    };
     if (!currentUser || authStatus !== "done" || !currentUser.userDek) {
       setLoadedEvents([]);
       return;
@@ -211,106 +236,68 @@ export const TimeProvider = ({ children }) => {
       const currentEvents = result.events;
       console.log(currentEvents);
       if (!isInitialLoad) {
-        currentEvents.forEach((newEvent) => {
-          if (newEvent.isShared) {
-            const oldEvent = previousEvents.find((e) => e.id === newEvent.id);
+        for (const event of currentEvents) {
+          if (!event.isShared) continue;
 
-            if (!oldEvent) {
-              getDoc(doc(db, "users", newEvent.ownerId))
-                .then((snap) => {
-                  const name = snap.exists()
-                    ? snap.data().displayName
-                    : "A friend";
-                  notify({
-                    id: `added-${newEvent.id}`,
-                    type: "info",
-                    message: `${name} created a new event: ${newEvent.title || "(No title)"}`,
-                  });
-                })
-                .catch((err) => {
-                  if (err.name !== "AbortError") console.error(err);
-                });
-            } else {
-              const oldData = JSON.stringify({
-                t: oldEvent.title,
-                s: oldEvent.timeRange?.start,
-                e: oldEvent.timeRange?.end,
-              });
-              const newData = JSON.stringify({
-                t: newEvent.title,
-                s: newEvent.timeRange?.start,
-                e: newEvent.timeRange?.end,
-              });
+          const oldEvent = previousEvents.find((e) => e.id === event.id);
 
-              if (oldData !== newData) {
-                getDoc(doc(db, "users", newEvent.ownerId))
-                  .then((snap) => {
-                    const name = snap.exists()
-                      ? snap.data().displayName
-                      : "A friend";
-                    notify({
-                      id: `mod-${newEvent.id}`,
-                      type: "info",
-                      message: `${name} updated: ${newEvent.title || "(No title)"}`,
-                    });
-                  })
-                  .catch((err) => {
-                    if (err.name !== "AbortError") console.error(err);
-                  });
-              }
-            }
+          if (!oldEvent) {
+            const userData = await getUserData(event.ownerId);
+
+            notify({
+              id: `added-${event.id}`,
+              type: "info",
+              message: `${userData.name} created a new event: ${
+                event.title || EVENT_TITLE
+              }`,
+            });
+
+            continue;
           }
-        });
+
+          const oldData = JSON.stringify({
+            t: oldEvent.title,
+            s: oldEvent.timeRange?.start,
+            e: oldEvent.timeRange?.end,
+          });
+
+          const newData = JSON.stringify({
+            t: event.title,
+            s: event.timeRange?.start,
+            e: event.timeRange?.end,
+          });
+
+          if (oldData !== newData) {
+            const userData = await getUserData(event.ownerId);
+
+            notify({
+              id: `mod-${event.id}`,
+              type: "info",
+              message: `${userData.name} updated: ${
+                event.title || EVENT_TITLE
+              }`,
+            });
+          }
+        }
       }
 
       previousEvents = currentEvents;
       isInitialLoad = false;
 
       const formattedEvents = await Promise.all(
-        currentEvents.map(async (ev) => {
+        currentEvents.map(async (event) => {
           let ownerPfp = null;
           let ownerName = null;
-          if (ev.ownerId && ev.ownerId !== currentUser.id) {
-            if (!userProfileCache[ev.ownerId]) {
-              try {
-                const userSnap = await getDoc(doc(db, "users", ev.ownerId));
-                if (userSnap.exists()) {
-                  const data = userSnap.data();
-                  userProfileCache[ev.ownerId] = {
-                    pfp: data.pfpUrl || defaultAvatar,
-                    name: data.displayName || "A friend",
-                  };
-                } else {
-                  userProfileCache[ev.ownerId] = {
-                    pfp: defaultAvatar,
-                    name: "A friend",
-                  };
-                }
-              } catch (fetchErr) {
-                if (fetchErr.name === "AbortError") {
-                  return {
-                    ...ev,
-                    ownerPfp: defaultAvatar,
-                    ownerName: "A friend",
-                    columnDate: ev.start?.split("T")[0],
-                    position: { x: 0, y: 0 },
-                    size: { width: 0, height: 0 },
-                  };
-                }
-                console.error(fetchErr);
-              }
-            }
-            ownerPfp = userProfileCache[ev.ownerId]?.pfp;
-            ownerName = userProfileCache[ev.ownerId]?.name;
+          if (event.ownerId && event.ownerId !== currentUser.id) {
+            const userData = await getUserData(event.ownerId);
+            ownerPfp = userData.pfp;
+            ownerName = userData.name;
           }
 
           return {
-            ...ev,
+            ...event,
             ownerPfp,
             ownerName,
-            columnDate: ev.start?.split("T")[0],
-            position: { x: 0, y: 0 },
-            size: { width: 0, height: 0 },
           };
         }),
       );
@@ -357,9 +344,6 @@ export const TimeProvider = ({ children }) => {
         direction,
         setDirection,
         moveDate,
-        daysOfWeekEU,
-        daysOfWeekUS,
-        MonthsOfTheYear,
         loadedEvents,
         setLoadedEvents,
         safeSetLoadedEvents,
@@ -372,27 +356,23 @@ export const TimeProvider = ({ children }) => {
         dayTasksDiv,
         draggableRef,
         resizeRef,
-        daysOfWeek,
         topBottomHeight,
         setTopBottomHeight,
         setDayTasksDiv,
         setDraggableRef,
-        renderEvents,
-        setRenderEvents,
         tasks,
         setTasks,
         lists,
         setLists,
         notes,
         setNotes,
-        websiteTitle,
-        setWebsiteTitle,
         activeFilterIds,
         setActiveFilterIds,
         isMobile,
         setDragSourceId,
         dragSourceId,
         defaultAvatarUrl,
+        setToday,
       }}
     >
       {children}

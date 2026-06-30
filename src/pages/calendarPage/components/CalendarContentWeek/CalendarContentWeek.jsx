@@ -9,6 +9,11 @@ import { useState } from "react";
 import { useEffect } from "react";
 import EventBlock from "../EventBlock/EventBlock";
 import { ArrowDownThinIcon } from "../../../../assets/icons/Icon";
+import {
+  DAYS_OF_WEEK,
+  MONTHS_OF_THE_YEAR,
+} from "../../../../constants/constants";
+import { useUserSettings } from "../../../../contexts/UserSettingsContext";
 
 function CalendarContentWeek({
   currentDate,
@@ -23,26 +28,27 @@ function CalendarContentWeek({
   handleGridPointerDown,
   handleResizeStart,
   handleNewEventClick,
-  is24HourFormat = false,
 }) {
   const {
-    daysOfWeek,
     draggableEvent,
     timeZoneOffset,
     setDayTasksDiv,
     isMobile,
     MonthsOfTheYear,
-    today,
   } = useTime();
-  const { view } = useParams();
-  const localDayTasksRef = useRef(null);
   const { closePopup } = usePopup();
 
   const [hoveredEventId, setHoveredEventId] = useState(null);
-  const bottomRef = useRef(null);
   const [firstVisibleHour, setFirstVisibleHour] = useState(0);
   const [currentLineTop, setCurrentLineTop] = useState(0);
 
+  const localDayTasksRef = useRef(null);
+  const bottomRef = useRef(null);
+
+  const { userSettings } = useUserSettings();
+
+  const is24HourFormat = userSettings?.timeFormat === "24h";
+  // Scroll handler for mobile to determine first visible hour
   const handleScroll = (e) => {
     if (!isMobile) return;
     const timeDiv = e.target.querySelector(`.${styles.time}`);
@@ -56,16 +62,22 @@ function CalendarContentWeek({
     }
   };
 
+  const weekStartDay = userSettings.weekStartDay;
   const startOfWeek = new Date(currentDate);
   const dayOfWeek = startOfWeek.getDay();
+
   const offset =
-    region === "EU" ? (dayOfWeek === 0 ? -6 : 1 - dayOfWeek) : -dayOfWeek;
+    weekStartDay <= dayOfWeek
+      ? weekStartDay - dayOfWeek
+      : weekStartDay - dayOfWeek - 7;
+
   startOfWeek.setDate(startOfWeek.getDate() + offset);
 
   useEffect(() => {
     setDayTasksDiv(localDayTasksRef);
   }, [setDayTasksDiv]);
 
+  // Current time line logic
   useEffect(() => {
     const updateLine = () => {
       const cellHeight = isMobile ? 64 : 52;
@@ -77,9 +89,9 @@ function CalendarContentWeek({
       setCurrentLineTop(newLineTop);
     };
 
-    updateLine(); // run immediately
+    updateLine();
 
-    const interval = setInterval(updateLine, 60000); // every 60s
+    const interval = setInterval(updateLine, 60000);
 
     return () => clearInterval(interval);
   }, [isMobile]);
@@ -115,7 +127,7 @@ function CalendarContentWeek({
           {isMobile && (
             <div className={styles.mobileTop}>
               <p className={styles.month}>
-                {MonthsOfTheYear[currentDate.getMonth()].toUpperCase()}
+                {MONTHS_OF_THE_YEAR[currentDate.getMonth()].toUpperCase()}
               </p>
             </div>
           )}
@@ -125,6 +137,7 @@ function CalendarContentWeek({
               date.setDate(startOfWeek.getDate() + index);
               const isToday = date.toDateString() === new Date().toDateString();
               const dateStr = getLocalDateString(date);
+              const actualDay = date.getDay();
               return (
                 <div
                   key={dateStr}
@@ -141,8 +154,8 @@ function CalendarContentWeek({
                     <div className={styles.dayName}>
                       <p>
                         {isMobile
-                          ? daysOfWeek[index].slice(0, 1)
-                          : daysOfWeek[index]}
+                          ? DAYS_OF_WEEK[actualDay].slice(0, 1)
+                          : DAYS_OF_WEEK[actualDay]}
                       </p>
                     </div>
                     <CustomButton
@@ -294,7 +307,6 @@ function CalendarContentWeek({
           </div>
         </div>
       </div>
-
       <div
         id="bottom"
         className={styles.bottom}
@@ -307,7 +319,7 @@ function CalendarContentWeek({
             <div key={`time-${index}`} className={styles.timeBlock}>
               <p>
                 {is24HourFormat
-                  ? `${index}`
+                  ? `${index.toString().padStart(2, "0")}${!isMobile ? ":00" : ""}`
                   : `${index < 12 ? index + 1 : index - 11}`}
               </p>
               {!is24HourFormat && (
@@ -377,7 +389,7 @@ function CalendarContentWeek({
                     )
                     .map((event) => (
                       <EventBlock
-                        key={event.id}
+                        key={event.ghostId || event.id}
                         event={event}
                         handlePointerDown={handlePointerDown}
                         onResizeStart={handleResizeStart}

@@ -8,30 +8,30 @@ import { InfoProvider } from "./contexts/infoContext";
 import { TimeProvider } from "./contexts/TimeContext";
 import { PopupProvider } from "./contexts/PopupContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
+import { UserSettingsProvider } from "./contexts/UserSettingsContext";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <TimeProvider>
-          <NotificationProvider>
-            <InfoProvider>
-              <PopupProvider>
-                <App />
-              </PopupProvider>
-            </InfoProvider>
-          </NotificationProvider>
-        </TimeProvider>
+        <UserSettingsProvider>
+          <TimeProvider>
+            <NotificationProvider>
+              <InfoProvider>
+                <PopupProvider>
+                  <App />
+                </PopupProvider>
+              </InfoProvider>
+            </NotificationProvider>
+          </TimeProvider>
+        </UserSettingsProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
 );
-/* cite: uploaded:src/main.jsx */
-// Append this to the bottom of your src/main.jsx file
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    // Force the scope to the absolute root '/'
     navigator.serviceWorker
       .register("/sw.js", { scope: "/" })
       .then((registration) => {

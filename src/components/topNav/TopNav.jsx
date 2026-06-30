@@ -9,6 +9,7 @@ import {
 } from "../../assets/icons/Icon";
 import { CalendarNavControlls } from "../../pages/calendarPage/CalendarPage";
 import { ToDoNavControlls } from "../../pages/toDoPage/ToDoPage";
+import { useUserSettings } from "../../contexts/UserSettingsContext";
 function TopNav() {
   const location = useLocation();
   const [activePage, setActivePage] = useState(location.pathname);
@@ -26,7 +27,8 @@ function TopNav() {
     return () => clearInterval(timer);
   }, []);
 
-  const [is24HourFormat, setIs24HourFormat] = useState(false);
+  const { userSettings } = useUserSettings();
+  const is24HourFormat = userSettings?.timeFormat === "24h";
 
   const lastClickTime = useRef(0);
 

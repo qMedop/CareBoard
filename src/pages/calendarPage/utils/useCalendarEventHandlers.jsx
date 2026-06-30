@@ -24,6 +24,7 @@ function useCalendarEventHandlers(props = {}) {
     loadedEvents,
     isMobile,
     newEvent,
+    dragSourceId, // Used specifically for identity matching against ghosts
     setDragSourceId,
   } = useTime();
   const { openPopup, closePopup, hidePopup, showPopup } = usePopup();
@@ -114,22 +115,6 @@ function useCalendarEventHandlers(props = {}) {
         type: "error",
       });
   };
-
-  const getScrollSpeed = useCallback(
-    (clientY) => {
-      const container = dayTasksDiv.current;
-      if (!container) return 0;
-      const scrollContainer = container.closest("#bottom");
-      if (!scrollContainer) return 0;
-
-      const rect = scrollContainer.getBoundingClientRect();
-      const threshold = 60;
-      if (clientY < rect.top + threshold) return -12;
-      if (clientY > rect.bottom - threshold) return 12;
-      return 0;
-    },
-    [dayTasksDiv],
-  );
 
   const getActiveContainer = useCallback(() => {
     if (isMobile) {
@@ -295,7 +280,6 @@ function useCalendarEventHandlers(props = {}) {
       const mouseY = e.clientY - rect.top + scrollContainer.scrollTop;
       let minutesFromTopOfColumn = (mouseY / cellHeight) * 60;
 
-      // Clamp strictly between 0 and 1440 minutes (24 hours)
       if (minutesFromTopOfColumn < 0) {
         minutesFromTopOfColumn = 0;
       } else if (minutesFromTopOfColumn > 1440) {
@@ -313,7 +297,6 @@ function useCalendarEventHandlers(props = {}) {
 
       const snappedMinutes = Math.round(pointerDateTime.minute / 15) * 15;
 
-      // If we snapped to 60 minutes or reached exactly 24:00, handle day rollover safety
       if (snappedMinutes === 60 || minutesFromTopOfColumn === 1440) {
         pointerDateTime = pointerDateTime.set({
           minute: 0,
@@ -324,7 +307,6 @@ function useCalendarEventHandlers(props = {}) {
           pointerDateTime = pointerDateTime.plus({ hours: 1 });
         }
 
-        // Safety lock: If it crossed into the next day, make sure it stays exactly at midnight (00:00 / 24:00)
         if (pointerDateTime.toISODate() !== targetColumnDay.toISODate()) {
           pointerDateTime = targetColumnDay.plus({ days: 1 }).startOf("day");
         }
@@ -392,12 +374,11 @@ function useCalendarEventHandlers(props = {}) {
     },
     [timeZoneOffset, getActiveContainer, isMobile],
   );
+
   const activateDragMode = useCallback(
     (e, event, element) => {
       const currentLoadedEvents = loadedEventsRef.current || [];
-      const original = currentLoadedEvents.find(
-        (ev) => ev.id === (event.sourceEventId || event.id),
-      );
+      const original = currentLoadedEvents.find((ev) => ev.id === event.id);
 
       originalEventSnapshot.current = original
         ? JSON.parse(JSON.stringify(original))
@@ -415,7 +396,7 @@ function useCalendarEventHandlers(props = {}) {
       }
 
       const elements = document.querySelectorAll(
-        `[data-sourceid="${event.sourceEventId || event.id}"]`,
+        `[data-eventid="${event.id}"]`,
       );
       elements.forEach((el) => el.classList.add(styles.editing));
       editingElementRef.current = Array.from(elements);
@@ -457,31 +438,34 @@ function useCalendarEventHandlers(props = {}) {
 
       setDraggableEvent({
         ...cleanEvent,
+        id: event.id,
+        ghostId: `ghost-${event.id}`,
         originalTimeRange: timeRangeToUse,
         timeRange: timeRangeToUse,
         active: true,
+        isGhost: true,
         size: {
           height: `${elementRect.height}px`,
           width: `${elementRect.width}px`,
         },
         position: { x: relativeLeft + "px", y: relativeTop },
       });
-      setDragSourceId(event.sourceEventId);
+      setDragSourceId(event.id);
     },
     [
-      dayTasksDiv,
       setDraggableEvent,
       setFullDayExpanded,
       timeZoneOffset,
       isMobile,
       getColumnsInView,
       getActiveContainer,
+      setDragSourceId,
     ],
   );
 
   const handleRecurrenceAndSave = useCallback(
     async (currentEvent, finalData, triggerElement) => {
-      const originalId = currentEvent.sourceEventId || currentEvent.id;
+      const originalId = currentEvent.id;
       const oldStart = DateTime.fromISO(
         currentEvent.originalTimeRange.start,
       ).toMillis();
@@ -496,53 +480,53 @@ function useCalendarEventHandlers(props = {}) {
 
       if (deltaMs === 0 && durationDeltaMs === 0) {
         const targetDiv =
-          document.querySelector(`[data-sourceid="${originalId}"]`) ||
+          document.querySelector(`[data-eventid="${originalId}"]`) ||
           document.body;
+        console.log(document.querySelector(`[data-eventid="${originalId}"]`));
         showPopup("edit-popup", targetDiv);
         return;
       }
-
       const cleanFinalData = { ...finalData };
+
       delete cleanFinalData.isSegment;
       delete cleanFinalData.columnDate;
       delete cleanFinalData.position;
       delete cleanFinalData.size;
       delete cleanFinalData.active;
       delete cleanFinalData.originalTimeRange;
-      delete cleanFinalData.id;
-      delete cleanFinalData.sourceEventId;
       delete cleanFinalData.group_id;
+      delete cleanFinalData.isGhost;
+      delete cleanFinalData.isUnsaved;
+      delete cleanFinalData.ghostId;
 
+      cleanFinalData.id = originalId;
       if (cleanFinalData.timeRange) {
         cleanFinalData.start = cleanFinalData.timeRange.start;
         cleanFinalData.end = cleanFinalData.timeRange.end;
       }
-
-      const activeSnapshotId =
-        originalEventSnapshot.current?.sourceEventId ||
-        originalEventSnapshot.current?.id;
+      const activeSnapshotId = originalEventSnapshot.current?.id;
       const isActivelyEditing =
         addEditRef.current && activeSnapshotId === originalId;
-      const isUnsaved = originalId.toString().startsWith("unsaved");
 
-      if (isUnsaved || isActivelyEditing) {
+      if (currentEvent.isUnsaved || isActivelyEditing) {
         setLoadedEvents((prev) =>
           prev.map((ev) =>
             ev.id === originalId ? { ...ev, ...cleanFinalData } : ev,
           ),
         );
-        if (isUnsaved) setNewEvent((prev) => ({ ...prev, ...cleanFinalData }));
+        if (currentEvent.isUnsaved)
+          setNewEvent((prev) => ({ ...prev, ...cleanFinalData }));
 
         setTimeout(() => {
           const targetDiv =
-            document.querySelector(`[data-sourceid="${originalId}"]`) ||
+            document.querySelector(`[data-eventid="${originalId}"]`) ||
             document.body;
           showPopup("edit-popup", targetDiv);
         }, 50);
         return;
       }
 
-      const consoleLogProgress = createConsoleLogProgress(currentEvent.id);
+      const consoleLogProgress = createConsoleLogProgress(originalId);
       const parentEvent = loadedEventsRef.current.find(
         (ev) => ev.id === originalId,
       );
@@ -564,8 +548,6 @@ function useCalendarEventHandlers(props = {}) {
                 ? {
                     ...ev,
                     timeRange: cleanFinalData.timeRange,
-                    start: cleanFinalData.start,
-                    end: cleanFinalData.end,
                   }
                 : ev,
             ),
@@ -573,7 +555,7 @@ function useCalendarEventHandlers(props = {}) {
 
           const result = await updateEvent(
             {
-              sourceEventId: parentEvent.id,
+              id: parentEvent.id,
               ...cleanFinalData,
               isFullDay: finalFullDay,
               title: parentEvent.title,
@@ -636,6 +618,7 @@ function useCalendarEventHandlers(props = {}) {
       showPopup,
       timeZoneOffset,
       updateEvent,
+      dragSourceId,
     ],
   );
 
@@ -698,7 +681,6 @@ function useCalendarEventHandlers(props = {}) {
         hasDragged.current = true;
       }
 
-      // Update global auto-scroll tracking coordinates
       autoScrollState.current.clientX = clientX;
       autoScrollState.current.clientY = clientY;
 
@@ -719,7 +701,6 @@ function useCalendarEventHandlers(props = {}) {
       if (!matchedColumn) return;
 
       if (isTopArea) {
-        // Disengage vertical auto-scroller when hovering the top all-day area section
         autoScrollState.current.active = false;
         if (autoScrollState.current.animationFrameId) {
           cancelAnimationFrame(autoScrollState.current.animationFrameId);
@@ -804,7 +785,6 @@ function useCalendarEventHandlers(props = {}) {
           };
         }
       } else {
-        // Column grid area interaction handling
         const scrollRect = scrollContainer.getBoundingClientRect();
         const threshold = 60;
         let speed = 0;
@@ -820,12 +800,8 @@ function useCalendarEventHandlers(props = {}) {
 
             const scrollLoop = () => {
               if (!autoScrollState.current.active) return;
-
               if (scrollContainer) {
-                // Shift the column scroll container
                 scrollContainer.scrollTop += autoScrollState.current.speed;
-
-                // Continuously update block positioning calculations even if mouse remains still
                 performDragUpdate(
                   autoScrollState.current.clientX,
                   autoScrollState.current.clientY,
@@ -838,7 +814,6 @@ function useCalendarEventHandlers(props = {}) {
               requestAnimationFrame(scrollLoop);
           }
         } else {
-          // Stationary in safe view boundaries: Kill scroll loops and execute native move tracking
           autoScrollState.current.active = false;
           if (autoScrollState.current.animationFrameId) {
             cancelAnimationFrame(autoScrollState.current.animationFrameId);
@@ -902,19 +877,20 @@ function useCalendarEventHandlers(props = {}) {
     if (!isDragging.current && !hasDragged.current) {
       const currentEvent = draggableEventRef.current;
       if (currentEvent && currentEvent.id) {
-        const originalId = currentEvent.sourceEventId || currentEvent.id;
-        const div = document.querySelector(`[data-sourceid="${originalId}"]`);
+        const originalId = currentEvent.isGhost
+          ? dragSourceId
+          : currentEvent.id;
+        const div = document.querySelector(`[data-eventid="${originalId}"]`);
 
         if (div) {
           blockedPopupRef.current = true;
-          if (originalId.toString().startsWith("unsaved")) return;
+          if (currentEvent.isUnsaved) return;
 
           const activePopupEl = document.querySelector(
             `[data-popupid="info-popup"]`,
           );
           const isTargetAlreadyOpen =
-            activePopupEl &&
-            activePopupEl.innerHTML.includes(originalId.toString());
+            activePopupEl && activePopupEl.innerHTML.includes(originalId);
 
           if (isTargetAlreadyOpen) {
             closePopup("info-popup", true);
@@ -924,9 +900,7 @@ function useCalendarEventHandlers(props = {}) {
 
           const openEditPopup = (eventId) => {
             closePopup();
-            const targetDiv =
-              document.querySelector(`[data-sourceid="${eventId}"]`) ||
-              document.body;
+            setEditingEventId(eventId);
 
             const dynamicLoadedEvents = loadedEventsRef.current || [];
             const activeFoundEvent = dynamicLoadedEvents.find(
@@ -940,8 +914,6 @@ function useCalendarEventHandlers(props = {}) {
             } else {
               originalEventSnapshot.current = null;
             }
-
-            setEditingEventId(eventId);
 
             setTimeout(() => {
               const forceClose = { current: false };
@@ -1006,16 +978,15 @@ function useCalendarEventHandlers(props = {}) {
     e.stopPropagation();
     if (!event || !element || event.isShared) return;
 
-    const realId = event.sourceEventId || event.id;
+    const realId = event.id;
     const activeSnapshotId =
       typeof originalEventSnapshot.current === "object"
-        ? originalEventSnapshot.current?.sourceEventId ||
-          originalEventSnapshot.current?.id
+        ? originalEventSnapshot.current?.id
         : originalEventSnapshot.current;
 
     const isCurrentlyEditing =
       (activeSnapshotId && String(activeSnapshotId) === String(realId)) ||
-      realId.toString().startsWith("unsaved") ||
+      event.isUnsaved ||
       (props.editingEventId && String(props.editingEventId) === String(realId));
 
     if (!isCurrentlyEditing) {
@@ -1025,9 +996,7 @@ function useCalendarEventHandlers(props = {}) {
     if (isCurrentlyEditing) hidePopup("edit-popup");
 
     const currentLoadedEvents = loadedEventsRef.current || [];
-    const original = currentLoadedEvents.find(
-      (ev) => ev.id === (event.sourceEventId || event.id),
-    );
+    const original = currentLoadedEvents.find((ev) => ev.id === event.id);
     originalEventSnapshot.current = original
       ? JSON.parse(JSON.stringify(original))
       : null;
@@ -1053,12 +1022,16 @@ function useCalendarEventHandlers(props = {}) {
 
     setDraggableEvent({
       ...cleanEvent,
+      id: event.id,
+      ghostId: `ghost-${event.id}`,
+      originalTimeRange: event.originalTimeRange,
       timeRange: event.originalTimeRange,
       active: true,
+      isGhost: true,
       size: { height: `${elementRect.height}`, width: `${colRect.width}px` },
       position: { x: relativeLeft + "px", y: relativeTop },
     });
-    setDragSourceId(event.sourceEventId);
+    setDragSourceId(event.id);
     draggableEventRef.current = { ...event, _element: element };
   }
 
@@ -1119,8 +1092,6 @@ function useCalendarEventHandlers(props = {}) {
 
               if (scrollContainer) {
                 scrollContainer.scrollTop += autoScrollState.current.speed;
-
-                // Keeps processing updates continuously while mouse remains inside threshold area
                 performResizeUpdate(
                   autoScrollState.current.clientX,
                   autoScrollState.current.clientY,
@@ -1133,7 +1104,6 @@ function useCalendarEventHandlers(props = {}) {
               requestAnimationFrame(scrollLoop);
           }
         } else {
-          // Stationary safe region: Clear loop tracking and recalculate layout locally
           autoScrollState.current.active = false;
           if (autoScrollState.current.animationFrameId) {
             cancelAnimationFrame(autoScrollState.current.animationFrameId);
@@ -1176,19 +1146,20 @@ function useCalendarEventHandlers(props = {}) {
     const { active, _element, _e, ...finalData } = currentEvent;
     hasDragged.current = false;
 
-    // Fixes Issue #3: Open the AddEdit Popup modal overlay properly on hold end
     if (isHoldCreatedEvent.current) {
       isHoldCreatedEvent.current = false;
       const draftId = currentEvent.id;
 
-      // Update local state with the final dragged dimensions
       setNewEvent((prev) =>
         prev ? { ...prev, timeRange: finalData.timeRange } : prev,
       );
 
       setTimeout(() => {
+        const originalId = currentEvent.isGhost
+          ? dragSourceId
+          : currentEvent.id;
         const liveEventBlock =
-          document.querySelector(`[data-sourceid="${draftId}"]`) ||
+          document.querySelector(`[data-eventid="${originalId}"]`) ||
           document.body;
 
         const mockSyntheticEvent = {
@@ -1216,7 +1187,6 @@ function useCalendarEventHandlers(props = {}) {
           return true;
         }
 
-        // Open the creation popup cleanly with final duration sizes loaded
         openAddEditPopup(
           mockSyntheticEvent,
           handleDiscard,
@@ -1227,7 +1197,6 @@ function useCalendarEventHandlers(props = {}) {
       return;
     }
 
-    // Regular preexisting update save path remains completely safe and untouched below
     await handleRecurrenceAndSave(currentEvent, finalData, null);
   }
 
@@ -1240,7 +1209,6 @@ function useCalendarEventHandlers(props = {}) {
 
       if (closePopup("edit-popup") === false) return;
 
-      // 🟢 RESOLVE GEOMETRIC DYNAMIC DATES Purely
       let rawId =
         e.syntheticDateId ||
         e.currentTarget.getAttribute("data-date") ||
@@ -1259,7 +1227,6 @@ function useCalendarEventHandlers(props = {}) {
         luxonStart = DateTime.fromISO(rawId, { zone: userZone }).startOf("day");
         luxonEnd = luxonStart.plus({ days: 1 });
       } else {
-        // FIX: Parse incoming ISO context dynamically in your calendar's target zone directly
         const adjusted = DateTime.fromISO(rawId, { zone: userZone });
         const snappedMinutes = Math.round(adjusted.minute / 15) * 15;
 
@@ -1275,7 +1242,8 @@ function useCalendarEventHandlers(props = {}) {
         .toUTC()
         .toISO({ suppressMilliseconds: true });
       const endTimeUTC = luxonEnd.toUTC().toISO({ suppressMilliseconds: true });
-      const draftId = `unsaved-${Date.now()}`;
+
+      const draftId = crypto.randomUUID();
 
       if (window.innerWidth <= 768 && editingElementRef.current) {
         editingElementRef.current.forEach((el) =>
@@ -1285,6 +1253,7 @@ function useCalendarEventHandlers(props = {}) {
 
       setNewEvent({
         id: draftId,
+        isUnsaved: true,
         title: "",
         description: "",
         timeRange: { start: startTimeUTC, end: endTimeUTC },
@@ -1343,16 +1312,13 @@ function useCalendarEventHandlers(props = {}) {
       if (navigator.vibrate) navigator.vibrate(50);
 
       const currentLoadedEvents = loadedEventsRef.current || [];
-      const original = currentLoadedEvents.find(
-        (ev) => ev.id === (event.sourceEventId || event.id),
-      );
+      const original = currentLoadedEvents.find((ev) => ev.id === event.id);
       originalEventSnapshot.current = original
         ? JSON.parse(JSON.stringify(original))
         : null;
 
-      const realSrcId = event.sourceEventId || event.id;
       const elements = document.querySelectorAll(
-        `[data-sourceid="${realSrcId}"], [id="${realSrcId}"]`,
+        `[data-eventid="${event.id}"]`,
       );
       elements.forEach((el) => el.classList.add(styles.editing));
       editingElementRef.current = Array.from(elements);
@@ -1402,16 +1368,19 @@ function useCalendarEventHandlers(props = {}) {
 
         setDraggableEvent({
           ...cleanEvent,
+          id: event.id,
+          ghostId: `ghost-${event.id}`,
           originalTimeRange: timeRangeToUse,
           timeRange: timeRangeToUse,
           active: true,
+          isGhost: true,
           size: {
             height: `${elementRect.height}px`,
             width: `${elementRect.width}px`,
           },
           position: { x: relativeLeft + "px", y: relativeTop },
         });
-        setDragSourceId(event.sourceEventId);
+        setDragSourceId(event.id);
       }
 
       mobileEventRef.current = {
@@ -1431,7 +1400,13 @@ function useCalendarEventHandlers(props = {}) {
             .toISODate(),
       };
     },
-    [dayTasksDiv, setDraggableEvent, timeZoneOffset, getColumnsInView],
+    [
+      dayTasksDiv,
+      setDraggableEvent,
+      timeZoneOffset,
+      getColumnsInView,
+      setDragSourceId,
+    ],
   );
 
   const calculateMobileEventPosition = useCallback(
@@ -1728,7 +1703,6 @@ function useCalendarEventHandlers(props = {}) {
       if (!column || !scrollContainer) return;
 
       autoScrollState.current.clientX = clientX;
-
       autoScrollState.current.clientY = clientY;
 
       const rect = scrollContainer.getBoundingClientRect();
@@ -1760,20 +1734,12 @@ function useCalendarEventHandlers(props = {}) {
 
         const columnDateStr = column.getAttribute("data-column-date");
 
-        // Establish the locked local target day boundaries
-
         const targetDayLocal = DateTime.fromISO(columnDateStr, {
           zone: userZone,
         }).startOf("day");
 
-        // FIX: Match handleMobileDragging logic. Go to 00:00 of the NEXT day.
-
-        // For UTC+3, June 5th 00:00 local maps perfectly to June 4th 21:00:00Z.
-
         const targetDayEndLocal = targetDayLocal
-
           .plus({ days: 1 })
-
           .startOf("day");
 
         let pointerDateTime = targetDayLocal.plus({
@@ -1784,13 +1750,9 @@ function useCalendarEventHandlers(props = {}) {
 
         pointerDateTime = pointerDateTime.set({
           minute: snappedMinutes,
-
           second: 0,
-
           millisecond: 0,
         });
-
-        // If the user scrolls past the 24-hour mark or boundary, clamp strictly to midnight of next day
 
         if (
           minutesFromTopOfColumn >= 1440 ||
@@ -1802,51 +1764,42 @@ function useCalendarEventHandlers(props = {}) {
 
         const originalStartTime = DateTime.fromISO(
           currentEvent.originalTimeRange.start,
-
           { zone: "utc" },
         ).setZone(userZone);
 
         const originalEndTime = DateTime.fromISO(
           currentEvent.originalTimeRange.end,
-
           { zone: "utc" },
         ).setZone(userZone);
 
         let newStartDateTime = originalStartTime;
-
         let newEndDateTime = originalEndTime;
 
         if (handleType === "top") {
           newStartDateTime = pointerDateTime;
-
           newEndDateTime = originalEndTime;
 
           const maxStartDateTime = originalEndTime.minus({ minutes: 60 });
 
           if (newStartDateTime >= maxStartDateTime) {
             newStartDateTime = maxStartDateTime;
-
             if (pointerDateTime > originalEndTime) {
               newEndDateTime = pointerDateTime;
             }
           }
         } else {
           newStartDateTime = originalStartTime;
-
           newEndDateTime = pointerDateTime;
 
           const minEndDateTime = originalStartTime.plus({ minutes: 60 });
 
           if (newEndDateTime <= minEndDateTime) {
             newEndDateTime = minEndDateTime;
-
             if (pointerDateTime < originalStartTime) {
               newStartDateTime = pointerDateTime;
             }
           }
         }
-
-        // Absolute column safety clamps using our clean midnight ceiling
 
         if (newStartDateTime < targetDayLocal)
           newStartDateTime = targetDayLocal;
@@ -1855,12 +1808,10 @@ function useCalendarEventHandlers(props = {}) {
           newEndDateTime = targetDayEndLocal;
 
         const finalStartUTC = newStartDateTime.toUTC();
-
         const finalEndUTC = newEndDateTime.toUTC();
 
         const newDurationMins = finalEndUTC.diff(
           finalStartUTC,
-
           "minutes",
         ).minutes;
 
@@ -1868,7 +1819,6 @@ function useCalendarEventHandlers(props = {}) {
 
         const minutesFromDayStart = newStartDateTime.diff(
           targetDayLocal,
-
           "minutes",
         ).minutes;
 
@@ -1876,19 +1826,14 @@ function useCalendarEventHandlers(props = {}) {
 
         setDraggableEvent((prev) => ({
           ...prev,
-
           timeRange: {
             start: finalStartUTC.toISO({ suppressMilliseconds: true }),
-
             end: finalEndUTC.toISO({ suppressMilliseconds: true }),
           },
-
           size: {
             width: column.getBoundingClientRect().width + "px",
-
             height: newHeight + "px",
           },
-
           position: { ...prev.position, y: newY },
         }));
       };
@@ -1904,7 +1849,6 @@ function useCalendarEventHandlers(props = {}) {
 
             if (scrollContainer) {
               scrollContainer.scrollTop += autoScrollState.current.speed;
-
               calculateAndUpdateEvent(autoScrollState.current.clientY);
             }
 
@@ -1920,14 +1864,12 @@ function useCalendarEventHandlers(props = {}) {
 
         if (autoScrollState.current.animationFrameId) {
           cancelAnimationFrame(autoScrollState.current.animationFrameId);
-
           autoScrollState.current.animationFrameId = null;
         }
 
         calculateAndUpdateEvent(clientY);
       }
     },
-
     [timeZoneOffset, setDraggableEvent, getActiveContainer],
   );
 
@@ -1935,16 +1877,14 @@ function useCalendarEventHandlers(props = {}) {
     (e, manualMode = null) => {
       if (cancelTouch.current) return;
 
-      // Support passing either a native TouchEvent or a mocked/synthetic event object
       const touch = e.touches ? e.touches[0] : e.touch || e;
 
-      // 🟢 MANUAL OVERRIDE BYPASS: If called directly with an explicit mode
       if (manualMode === "resize") {
         isHolding.current = true;
         if (!isResizing.current) {
           hasDragged.current = true;
           isResizing.current = true;
-          activeMobileMode.current = "resize"; // Dictates "bottom" resize below
+          activeMobileMode.current = "resize";
           initialPointer.current = mobileInitialTouch.current;
         }
       }
@@ -1952,7 +1892,6 @@ function useCalendarEventHandlers(props = {}) {
       const dx = touch.clientX - mobileInitialTouch.current.x;
       const dy = touch.clientY - mobileInitialTouch.current.y;
 
-      // Deadzone check: Ignore accidental micro-wiggles before long-press holds commit
       if (!isHolding.current) {
         if (Math.sqrt(dx * dx + dy * dy) > 10) {
           clearTimeout(touchTimerRef.current);
@@ -1962,11 +1901,10 @@ function useCalendarEventHandlers(props = {}) {
         return;
       }
 
-      if (e.preventDefault) e.preventDefault(); // Stop mobile viewport rubber-banding safely
+      if (e.preventDefault) e.preventDefault();
       const stored = mobileEventRef.current;
       if (!stored) return;
 
-      // Trigger state machines once upon initial drag movement activity
       if (!isDragging.current && !isResizing.current) {
         hasDragged.current = true;
         initialPointer.current = mobileInitialTouch.current;
@@ -1986,7 +1924,6 @@ function useCalendarEventHandlers(props = {}) {
           }
         }
 
-        // Route to correct operation based on our spatial edge-detection checks
         if (activeMobileMode.current === "drag") {
           isDragging.current = true;
           const { _element, _e, ...cleanEvent } = stored;
@@ -1997,7 +1934,6 @@ function useCalendarEventHandlers(props = {}) {
         return;
       }
 
-      // Execute active movement calculations continuous cycles
       if (activeMobileMode.current === "drag") {
         handleMobileDragging(touch.clientX, touch.clientY);
       } else if (activeMobileMode.current === "resize") {
@@ -2054,14 +1990,15 @@ function useCalendarEventHandlers(props = {}) {
       document.body.classList.remove("dragging", "resizing");
 
       if (!isHolding.current) {
+        // Here, the stored object is the original untouched event context
         const stored = mobileEventRef.current;
         mobileEventRef.current = null;
 
         if (stored) {
-          const realId = stored.sourceEventId || stored.id;
+          const realId = stored.id;
           const targetDiv = stored._element;
 
-          if (realId.toString().startsWith("unsaved")) {
+          if (stored.isUnsaved) {
             if (e.stopPropagation) e.stopPropagation();
             if (e.preventDefault) e.preventDefault();
 
@@ -2102,25 +2039,16 @@ function useCalendarEventHandlers(props = {}) {
           } else {
             if (e.stopPropagation) e.stopPropagation();
 
-            // 🟢 FIX: Verify if the touch target is inside a valid saved event block.
-            // If the user tapped a real event, we bypass wiping out the active draft context layers
-            // which was causing the race condition that closed the popup instantly.
             const clickedSavedBlock = e.target?.closest
-              ? e.target.closest("[data-sourceid]")
+              ? e.target.closest("[data-eventid]")
               : null;
+            // Verify if user tapped something real vs background/ghost
             const isTappingRealEvent =
               clickedSavedBlock &&
-              !clickedSavedBlock
-                .getAttribute("data-sourceid")
-                .startsWith("unsaved");
+              clickedSavedBlock.getAttribute("data-unsaved") !== "true";
 
             if (!isTappingRealEvent) {
-              if (
-                draggableEventRef.current?.id
-                  ?.toString()
-                  .startsWith("unsaved") ||
-                newEvent
-              ) {
+              if (draggableEventRef.current?.isUnsaved || newEvent) {
                 setNewEvent(null);
                 setEditingEventId(null);
                 closePopup("edit-popup", true);
@@ -2137,8 +2065,7 @@ function useCalendarEventHandlers(props = {}) {
               `[data-popupid="info-popup"]`,
             );
             const isTargetAlreadyOpen =
-              activePopupEl &&
-              activePopupEl.innerHTML.includes(realId.toString());
+              activePopupEl && activePopupEl.innerHTML.includes(realId);
 
             if (isTargetAlreadyOpen) {
               closePopup("info-popup", true);
@@ -2285,16 +2212,15 @@ function useCalendarEventHandlers(props = {}) {
 
     if (!isTouch) {
       if (e.button !== 0) return;
-      const realId = event.sourceEventId || event.id;
+      const realId = event.id;
       const activeSnapshotId =
         typeof originalEventSnapshot.current === "object"
-          ? originalEventSnapshot.current?.sourceEventId ||
-            originalEventSnapshot.current?.id
+          ? originalEventSnapshot.current?.id
           : originalEventSnapshot.current;
 
       const isCurrentlyEditing =
         (activeSnapshotId && String(activeSnapshotId) === String(realId)) ||
-        realId.toString().startsWith("unsaved") ||
+        event.isUnsaved ||
         (props.editingEventId &&
           String(props.editingEventId) === String(realId));
 
@@ -2343,7 +2269,6 @@ function useCalendarEventHandlers(props = {}) {
       return;
     }
 
-    // closePopup("info-popup");
     if (closePopup("edit-popup") === false) return;
 
     mobileInitialTouch.current = {
@@ -2358,7 +2283,6 @@ function useCalendarEventHandlers(props = {}) {
     const elementRect = element.getBoundingClientRect();
     const touchYRelative = mobileInitialTouch.current.y - elementRect.top;
 
-    // Determine mode based purely on spatial positioning inside the box
     if (touchYRelative <= MOBILE_RESIZE_EDGE_THRESHOLD_PX && !event.isFullDay) {
       activeMobileMode.current = "resize-top";
     } else if (
@@ -2386,9 +2310,7 @@ function useCalendarEventHandlers(props = {}) {
     const handleMobileBackgroundDiscard = (e) => {
       if (isDragging.current || isResizing.current || isHolding.current) return;
 
-      const clickedCell = e.target.closest(
-        `.${styles.column}, [data-sourceid], [id^="unsaved-"]`,
-      );
+      const clickedCell = e.target.closest(`.${styles.column}, [data-eventid]`);
       const clickedInsidePopup = e.target.closest(
         '#edit-popup, #info-popup, [id*="popup"], [class*="popup"]',
       );
@@ -2421,7 +2343,7 @@ function useCalendarEventHandlers(props = {}) {
         }, 150);
       }
 
-      if (draggableEventRef.current?.id?.toString().startsWith("unsaved")) {
+      if (draggableEventRef.current?.isUnsaved) {
         setTimeout(() => {
           setNewEvent(null);
           setEditingEventId(null);
@@ -2514,7 +2436,7 @@ function useCalendarEventHandlers(props = {}) {
       holdTimer = setTimeout(() => {
         if (navigator.vibrate) navigator.vibrate(40);
 
-        const draftId = `unsaved-${Date.now()}`;
+        const draftId = crypto.randomUUID();
 
         const startTimeUTC = targetIsoString;
         const endTimeUTC = calcDateTime
@@ -2524,6 +2446,7 @@ function useCalendarEventHandlers(props = {}) {
 
         const mockEvent = {
           id: draftId,
+          isUnsaved: true,
           title: "",
           description: "",
           timeRange: { start: startTimeUTC, end: endTimeUTC },
@@ -2539,30 +2462,32 @@ function useCalendarEventHandlers(props = {}) {
         setEditingEventId(draftId);
 
         setTimeout(() => {
-          const liveEventBlock =
-            document.getElementById(draftId) ||
-            document.querySelector(`[data-sourceid="${draftId}"]`);
+          const liveEventBlock = document.querySelector(
+            `[data-eventid="${draftId}"]`,
+          );
           if (liveEventBlock) {
             draggableEventRef.current = {
               ...mockEvent,
               _element: liveEventBlock,
             };
             if (isMobile) {
-              // 1. Core structural tracking properties assigned
               mobileInitialTouch.current = { x: clientX, y: clientY };
               mobileEventRef.current = {
                 ...mockEvent,
                 _element: liveEventBlock,
                 _e: e,
               };
-              setDraggableEvent({ ...mockEvent, active: true });
-              setDragSourceId(draftId);
-              // 2. Fire the handler instantly with your manual override string
-              // Passing a custom coordinate mock object ensures it calculates using down coords
+              setDraggableEvent({
+                ...mockEvent,
+                id: crypto.randomUUID(),
+                active: true,
+                isGhost: true,
+              });
+              setDragSourceId(mockEvent.id);
+
               const mockTouchCoordinates = { clientX, clientY };
               handleTouchMove(mockTouchCoordinates, "resize");
 
-              // 3. Mount native listeners for the ongoing drag session
               document.addEventListener("touchmove", handleTouchMove, {
                 passive: false,
               });
@@ -2577,7 +2502,6 @@ function useCalendarEventHandlers(props = {}) {
         holdTimer = null;
       }, 500);
 
-      // Cancel setup loops if user wiggles mouse away or releases too quickly
       const handleGridMoveCheck = (moveEv) => {
         const dx = moveEv.clientX - initialPointerPos.x;
         const dy = moveEv.clientY - initialPointerPos.y;
@@ -2599,7 +2523,6 @@ function useCalendarEventHandlers(props = {}) {
           clearTimeout(holdTimer);
           holdTimer = null;
 
-          // Regular Fast Click: Bypasses hold resizing and uses normal click creation flow
           const clickSyntheticEvent = {
             ...upEv,
             clientX: upEv.clientX,
