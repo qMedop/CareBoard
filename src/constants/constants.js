@@ -15,9 +15,9 @@ export const MONTHS_OF_THE_YEAR = [
   "Dec",
 ];
 
-export const DEFAULT_EVENT_BG = "#FFD4A9";
-export const DEFAULT_EVENT_VISIBILITY = "visible";
-export const DEFAULT_EVENT_AVAILABILITY = "busy";
+export const EVENT_BG = "#FFD4A9";
+export const EVENT_VISIBILITY = "visible";
+export const EVENT_AVAILABILITY = "busy";
 export const EVENT_TITLE = "(No Title)";
 export const EVENT_CELL_HEIGHT_PC = 52;
 export const EVENT_CELL_HEIGHT_MOBILE = 64;
