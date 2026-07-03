@@ -672,6 +672,9 @@ function CalendarContentMonth({
                         {orderedDays[dayIndex]}
                       </p>
                       <CustomButton
+                        style={{
+                          opacity: `${dayObj.type !== "current" ? 0.6 : 1}`,
+                        }}
                         className={styles.dayButton}
                         link={true}
                         href={`/calendar/day/${dayObj.date.getDate()}/${dayObj.date.getMonth() + 1}/${dayObj.date.getFullYear()}`}
