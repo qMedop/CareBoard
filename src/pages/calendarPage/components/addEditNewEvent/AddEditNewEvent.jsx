@@ -46,6 +46,7 @@ import {
 import Loading from "../../../../components/loading/Loading";
 import { db } from "../../../../../firebase";
 import defaultAvatar from "../../../../assets/svg/user-avatar.svg";
+import { getUserZone } from "../../../../utils/getUserZone";
 
 const AddEditNewEvent = forwardRef(
   ({ eventId: incomingEventId, onClose }, ref) => {
@@ -70,7 +71,7 @@ const AddEditNewEvent = forwardRef(
 
     // --- CONSTANTS ---
     const is24Format = false;
-    const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+    const userZone = getUserZone(timeZoneOffset);
 
     // 🔴 FETCH FRIENDS FOR SPECIFIC INVITES
     const [friends, setFriends] = useState([]);
@@ -449,7 +450,7 @@ const AddEditNewEvent = forwardRef(
           const created = {
             ...result.event,
             ...payload,
-            timeRange: { start: payload.start, end: payload.end },
+            timeRange: payload.timeRange,
           };
           setNewEvent(null);
           safeSetLoadedEvents((prev) => [...prev, created]);
@@ -1203,6 +1204,7 @@ const AddEditNewEvent = forwardRef(
                 ClickEffect={"scale"}
                 type="list"
                 className={`default disabled`}
+                // onClick={handleRepeatClick}
               >
                 <div className={styles.icon}>
                   <RepeatIcon />

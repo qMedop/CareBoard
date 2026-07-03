@@ -2,7 +2,7 @@ export function getMonthLayout(
   year,
   month,
   firstDayOfWeek = 0,
-  forceSixRows = false
+  forceSixRows = false,
 ) {
   const today = new Date();
   const isToday = (date) =>

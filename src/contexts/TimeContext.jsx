@@ -234,7 +234,6 @@ export const TimeProvider = ({ children }) => {
       }
 
       const currentEvents = result.events;
-      console.log(currentEvents);
       if (!isInitialLoad) {
         for (const event of currentEvents) {
           if (!event.isShared) continue;
@@ -308,9 +307,9 @@ export const TimeProvider = ({ children }) => {
         const merged = prev
           .map((e) => {
             const isLocalDraft =
-              e.id.toString().startsWith("unsaved") ||
               e.id.toString().startsWith("shadow_") ||
-              e.isPreview;
+              e.isPreview ||
+              e.isUnsaved;
             if (isLocalDraft) return e;
 
             if (serverMap.has(e.id)) {

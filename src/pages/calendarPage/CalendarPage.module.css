@@ -442,6 +442,7 @@
   margin: 0 auto;
   justify-items: center;
 }
+
 .calendarContainer .yearLayout .monthBlock {
   color: var(--text-gray);
 }
@@ -1135,6 +1136,15 @@ body:global(.mobile) {
     left: -4px;
   }
   /* WeekView */
+
+  /* Month View */
+  .calendarContainer .monthLayout {
+    height: calc(100% - 62px);
+    width: calc(100% - 12px);
+    border-radius: 0px;
+    border: 0px;
+    justify-self: center;
+  }
 }
 
 .eventBlock.dragging {

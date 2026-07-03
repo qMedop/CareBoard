@@ -8,6 +8,7 @@ import { usePopup } from "../../../../contexts/PopupContext";
 import { useState } from "react";
 import { useEffect } from "react";
 import { getLocalDateString } from "../../../../utils/getLocalDateString";
+import { DAYS_OF_WEEK } from "../../../../constants/constants";
 
 function CalendarContentDay({
   currentDate,
@@ -17,17 +18,13 @@ function CalendarContentDay({
   fullDayExpanded,
   editingEventId,
   infoPopupEventId,
-  onPointerDown,
+  handlePointerDown,
   handleResizeStart,
   handleNewEventClick,
+  handleGridPointerDown,
 }) {
-  const {
-    daysOfWeek,
-    timeZoneOffset,
-    setDayTasksDiv,
-    draggableEvent,
-    isMobile,
-  } = useTime();
+  const { daysOfWeek, timeZoneOffset, setDayTasksDiv, draggableEvent } =
+    useTime();
   const localDayTasksRef = useRef(null);
   const { closePopup } = usePopup();
 
@@ -41,53 +38,6 @@ function CalendarContentDay({
   const isToday = date.toDateString() === new Date().toDateString();
   const columnDateStr = getLocalDateString(date);
   const dayIndex = date.getDay() === 0 ? 6 : date.getDay() - 1;
-
-  // 🟢 FIXED: Snaps time and anchor placement strictly to the top of the hour block
-  const handleColumnGridClick = (e) => {
-    if (closePopup("edit-popup") === false) return;
-    if (e.target !== e.currentTarget) return;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickY = e.clientY - rect.top;
-
-    const cellHeight = isMobile ? 64 : 52;
-    const totalMinutesClicked = (clickY / cellHeight) * 60;
-    const clickedHour = Math.floor(totalMinutesClicked / 60);
-
-    // Force the minutes strictly to 0 so clicking anywhere within Hour X yields X:00
-    const calculatedCellDate = new Date(
-      Date.UTC(
-        date.getFullYear(),
-        date.getMonth(),
-        date.getDate(),
-        clickedHour,
-        0, // 💡 Force exactly onto the hour mark
-        0,
-      ),
-    );
-
-    // Position the layout anchor exactly at the top of the hour track cell
-    const popupAnchor = document.createElement("div");
-    popupAnchor.style.position = "absolute";
-    popupAnchor.style.top = `${clickedHour * cellHeight}px`; // 💡 Top boundary of the hour block
-    popupAnchor.style.left = "0px";
-    popupAnchor.style.width = "100%";
-    popupAnchor.style.height = `${cellHeight}px`;
-    popupAnchor.style.pointerEvents = "none";
-    popupAnchor.setAttribute("data-popup-anchor", "true");
-
-    e.currentTarget.appendChild(popupAnchor);
-
-    const syntheticEvent = {
-      ...e,
-      clientX: e.clientX,
-      clientY: e.clientY,
-      currentTarget: popupAnchor,
-      syntheticDateId: calculatedCellDate.toISOString(),
-    };
-
-    handleNewEventClick(syntheticEvent);
-  };
 
   return (
     <>
@@ -127,7 +77,7 @@ function CalendarContentDay({
               style={{ cursor: "pointer" }}
             >
               <div className={styles.dayBlock}>
-                <p>{daysOfWeek[dayIndex]}</p>
+                <p>{DAYS_OF_WEEK[dayIndex]}</p>
                 <CustomButton
                   key={`button-${columnDateStr}`}
                   link
@@ -184,19 +134,18 @@ function CalendarContentDay({
                   );
                 }
 
-                const realId = event.sourceEventId || event.id;
-                const isUnsaved = realId.toString().startsWith("unsaved");
+                const realId = event.id;
+                const isUnsaved = Boolean(event.isUnsaved);
                 const isHovered = hoveredEventId === realId;
 
                 const isEditing = String(editingEventId) === realId.toString();
                 const isInfoOpen =
                   String(infoPopupEventId) === realId.toString();
-                const isGhost = event.id?.toString().startsWith("drag-");
+                const isGhost = Boolean(event.isGhost);
 
                 const isDraggedOriginal =
                   draggableEvent?.active &&
-                  (draggableEvent.sourceEventId || draggableEvent.id) ===
-                    realId &&
+                  draggableEvent.id === realId &&
                   !isGhost;
 
                 const isActive = isUnsaved || isEditing || isInfoOpen;
@@ -240,9 +189,9 @@ function CalendarContentDay({
                       id={event.id}
                       data-sourceid={realId}
                       style={{ backgroundColor: event.color }}
-                      onMouseDown={(e) => {
+                      onPointerDown={(e) => {
                         e.stopPropagation();
-                        onPointerDown(e, event, e.currentTarget);
+                        handlePointerDown(e, event, e.currentTarget);
                       }}
                     >
                       <p className={styles.title}>
@@ -294,7 +243,7 @@ function CalendarContentDay({
                 className={`${styles.column} ${styles.firstColumn}`}
                 id={columnDateStr}
                 data-column-date={columnDateStr}
-                onClick={handleColumnGridClick}
+                onPointerDown={handleGridPointerDown}
                 style={{ cursor: "pointer", position: "relative" }}
               >
                 {/* 🟢 STRUCTURAL CELL LOOPS REMOVED COMPONENT-WIDE */}
@@ -309,7 +258,7 @@ function CalendarContentDay({
                   <EventBlock
                     key={event.id}
                     event={event}
-                    onPointerDown={onPointerDown}
+                    onPointerDown={handlePointerDown}
                     onResizeStart={handleResizeStart}
                     editingEventId={editingEventId}
                     infoPopupEventId={infoPopupEventId}

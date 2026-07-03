@@ -225,19 +225,18 @@ function CalendarContentWeek({
                   );
                 }
 
-                const realId = event.sourceEventId || event.id;
-                const isUnsaved = realId.toString().startsWith("unsaved");
+                const realId = event.id;
+                const isUnsaved = Boolean(event.isUnsaved);
                 const isHovered = hoveredEventId === realId;
 
                 const isEditing = String(editingEventId) === realId.toString();
                 const isInfoOpen =
                   String(infoPopupEventId) === realId.toString();
-                const isGhost = event.id?.toString().startsWith("drag-");
+                const isGhost = Boolean(event.isGhost);
 
                 const isDraggedOriginal =
                   draggableEvent?.active &&
-                  (draggableEvent.sourceEventId || draggableEvent.id) ===
-                    realId &&
+                  draggableEvent.id === realId &&
                   !isGhost;
 
                 const isActive = isUnsaved || isEditing || isInfoOpen;

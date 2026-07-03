@@ -138,7 +138,13 @@ function EventBlock({
 
           {!isShared && (
             <span
-              onMouseDown={(e) => {
+              onPointerDown={(e) => {
+                // Mobile has no resize span - it detects resize spatially
+                // via edge-threshold checks in handlePointerDown/
+                // handleGridPointerDown instead. Let touch presses on this
+                // strip fall through to the parent block so that logic
+                // still runs.
+                if (e.pointerType === "touch") return;
                 e.stopPropagation();
                 onResizeStart(e, event, blockRef.current);
               }}

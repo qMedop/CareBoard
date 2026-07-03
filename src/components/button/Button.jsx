@@ -13,6 +13,7 @@ function CustomButton({
   type = "button",
   className = "",
   ariaLabel = "",
+  style = {},
   ClickEffect = true,
   dataInfo,
   infoClassName,
@@ -179,6 +180,7 @@ function CustomButton({
         onMouseEnter={infoTriggerProps.onMouseEnter}
         onMouseLeave={infoTriggerProps.onMouseLeave}
         style={{
+          ...style,
           opacity: loading === "active" ? 0.6 : 1,
           cursor: loading === "active" ? "not-allowed" : null,
         }}
@@ -223,6 +225,7 @@ function CustomButton({
       {...props}
       disabled={loading === "active" ? true : props.disabled}
       style={{
+        ...style,
         opacity: loading === "active" ? 0.6 : 1,
         cursor: loading === "active" ? "not-allowed" : null,
       }}

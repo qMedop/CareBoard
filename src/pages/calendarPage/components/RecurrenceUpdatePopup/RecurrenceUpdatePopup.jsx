@@ -9,6 +9,7 @@ import styles from "./RecurrenceUpdatePopup.module.css";
 import { useData } from "../../../../contexts/AuthContext";
 import { useTime } from "../../../../contexts/TimeContext";
 import { useNotification } from "../../../../contexts/NotificationContext";
+import { getUserZone } from "../../../../utils/getUserZone";
 
 export default function RecurrenceUpdatePopup({
   onClose,
@@ -73,7 +74,7 @@ export default function RecurrenceUpdatePopup({
     const groupId = parentEvent.group_id || parentId;
     const currentExdates = parentEvent.exdate || [];
 
-    const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+    const userZone = getUserZone(timeZoneOffset);
     const originalIsoStart =
       currentEvent.originalTimeRange?.start || currentEvent.timeRange.start;
     const originalInstanceStartUTC = DateTime.fromISO(originalIsoStart, {
@@ -104,11 +105,11 @@ export default function RecurrenceUpdatePopup({
         } else {
           const exceptionEvent = {
             ...finalData,
-            start: finalData.timeRange.start,
-            end: finalData.timeRange.end,
             id: `exception-${Date.now()}`,
             sourceEventId: parentId,
             group_id: groupId,
+            originalOccurrenceDate: exceptionIso,
+            recurrenceOverride: true,
             recurrence: { type: "NONE" },
           };
 
@@ -150,8 +151,23 @@ export default function RecurrenceUpdatePopup({
         };
 
         if (isDelete) {
+          const overridesToDelete = loadedEvents
+            .filter(
+              (ev) =>
+                ev.recurrence?.type === "NONE" &&
+                (ev.group_id === groupId || ev.sourceEventId === parentId) &&
+                ev.id !== parentId &&
+                DateTime.fromISO(
+                  ev.originalTimeRange?.start || ev.timeRange.start,
+                  { zone: "utc" },
+                ) >= originalInstanceStartUTC,
+            )
+            .map((ev) => ev.id);
+
           setLoadedEvents((prev) =>
-            prev.map((ev) => (ev.id === parentId ? updatedOldParent : ev)),
+            prev
+              .map((ev) => (ev.id === parentId ? updatedOldParent : ev))
+              .filter((ev) => !overridesToDelete.includes(ev.id)),
           );
           consoleLogProgress("Saving");
           const res = await updateEvent(
@@ -159,15 +175,19 @@ export default function RecurrenceUpdatePopup({
             consoleLogProgress,
           );
           if (!res?.success) throw new Error(res?.error);
+
+          for (const oid of overridesToDelete) {
+            await deleteEvent(oid);
+          }
           consoleLogProgress("success");
         } else {
+          const newGroupId = `series-${Date.now()}`;
+
           const newParentEvent = {
             ...finalData,
-            start: finalData.timeRange.start,
-            end: finalData.timeRange.end,
             id: `parent-${Date.now()}`,
             sourceEventId: null,
-            group_id: groupId,
+            group_id: newGroupId,
             recurrence: { ...parentEvent.recurrence },
           };
 
@@ -251,8 +271,6 @@ export default function RecurrenceUpdatePopup({
             ...parentEvent,
             ...finalData,
             timeRange: { start: newParentStart, end: newParentEnd },
-            start: newParentStart,
-            end: newParentEnd,
             id: parentId,
             exdate: shiftedExdates,
           };

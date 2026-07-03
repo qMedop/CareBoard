@@ -1,4 +1,6 @@
 /* eslint-disable no-unused-vars */
+
+// MY WORKING VERSION (With Safe Fixes & Hold-to-Create Restored)
 import { useRef, useEffect, useCallback } from "react";
 import { useData } from "../../../contexts/AuthContext";
 import { useNotification } from "../../../contexts/NotificationContext";
@@ -9,7 +11,7 @@ import { usePopup } from "../../../contexts/PopupContext";
 import AddEditNewEvent from "../components/addEditNewEvent/AddEditNewEvent";
 import EventInfoPopup from "../components/EventInfoPopup/EventInfoPopup";
 import RecurrenceUpdatePopup from "../components/RecurrenceUpdatePopup/RecurrenceUpdatePopup";
-import { m } from "framer-motion";
+import { getUserZone } from "../../../utils/getUserZone";
 
 function useCalendarEventHandlers(props = {}) {
   const { notify } = useNotification();
@@ -72,6 +74,9 @@ function useCalendarEventHandlers(props = {}) {
   const mobileInitialTouch = useRef({ x: 0, y: 0 });
   const mobileEventRef = useRef(null);
 
+  // Persistent reference hook to stabilize hold transitions across immediate state updates
+  const gridHoldTimerRef = useRef(null);
+
   useEffect(() => {
     fullDayExpandedRef.current = fullDayExpanded;
   }, [fullDayExpanded]);
@@ -81,6 +86,15 @@ function useCalendarEventHandlers(props = {}) {
   useEffect(() => {
     loadedEventsRef.current = loadedEvents;
   }, [loadedEvents]);
+
+  // Handle cross-platform context menu suppressions cleanly
+  useEffect(() => {
+    const suppressMenu = (e) => e.preventDefault();
+    document.addEventListener("contextmenu", suppressMenu);
+    return () => {
+      document.removeEventListener("contextmenu", suppressMenu);
+    };
+  }, []);
 
   const createConsoleLogProgress = (operationId) => (status) => {
     const notificationId = `event-save-progress-${operationId}`;
@@ -202,7 +216,7 @@ function useCalendarEventHandlers(props = {}) {
 
       const rawY = e.clientY - containerRect.top + scrollTop;
       const minutesFromTopOfColumn = (rawY / cellHeight) * 60;
-      const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+      const userZone = getUserZone(timeZoneOffset);
 
       const pointerTime = DateTime.fromISO(
         matchedColumn.getAttribute("data-column-date"),
@@ -275,7 +289,7 @@ function useCalendarEventHandlers(props = {}) {
 
       const rect = scrollContainer.getBoundingClientRect();
       const cellHeight = isMobile ? 64 : 52;
-      const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+      const userZone = getUserZone(timeZoneOffset);
 
       const mouseY = e.clientY - rect.top + scrollContainer.scrollTop;
       let minutesFromTopOfColumn = (mouseY / cellHeight) * 60;
@@ -417,7 +431,7 @@ function useCalendarEventHandlers(props = {}) {
         return e.clientX >= rect.left && e.clientX <= rect.right;
       });
       if (matchedColumn) {
-        const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+        const userZone = getUserZone(timeZoneOffset);
         const pointerTime = DateTime.fromISO(
           matchedColumn.getAttribute("data-column-date"),
           { zone: userZone },
@@ -579,10 +593,10 @@ function useCalendarEventHandlers(props = {}) {
       }
 
       const oldDateStr = DateTime.fromMillis(oldStart)
-        .setZone(`UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`)
+        .setZone(getUserZone(timeZoneOffset))
         .toISODate();
       const newDateStr = DateTime.fromMillis(newStart)
-        .setZone(`UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`)
+        .setZone(getUserZone(timeZoneOffset))
         .toISODate();
       const isDayChange = oldDateStr !== newDateStr;
 
@@ -708,7 +722,7 @@ function useCalendarEventHandlers(props = {}) {
         }
 
         const targetDateStr = matchedColumn.getAttribute("data-column-date");
-        const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+        const userZone = getUserZone(timeZoneOffset);
 
         const targetDate = DateTime.fromISO(targetDateStr, {
           zone: userZone,
@@ -1220,7 +1234,7 @@ function useCalendarEventHandlers(props = {}) {
         !!e.currentTarget.getAttribute("data-date");
       if (rawId?.startsWith("top-")) rawId = rawId.replace("top-", "");
 
-      const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+      const userZone = getUserZone(timeZoneOffset);
       let luxonStart, luxonEnd;
 
       if (isFullDay) {
@@ -1349,7 +1363,7 @@ function useCalendarEventHandlers(props = {}) {
         );
 
         if (matchedColumn) {
-          const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+          const userZone = getUserZone(timeZoneOffset);
           const pointerTime = DateTime.fromISO(
             matchedColumn.getAttribute("data-column-date"),
             { zone: userZone },
@@ -1396,7 +1410,7 @@ function useCalendarEventHandlers(props = {}) {
         columnDate:
           event.columnDate ||
           DateTime.fromISO(timeRangeToUse.start)
-            .setZone(`UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`)
+            .setZone(getUserZone(timeZoneOffset))
             .toISODate(),
       };
     },
@@ -1453,7 +1467,7 @@ function useCalendarEventHandlers(props = {}) {
         minutesFromTopOfColumn = Math.max(minMinutes, maxMinutes);
       }
 
-      const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+      const userZone = getUserZone(timeZoneOffset);
       const pointerTime = DateTime.fromISO(
         matchedColumn.getAttribute("data-column-date"),
         { zone: userZone },
@@ -1573,7 +1587,7 @@ function useCalendarEventHandlers(props = {}) {
         }
 
         const targetDateStr = matchedColumn.getAttribute("data-column-date");
-        const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+        const userZone = getUserZone(timeZoneOffset);
 
         const targetDate = DateTime.fromISO(targetDateStr, {
           zone: userZone,
@@ -1717,7 +1731,7 @@ function useCalendarEventHandlers(props = {}) {
       const calculateAndUpdateEvent = (currentClientY) => {
         const cellHeight = mobileCellHeight;
 
-        const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+        const userZone = getUserZone(timeZoneOffset);
 
         const currentRect = scrollContainer.getBoundingClientRect();
 
@@ -2413,7 +2427,6 @@ function useCalendarEventHandlers(props = {}) {
       const clientY = e.clientY;
 
       const initialPointerPos = { x: clientX, y: clientY };
-      let holdTimer = null;
 
       document.body.style.userSelect = "none";
       document.body.style.webkitUserSelect = "none";
@@ -2424,7 +2437,7 @@ function useCalendarEventHandlers(props = {}) {
       const clickedHour = Math.floor(clickY / cellHeight);
       const columnDateStr = columnElement.getAttribute("data-column-date");
 
-      const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+      const userZone = getUserZone(timeZoneOffset);
       const calcDateTime = DateTime.fromISO(columnDateStr, { zone: userZone })
         .startOf("day")
         .plus({ hours: clickedHour });
@@ -2433,7 +2446,7 @@ function useCalendarEventHandlers(props = {}) {
         .toUTC()
         .toISO({ suppressMilliseconds: true });
 
-      holdTimer = setTimeout(() => {
+      gridHoldTimerRef.current = setTimeout(() => {
         if (navigator.vibrate) navigator.vibrate(40);
 
         const draftId = crypto.randomUUID();
@@ -2499,16 +2512,16 @@ function useCalendarEventHandlers(props = {}) {
           }
         }, 20);
 
-        holdTimer = null;
+        gridHoldTimerRef.current = null;
       }, 500);
 
       const handleGridMoveCheck = (moveEv) => {
         const dx = moveEv.clientX - initialPointerPos.x;
         const dy = moveEv.clientY - initialPointerPos.y;
         if (Math.sqrt(dx * dx + dy * dy) > 5) {
-          if (holdTimer) {
-            clearTimeout(holdTimer);
-            holdTimer = null;
+          if (gridHoldTimerRef.current) {
+            clearTimeout(gridHoldTimerRef.current);
+            gridHoldTimerRef.current = null;
             document.body.style.userSelect = "";
             document.body.style.webkitUserSelect = "";
           }
@@ -2519,9 +2532,9 @@ function useCalendarEventHandlers(props = {}) {
         document.body.style.userSelect = "";
         document.body.style.webkitUserSelect = "";
 
-        if (holdTimer) {
-          clearTimeout(holdTimer);
-          holdTimer = null;
+        if (gridHoldTimerRef.current) {
+          clearTimeout(gridHoldTimerRef.current);
+          gridHoldTimerRef.current = null;
 
           const clickSyntheticEvent = {
             ...upEv,
@@ -2562,9 +2575,5 @@ function useCalendarEventHandlers(props = {}) {
     handleGridPointerDown,
   };
 }
-
-document.addEventListener("contextmenu", (e) => {
-  e.preventDefault();
-});
 
 export default useCalendarEventHandlers;

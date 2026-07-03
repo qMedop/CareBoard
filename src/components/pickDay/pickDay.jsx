@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import styles from "./pickDay.module.css";
 import CustomButton from "../button/Button";
 import { useTime } from "../../contexts/TimeContext";
+import { DAYS_OF_WEEK, MONTHS_OF_THE_YEAR } from "../../constants/constants";
 
 function PickDay({ onPick, today: todayProp, minDate, maxDate }) {
   const region = "EU";
@@ -51,7 +52,7 @@ function PickDay({ onPick, today: todayProp, minDate, maxDate }) {
       <div className={styles.monthControls}>
         <div className={styles.left}>
           <p>
-            {MonthsOfTheYear[currentMonthView.getMonth()]}{" "}
+            {MONTHS_OF_THE_YEAR[currentMonthView.getMonth()]}{" "}
             {currentMonthView.getFullYear()}
           </p>
         </div>
@@ -87,7 +88,7 @@ function PickDay({ onPick, today: todayProp, minDate, maxDate }) {
       <div className={styles.monthGrid}>
         {/* Days of week header row */}
         <div className={styles.weekRow}>
-          {daysOfWeek.map((day, idx) => (
+          {DAYS_OF_WEEK.map((day, idx) => (
             <div key={idx} className={styles.cell}>
               <p className={styles.dayId}>{day.charAt(0)}</p>
             </div>

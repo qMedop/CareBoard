@@ -19,6 +19,7 @@ import {
 } from "../../../../assets/icons/Icon";
 import CustomButton from "../../../../components/button/Button";
 import defaultAvatar from "../../../../assets/svg/user-avatar.svg";
+import { getUserZone } from "../../../../utils/getUserZone";
 export default function EventInfoPopup({
   eventId,
   onClose,
@@ -40,7 +41,7 @@ export default function EventInfoPopup({
   }
 
   const is24Format = false;
-  const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+  const userZone = getUserZone(timeZoneOffset);
 
   const startDT = currentEvent.timeRange?.start
     ? DateTime.fromISO(currentEvent.timeRange.start, { zone: "utc" }).setZone(

@@ -14,6 +14,9 @@ import EventInfoPopup from "../EventInfoPopup/EventInfoPopup";
 import AddEditNewEvent from "../addEditNewEvent/AddEditNewEvent";
 import { NextBtnIcon, PrevBtnIcon } from "../../../../assets/icons/Icon";
 import RecurrenceUpdatePopup from "../RecurrenceUpdatePopup/RecurrenceUpdatePopup";
+import { getUserZone } from "../../../../utils/getUserZone";
+import { DAYS_OF_WEEK } from "../../../../constants/constants";
+import { useUserSettings } from "../../../../contexts/UserSettingsContext";
 
 function CalendarContentMonth({
   currentDate,
@@ -28,14 +31,11 @@ function CalendarContentMonth({
   setInfoPopupEventId,
   handleRecurrenceAndSave,
 }) {
-  const region = "EU";
-  const { daysOfWeekUS, daysOfWeekEU, loadedEvents, setLoadedEvents } =
-    useTime();
+  const { loadedEvents, setLoadedEvents } = useTime();
+  const { userSettings } = useUserSettings();
   const { openPopup, closePopup, hidePopup, showPopup } = usePopup();
   const { updateEvent } = useData();
   const { notify } = useNotification();
-
-  const daysOfWeek = region === "EU" ? daysOfWeekEU : daysOfWeekUS;
 
   const [hoveredDate, setHoveredDate] = useState(null);
   const [hoveredEventId, setHoveredEventId] = useState(null);
@@ -51,10 +51,17 @@ function CalendarContentMonth({
     startY: 0,
   });
 
+  const weekStartDay = userSettings?.weekStartDay ?? 1;
+
   const { weeks } = getMonthLayout(
     currentDate.getFullYear(),
     currentDate.getMonth(),
-    region === "EU" ? 1 : 0,
+    weekStartDay,
+  );
+
+  const orderedDays = Array.from(
+    { length: 7 },
+    (_, i) => DAYS_OF_WEEK[(weekStartDay + i) % 7],
   );
 
   useEffect(() => {
@@ -83,7 +90,7 @@ function CalendarContentMonth({
     return () => observer.disconnect();
   }, [weeks.length]);
 
-  const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+  const userZone = getUserZone(timeZoneOffset);
 
   const executeDropSave = async (event, offsetDays) => {
     const origStart = DateTime.fromISO(event.timeRange.start, { zone: "utc" });
@@ -101,16 +108,17 @@ function CalendarContentMonth({
       start: newStart.toUTC().toISO({ suppressMilliseconds: true }),
       end: newEnd.toUTC().toISO({ suppressMilliseconds: true }),
     };
-    delete cleanFinalData.sourceEventId;
+
     delete cleanFinalData.id;
     delete cleanFinalData.group_id;
-    delete cleanFinalData.isPreview;
+    delete cleanFinalData.isGhost;
+    delete cleanFinalData.ghostId;
 
-    const realId = event.sourceEventId || event.id;
+    const realId = event.id;
     const parentEvent = loadedEvents.find((ev) => ev.id === realId) || event;
     const isRecurring =
       parentEvent.recurrence && parentEvent.recurrence.type !== "NONE";
-    const isUnsaved = realId.toString().startsWith("unsaved");
+    const isUnsaved = event.isUnsaved;
     const isActivelyEditing = String(editingEventId) === realId.toString();
 
     if (isUnsaved) {
@@ -189,7 +197,7 @@ function CalendarContentMonth({
         );
         consoleLogProgress("Saving");
         const result = await updateEvent(
-          { sourceEventId: parentEvent.id, ...cleanFinalData },
+          { id: parentEvent.id, ...cleanFinalData },
           consoleLogProgress,
         );
 
@@ -260,7 +268,6 @@ function CalendarContentMonth({
             .setZone(userZone)
             .startOf("day");
           const diffDays = Math.round(targetDate.diff(origStart, "days").days);
-
           if (dragState.offsetDays !== diffDays) {
             setDragState((prev) => ({ ...prev, offsetDays: diffDays }));
           }
@@ -270,6 +277,7 @@ function CalendarContentMonth({
 
     const handleMouseUp = () => {
       document.body.classList.remove("dragging");
+
       const { active, event, offsetDays } = dragState;
 
       setDragState({
@@ -284,7 +292,7 @@ function CalendarContentMonth({
         if (offsetDays !== 0) {
           executeDropSave(event, offsetDays);
         } else {
-          const realId = event.sourceEventId || event.id;
+          const realId = event.id;
           setTimeout(() => {
             const targetDiv =
               document.querySelector(`[data-sourceid="${realId}"]`) ||
@@ -306,14 +314,11 @@ function CalendarContentMonth({
 
   const handleEventMouseDown = (e, event) => {
     if (e.button !== 0) return;
-
-    // 🔴 Must stop propagation to prevent background day-click
     e.stopPropagation();
 
-    const realId = event.sourceEventId || event.id;
+    const realId = event.id;
     const isCurrentlyEditing =
-      String(editingEventId) === String(realId) ||
-      realId.toString().startsWith("unsaved");
+      String(editingEventId) === String(realId) || event.isUnsaved;
 
     if (editingEventId && !isCurrentlyEditing) {
       return;
@@ -440,8 +445,8 @@ function CalendarContentMonth({
       ...globalAllEvents,
       {
         ...dragState.event,
-        id: `${dragState.event.id}-preview`,
-        isPreview: true,
+        ghostId: `ghost-${dragState.event.id}`,
+        isGhost: true,
         timeRange: { start: newStart.toISO(), end: newEnd.toISO() },
       },
     ];
@@ -489,8 +494,7 @@ function CalendarContentMonth({
           });
 
           const hasActiveUnsavedThisWeek = weekEventsRaw.some((ev) => {
-            const id = (ev.sourceEventId || ev.id).toString();
-            return id.startsWith("unsaved") || id === String(editingEventId);
+            return ev.isUnsaved || ev.id === String(editingEventId);
           });
 
           const MAX_SLOTS = maxSlotsPerWeek[weekIndex] || 3;
@@ -499,12 +503,10 @@ function CalendarContentMonth({
           const MAX_VISIBLE_EVENTS = Math.max(0, SAFE_SLOTS - 1);
 
           weekEventsRaw.sort((a, b) => {
-            const aId = (a.sourceEventId || a.id).toString();
-            const bId = (b.sourceEventId || b.id).toString();
-            const aIsTop =
-              aId.startsWith("unsaved") || aId === String(editingEventId);
-            const bIsTop =
-              bId.startsWith("unsaved") || bId === String(editingEventId);
+            const aId = a.id;
+            const bId = b.id;
+            const aIsTop = a.isUnsaved || aId === String(editingEventId);
+            const bIsTop = b.isUnsaved || bId === String(editingEventId);
 
             if (aIsTop && !bIsTop) return -1;
             if (!aIsTop && bIsTop) return 1;
@@ -604,7 +606,7 @@ function CalendarContentMonth({
                 const occupant = slotsByDay[i][slot];
                 if (occupant) {
                   if (
-                    ev.isPreview &&
+                    ev.isGhost &&
                     dragState.event &&
                     occupant.id === dragState.event.id
                   ) {
@@ -633,7 +635,7 @@ function CalendarContentMonth({
           });
 
           const dayMaxVisibles = slotsByDay.map((slots) => {
-            const total = slots.filter((ev) => ev && !ev.isPreview).length;
+            const total = slots.filter((ev) => ev && !ev.isGhost).length;
             return total <= SAFE_SLOTS ? SAFE_SLOTS : MAX_VISIBLE_EVENTS;
           });
 
@@ -643,13 +645,13 @@ function CalendarContentMonth({
                 const dateStr = getLocalDateString(dayObj.date);
                 const dailySlots = slotsByDay[dayIndex] || [];
                 const totalDayEvents = dailySlots.filter(
-                  (ev) => ev && !ev.isPreview,
+                  (ev) => ev && !ev.isGhost,
                 ).length;
                 const dayMaxVisible = dayMaxVisibles[dayIndex];
 
                 let maxVis = -1;
                 for (let i = 0; i < dayMaxVisible; i++) {
-                  if (dailySlots[i] && !dailySlots[i].isPreview) maxVis = i;
+                  if (dailySlots[i] && !dailySlots[i].isGhost) maxVis = i;
                 }
                 const hasMore = totalDayEvents > dayMaxVisible;
                 const previewSlot = hasMore ? dayMaxVisible + 1 : maxVis + 1;
@@ -666,11 +668,9 @@ function CalendarContentMonth({
                       onClick={(e) => e.stopPropagation()}
                       onMouseEnter={() => setHoveredDate(null)}
                     >
-                      {weekIndex === 0 && (
-                        <p className={styles.dayOfWeek}>
-                          {daysOfWeek[dayIndex]}
-                        </p>
-                      )}
+                      <p className={styles.dayOfWeek}>
+                        {orderedDays[dayIndex]}
+                      </p>
                       <CustomButton
                         className={styles.dayButton}
                         link={true}
@@ -720,10 +720,10 @@ function CalendarContentMonth({
 
               <div className={`${styles.monthEventContainer}`}>
                 {eventLayouts.flatMap((layout, idx) => {
-                  const isPreview = layout.event.isPreview;
+                  const isGhost = layout.event.isGhost;
                   const segments = [];
 
-                  if (isPreview) {
+                  if (isGhost) {
                     let overflows = false;
                     for (
                       let d = layout.startDayIdx;
@@ -773,18 +773,16 @@ function CalendarContentMonth({
                     const leftPct = (seg.start / 7) * 100;
                     const widthPct = ((seg.end - seg.start + 1) / 7) * 100;
 
-                    const realId =
-                      layout.event.sourceEventId || layout.event.id;
-                    const isUnsaved = realId.toString().startsWith("unsaved");
+                    const realId = layout.event.id;
+                    const isUnsaved = layout.event.isUnsaved;
 
                     const topPx = baseTop + seg.slot * 24;
 
                     const isDraggedOriginal =
                       dragState.active &&
                       dragState.event &&
-                      realId ===
-                        (dragState.event.sourceEventId || dragState.event.id) &&
-                      !isPreview;
+                      realId === dragState.event.id &&
+                      !isGhost;
 
                     const isHovered = hoveredEventId === realId;
                     const isEditing =
@@ -796,7 +794,7 @@ function CalendarContentMonth({
                       isHovered || isUnsaved || isEditing || isInfoOpen;
 
                     const hasShadow =
-                      (isPreview || isUnsaved || isEditing || isInfoOpen) &&
+                      (isGhost || isUnsaved || isEditing || isInfoOpen) &&
                       !isDraggedOriginal;
 
                     const segContBackward =
@@ -806,11 +804,11 @@ function CalendarContentMonth({
 
                     return (
                       <div
-                        key={`${layout.event.id}-${idx}-${segIdx}`}
+                        key={`${layout.event.ghostId || layout.event.id}-${idx}-${segIdx}`}
                         data-sourceid={realId}
                         onDragStart={(e) => e.preventDefault()}
                         onMouseDown={
-                          !isPreview
+                          !isGhost
                             ? (e) => {
                                 e.stopPropagation();
                                 handleEventMouseDown(e, layout.event);
@@ -818,17 +816,15 @@ function CalendarContentMonth({
                             : undefined
                         }
                         onClick={
-                          !isPreview
+                          !isGhost
                             ? (e) => handleEventClick(e, realId)
                             : undefined
                         }
                         onMouseEnter={
-                          !isPreview
-                            ? () => setHoveredEventId(realId)
-                            : undefined
+                          !isGhost ? () => setHoveredEventId(realId) : undefined
                         }
                         onMouseLeave={
-                          !isPreview ? () => setHoveredEventId(null) : undefined
+                          !isGhost ? () => setHoveredEventId(null) : undefined
                         }
                         className={`${styles.monthEvent}`}
                         style={{
@@ -836,30 +832,24 @@ function CalendarContentMonth({
                           width: `calc(${widthPct}% - 8px)`,
                           top: `${topPx}px`,
                           pointerEvents:
-                            isPreview || dragState.active ? "none" : "auto",
-                          cursor: isPreview ? "grabbing" : "pointer",
-                          zIndex: isPreview
+                            isGhost || dragState.active ? "none" : "auto",
+                          cursor: isGhost ? "grabbing" : "pointer",
+                          zIndex: isGhost
                             ? 50
                             : isUnsaved
                               ? 30
                               : isEditing || isInfoOpen
                                 ? 20
                                 : 10,
-                          opacity: isPreview
-                            ? 0.9
-                            : isDraggedOriginal
-                              ? 0.3
-                              : 1,
+                          opacity: isGhost ? 0.9 : isDraggedOriginal ? 0.3 : 1,
                           userSelect: "none",
                           WebkitUserSelect: "none",
                           boxShadow: hasShadow
                             ? "0px 0px 8px 1px #000000b5"
                             : "none",
                           filter:
-                            isHovered && !isPreview
-                              ? "brightness(0.95)"
-                              : "none",
-                          transition: isPreview
+                            isHovered && !isGhost ? "brightness(0.95)" : "none",
+                          transition: isGhost
                             ? "none"
                             : "left 0.1s ease, width 0.1s ease, top 0.1s ease, box-shadow 0.1s ease",
                         }}
@@ -890,7 +880,7 @@ function CalendarContentMonth({
                             className={`${styles.monthDayEvent}`}
                             style={{
                               backgroundColor:
-                                isActive || isPreview
+                                isActive || isGhost
                                   ? layout.event.color
                                   : "transparent",
                               transition: "background-color 0.1s ease",
@@ -907,7 +897,7 @@ function CalendarContentMonth({
                               className={styles.monthEventTitle}
                               style={{
                                 color:
-                                  isActive || isPreview
+                                  isActive || isGhost
                                     ? "#111"
                                     : "var(--text-light)",
                               }}
@@ -931,7 +921,7 @@ function CalendarContentMonth({
                 {slotsByDay.map((slots, dayIdx) => {
                   const dateStr = getLocalDateString(week[dayIdx].date);
                   const totalDayEvents = slots.filter(
-                    (ev) => ev && !ev.isPreview,
+                    (ev) => ev && !ev.isGhost,
                   ).length;
                   const dayMaxVisible = dayMaxVisibles[dayIdx];
 
@@ -939,7 +929,7 @@ function CalendarContentMonth({
                     const hiddenCount = totalDayEvents - dayMaxVisible;
                     const leftPct = (dayIdx / 7) * 100;
                     const topPx = baseTop + dayMaxVisible * 24;
-
+                    console.log(leftPct, topPx);
                     return (
                       <CustomButton
                         key={`more-${weekIndex}-${dayIdx}`}
@@ -954,7 +944,6 @@ function CalendarContentMonth({
                                 allEvents={globalAllEvents}
                                 userZone={userZone}
                                 styles={styles}
-                                daysOfWeek={daysOfWeek}
                                 handleEventMouseDown={handleEventMouseDown}
                                 handleEventClick={handleEventClick}
                                 hoveredEventId={hoveredEventId}
@@ -999,7 +988,6 @@ function ExpandedDayCarousel({
   allEvents,
   userZone,
   styles,
-  daysOfWeek,
   handleEventMouseDown,
   handleEventClick,
   hoveredEventId,
@@ -1109,7 +1097,7 @@ function ExpandedDayCarousel({
           const cellEndMs = cardDate.endOf("day").toMillis();
 
           const dayEvents = allEvents.filter((ev) => {
-            if (ev.isPreview) return false;
+            if (ev.isGhost) return false;
             const evStartMs = DateTime.fromISO(ev.timeRange.start, {
               zone: "utc",
             })
@@ -1128,12 +1116,10 @@ function ExpandedDayCarousel({
           });
 
           dayEvents.sort((a, b) => {
-            const aId = (a.sourceEventId || a.id).toString();
-            const bId = (b.sourceEventId || b.id).toString();
-            const aIsTop =
-              aId.startsWith("unsaved") || aId === String(editingEventId);
-            const bIsTop =
-              bId.startsWith("unsaved") || bId === String(editingEventId);
+            const aId = a.id.toString();
+            const bId = b.id.toString();
+            const aIsTop = a.isUnsaved || aId === String(editingEventId);
+            const bIsTop = b.isUnsaved || bId === String(editingEventId);
 
             if (aIsTop && !bIsTop) return -1;
             if (!aIsTop && bIsTop) return 1;
@@ -1224,7 +1210,7 @@ function ExpandedDayCarousel({
                     marginBottom: "6px",
                   }}
                 >
-                  {daysOfWeek[cardDate.weekday === 7 ? 0 : cardDate.weekday]}
+                  {DAYS_OF_WEEK[cardDate.weekday === 7 ? 0 : cardDate.weekday]}
                 </p>
                 <CustomButton
                   className={styles.dayButton}
@@ -1265,8 +1251,8 @@ function ExpandedDayCarousel({
                 }}
               >
                 {dayEvents.map((ev) => {
-                  const realId = ev.sourceEventId || ev.id;
-                  const isUnsaved = realId.toString().startsWith("unsaved");
+                  const realId = ev.id;
+                  const isUnsaved = ev.isUnsaved;
                   const isHovered = hoveredEventId === realId;
                   const isActive = isHovered || isUnsaved;
 

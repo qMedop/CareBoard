@@ -58,6 +58,7 @@ import {
   MONTHS_OF_THE_YEAR,
 } from "../../constants/constants";
 import { useUserSettings } from "../../contexts/UserSettingsContext";
+import { getUserZone } from "../../utils/getUserZone";
 
 function CalendarPage() {
   const { notify } = useNotification();
@@ -175,7 +176,7 @@ function CalendarPage() {
   const computePositionAndSize = (event) => {
     if (event.isFullDay) return [];
 
-    const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+    const userZone = getUserZone(timeZoneOffset);
 
     const eventStart = DateTime.fromISO(event.timeRange.start, {
       zone: "utc",
@@ -241,7 +242,7 @@ function CalendarPage() {
 
     function adjustEndDateIfMidnight(dateStr) {
       let dt = DateTime.fromISO(dateStr, { zone: "utc" }).setZone(
-        `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`,
+        getUserZone(timeZoneOffset),
       );
       if (dt.hour === 0 && dt.minute === 0) dt = dt.minus({ days: 1 });
       return new Date(dt.toISODate());
@@ -316,7 +317,7 @@ function CalendarPage() {
       if (durationHours >= 24 || event.isFullDay) {
         const eventStart = new Date(
           DateTime.fromISO(event.timeRange.start, { zone: "utc" })
-            .setZone(`UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`)
+            .setZone(getUserZone(timeZoneOffset))
             .toISODate(),
         );
         const eventEnd = adjustEndDateIfMidnight(event.timeRange.end);
@@ -362,7 +363,7 @@ function CalendarPage() {
     fullDayRaw.forEach((event) => {
       const start = new Date(
         DateTime.fromISO(event.timeRange.start, { zone: "utc" })
-          .setZone(`UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`)
+          .setZone(getUserZone(timeZoneOffset))
           .toISODate(),
       );
       const end = adjustEndDateIfMidnight(event.timeRange.end);
@@ -407,7 +408,7 @@ function CalendarPage() {
       const origId = ghost.id.replace("drag-", "");
       const start = new Date(
         DateTime.fromISO(ghost.timeRange.start, { zone: "utc" })
-          .setZone(`UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`)
+          .setZone(getUserZone(timeZoneOffset))
           .toISODate(),
       );
       const end = adjustEndDateIfMidnight(ghost.timeRange.end);
@@ -806,6 +807,7 @@ function CalendarPage() {
                       handleResizeStart={handleResizeStart}
                       handleNewEventClick={handleNewEventClick}
                       infoPopupEventId={infoPopupEventId}
+                      handleGridPointerDown={handleGridPointerDown}
                     />
                   ) : displayedView === "week" ? (
                     <CalendarContentWeek
@@ -852,7 +854,7 @@ function CalendarPage() {
 
 function expandRecurringEvents(events, viewStart, viewEnd, timeZoneOffset) {
   const expanded = [];
-  const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+  const userZone = getUserZone(timeZoneOffset);
   const rangeStart = DateTime.fromJSDate(viewStart)
     .setZone(userZone)
     .startOf("day");

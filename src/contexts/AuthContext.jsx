@@ -807,9 +807,6 @@ export function AuthProvider({ children }) {
   }
 
   async function signOut() {
-    setCurrentUser(null);
-    setAuthStatus("not_logged_in");
-
     try {
       const deviceId = await loadFromDB(IDB_METADATA_NAME).catch(() => null);
       const uid = auth.currentUser?.uid;
@@ -824,6 +821,8 @@ export function AuthProvider({ children }) {
 
     try {
       await firebaseSignOut(auth);
+      setCurrentUser(null);
+      setAuthStatus("not_logged_in");
     } catch (err) {
       devLog("SIGN_OUT", "Firebase sign-out threw (non-fatal)", err);
     }
@@ -996,7 +995,7 @@ export function AuthProvider({ children }) {
     } catch (err) {
       throw new AppError(
         AuthErrorCode.DECRYPTION_FAILED,
-        "Encryption failed.",
+        "DECRYPTION_FAILED.",
         err,
       );
     }
@@ -1522,6 +1521,10 @@ export function AuthProvider({ children }) {
         encrypted_event_data: ciphertext,
         event_data_iv: iv,
       };
+
+      if (isNonEmptyString(eventData.reassignGroupId)) {
+        updatePayload.group_id = eventData.reassignGroupId;
+      }
 
       if (data.ownerId === currentUser.id) {
         let participants = [currentUser.id];

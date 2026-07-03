@@ -1,7 +1,8 @@
 import { DateTime } from "luxon";
+import { getUserZone } from "./getUserZone";
 
 export function isAllDayEvent(event, timeZoneOffset) {
-  const userZone = `UTC${timeZoneOffset >= 0 ? "+" : ""}${timeZoneOffset}`;
+  const userZone = getUserZone(timeZoneOffset);
   const start = DateTime.fromISO(event.timeRange.start, {
     zone: "utc",
   }).setZone(userZone);
