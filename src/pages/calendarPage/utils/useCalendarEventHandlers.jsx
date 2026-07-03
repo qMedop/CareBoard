@@ -157,7 +157,10 @@ function useCalendarEventHandlers(props = {}) {
     (e, handleDiscard, attemptClose, eventIdToPass = null) => {
       const targetId = eventIdToPass || props.editingEventId;
       const isMobileView = window.innerWidth <= 768;
-
+      const targetDiv =
+        document.querySelector(`[data-eventid="${targetId}"]`) ||
+        e.currentTarget ||
+        document.body;
       if (isMobileView) {
         openPopup(
           "centered",
@@ -186,7 +189,7 @@ function useCalendarEventHandlers(props = {}) {
               popupId="edit-popup"
             />
           ),
-          e.currentTarget,
+          targetDiv,
           "right",
           24,
           attemptClose,

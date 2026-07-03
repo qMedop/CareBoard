@@ -36,26 +36,24 @@ function EventBlock({
   const isMobileGhost = isMobile && isGhost;
   const isMobileActive = isMobile && isActive;
 
-  const isDraged = String(dragSourceId) === event.id && !isGhost;
+  const isDraged = event.id === dragSourceId;
 
   const mobileGhostBg = (opacity) => `rgb(0 233 225 / ${opacity})`;
 
   const hasShadow = isActive || isGhost || isEditing || isInfoOpen;
   const zIndex = isGhost ? 50 : isUnsaved ? 30 : isActive ? 20 : 10;
   const opacity = isDraged ? 0.7 : 1;
-  const finalOpacity =
-    isMobileUnsaved && isDraged ? 0 : isGhostUnsaved ? 1 : opacity;
+  const finalOpacity = isMobileUnsaved && isDraged && !isGhost ? 0 : opacity;
   const editingStyle =
     isActive || isGhost
       ? {
           pointerEvents: isGhost ? "none" : "auto",
-          opacity: opacity,
+          opacity: finalOpacity,
           zIndex: zIndex,
           boxShadow:
             hasShadow || isGhostUnsaved ? "0px 0px 8px 1px #000000b5" : "none",
         }
       : {};
-
   return (
     <div
       ref={innerRef || blockRef}
@@ -67,18 +65,15 @@ function EventBlock({
         width: `${event?.size?.width || 90}%`,
         height: `${event?.size?.height}px`,
         zIndex: zIndex,
-        backgroundColor: `${isMobileUnsaved && isGhostUnsaved ? `${event?.editing ? "#ffffff00" : mobileGhostBg(0.2)}` : `${event?.color}99`}`,
+        backgroundColor: `${isMobileUnsaved ? `${event?.editing ? "#ffffff00" : mobileGhostBg(0.2)}` : `${event?.color}99`}`,
         cursor: isShared ? "pointer" : "grab",
-        border:
-          isGhostUnsaved && isMobileUnsaved
-            ? `1px solid ${mobileGhostBg(1)}`
-            : "none",
-        overflow: isGhostUnsaved && isMobileUnsaved ? "initial" : "hidden",
+        border: isMobileUnsaved ? `1px solid ${mobileGhostBg(1)}` : "none",
+        overflow: isMobileUnsaved ? "initial" : "hidden",
         opacity: finalOpacity,
         ...editingStyle,
       }}
       className={`${styles.eventBlock} ${event?.active ? styles.dragging : ""} ${isMobileUnsaved && styles.mobileUnsaved}`}
-      data-seventid={realId}
+      data-eventid={realId}
       id={event.id}
       onPointerDown={(e) => {
         e.stopPropagation();
@@ -88,7 +83,7 @@ function EventBlock({
         e.stopPropagation();
       }}
     >
-      {isMobileUnsaved && isGhostUnsaved ? (
+      {isMobileUnsaved ? (
         <div
           style={{
             opacity: event?.editing ? 0 : 1,
