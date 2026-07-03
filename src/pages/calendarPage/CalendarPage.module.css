@@ -419,7 +419,7 @@
 }
 .calendarContainer .monthLayout .dayCell.prev .dayButton,
 .calendarContainer .monthLayout .dayCell.next .dayButton {
-  opacity: 0.6;
+  opacity: 0.6 !important;
 }
 .calendarContainer .monthLayout .dayCell.today .dayButton {
   background: var(--main-cyan);
