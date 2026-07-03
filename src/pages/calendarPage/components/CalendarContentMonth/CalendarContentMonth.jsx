@@ -904,7 +904,11 @@ function CalendarContentMonth({
                             >
                               {`${DateTime.fromISO(layout.event.timeRange.start)
                                 .setZone(userZone)
-                                .toFormat("h:mm a")
+                                .toFormat(
+                                  userSettings?.timeFormat === "12h"
+                                    ? "h:mm a"
+                                    : "HH:mm",
+                                )
                                 .toLowerCase()
                                 .split(" ")
                                 .join(
