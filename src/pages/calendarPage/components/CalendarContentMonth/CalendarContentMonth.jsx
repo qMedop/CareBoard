@@ -902,14 +902,14 @@ function CalendarContentMonth({
                                     : "var(--text-light)",
                               }}
                             >
-                              {" "}
-                              {DateTime.fromISO(layout.event.timeRange.start)
+                              {`${DateTime.fromISO(layout.event.timeRange.start)
                                 .setZone(userZone)
                                 .toFormat("h:mm a")
                                 .toLowerCase()
                                 .split(" ")
-                                .join("")}
-                              {layout.event.title || "(No title)"}
+                                .join(
+                                  "",
+                                )} ${layout.event.title || "(No title)"}`}
                             </span>
                           </div>
                         )}
