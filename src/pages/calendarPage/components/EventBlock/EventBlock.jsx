@@ -38,11 +38,11 @@ function EventBlock({
 
   const isDraged = event.id === dragSourceId;
 
-  const mobileGhostBg = (opacity) => `rgb(0 233 225 / ${opacity})`;
+  const mobileGhostBg = (opacity) => `rgb(35 175 245 / ${opacity})`;
 
   const hasShadow = isActive || isGhost || isEditing || isInfoOpen;
   const zIndex = isGhost ? 50 : isUnsaved ? 30 : isActive ? 20 : 10;
-  const opacity = isDraged ? 0.7 : 1;
+  const opacity = isMobileUnsaved ? 1 : isDraged ? 0.7 : 1;
   const finalOpacity = isMobileUnsaved && isDraged && !isGhost ? 0 : opacity;
   const editingStyle =
     isActive || isGhost
@@ -67,7 +67,7 @@ function EventBlock({
         zIndex: zIndex,
         backgroundColor: `${isMobileUnsaved ? `${event?.editing ? "#ffffff00" : mobileGhostBg(0.2)}` : `${event?.color}99`}`,
         cursor: isShared ? "pointer" : "grab",
-        border: isMobileUnsaved ? `1px solid ${mobileGhostBg(1)}` : "none",
+        border: isMobileUnsaved ? `2px solid ${mobileGhostBg(1)}` : "none",
         overflow: isMobileUnsaved ? "initial" : "hidden",
         opacity: finalOpacity,
         ...editingStyle,

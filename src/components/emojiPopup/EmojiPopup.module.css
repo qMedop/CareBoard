@@ -61,9 +61,7 @@
   padding-left: 4px;
   position: sticky;
   top: 0;
-  background-color: var(
-    --popup-bg-color
-  ); /* Matches bg to cover emojis when scrolling */
+  background-color: var(--popup-bg-color);
   z-index: 1;
   padding-top: 4px;
   padding-bottom: 4px;
@@ -82,7 +80,9 @@
   cursor: pointer;
   padding: 6px;
   border-radius: 6px;
-  transition: background-color 0.1s, transform 0.1s;
+  transition:
+    background-color 0.1s,
+    transform 0.1s;
   display: flex;
   justify-content: center;
   align-items: center;

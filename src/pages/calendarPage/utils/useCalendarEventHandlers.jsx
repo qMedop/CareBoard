@@ -499,7 +499,6 @@ function useCalendarEventHandlers(props = {}) {
         const targetDiv =
           document.querySelector(`[data-eventid="${originalId}"]`) ||
           document.body;
-        console.log(document.querySelector(`[data-eventid="${originalId}"]`));
         showPopup("edit-popup", targetDiv);
         return;
       }
@@ -1278,7 +1277,6 @@ function useCalendarEventHandlers(props = {}) {
         color: "#ffd4a9ff",
       });
       setEditingEventId(draftId);
-
       if (window.innerWidth <= 768) return;
 
       const forceClose = { current: false };
@@ -2416,59 +2414,143 @@ function useCalendarEventHandlers(props = {}) {
 
   const handleGridPointerDown = useCallback(
     (e) => {
-      e.preventDefault();
-
       if (e.button !== 0 && e.pointerType !== "touch") return;
       if (isDragging.current || isResizing.current) return;
+
       if (props.editingEventId && addEditRef.current?.hasUnsavedChanges()) {
         addEditRef.current.requestClose();
         return;
       }
 
-      const columnElement = e.currentTarget;
-      const clientX = e.clientX;
-      const clientY = e.clientY;
+      e.preventDefault();
 
-      const initialPointerPos = { x: clientX, y: clientY };
+      const columnElement = e.currentTarget;
+
+      const initialPointerPos = {
+        x: e.clientX,
+        y: e.clientY,
+      };
+
+      const initialClientX = e.clientX;
+      const initialClientY = e.clientY;
+
+      const columnDateStr = columnElement.getAttribute("data-column-date");
+
+      if (!columnDateStr) return;
+
+      const cellHeight = isMobile ? mobileCellHeight : desktopCellHeight;
+
+      const userZone = getUserZone(timeZoneOffset);
+
+      let gestureCancelled = false;
+      let holdTriggered = false;
 
       document.body.style.userSelect = "none";
       document.body.style.webkitUserSelect = "none";
 
-      const rect = columnElement.getBoundingClientRect();
-      const clickY = clientY - rect.top;
-      const cellHeight = isMobile ? mobileCellHeight : desktopCellHeight;
-      const clickedHour = Math.floor(clickY / cellHeight);
-      const columnDateStr = columnElement.getAttribute("data-column-date");
+      /*
+       * Calculates the calendar time from CURRENT coordinates.
+       *
+       * This is important because the grid can move vertically
+       * between pointerdown and pointerup due to scrolling.
+       */
+      const getDateTimeFromCoordinates = (clientY) => {
+        const rect = columnElement.getBoundingClientRect();
 
-      const userZone = getUserZone(timeZoneOffset);
-      const calcDateTime = DateTime.fromISO(columnDateStr, { zone: userZone })
-        .startOf("day")
-        .plus({ hours: clickedHour });
+        const relativeY = clientY - rect.top;
 
-      const targetIsoString = calcDateTime
-        .toUTC()
-        .toISO({ suppressMilliseconds: true });
+        const clickedHour = Math.floor(relativeY / cellHeight);
 
+        return DateTime.fromISO(columnDateStr, {
+          zone: userZone,
+        })
+          .startOf("day")
+          .plus({ hours: clickedHour });
+      };
+
+      /*
+       * Remove all temporary listeners and restore DOM state.
+       */
+      const cleanupGridGesture = () => {
+        document.body.style.userSelect = "";
+        document.body.style.webkitUserSelect = "";
+
+        if (gridHoldTimerRef.current) {
+          clearTimeout(gridHoldTimerRef.current);
+          gridHoldTimerRef.current = null;
+        }
+
+        window.removeEventListener("pointermove", handleGridMoveCheck);
+
+        window.removeEventListener("pointerup", handleGridUpCheck);
+
+        window.removeEventListener("pointercancel", handleGridCancel);
+      };
+
+      /*
+       * Cancel the tap/hold interaction.
+       */
+      const cancelGridGesture = () => {
+        gestureCancelled = true;
+        cleanupGridGesture();
+      };
+
+      /*
+       * HOLD TIMER
+       *
+       * If the pointer stays still for 500ms,
+       * create the draft and immediately enter resize mode.
+       */
       gridHoldTimerRef.current = setTimeout(() => {
-        if (navigator.vibrate) navigator.vibrate(40);
+        if (gestureCancelled) return;
+
+        holdTriggered = true;
+
+        if (navigator.vibrate) {
+          navigator.vibrate(40);
+        }
+
+        /*
+         * Recalculate using the CURRENT grid position.
+         *
+         * The grid may have moved since pointerdown.
+         */
+        const calcDateTime = getDateTimeFromCoordinates(initialClientY);
+
+        const targetIsoString = calcDateTime.toUTC().toISO({
+          suppressMilliseconds: true,
+        });
 
         const draftId = crypto.randomUUID();
 
         const startTimeUTC = targetIsoString;
-        const endTimeUTC = calcDateTime
-          .plus({ hours: 1 })
-          .toUTC()
-          .toISO({ suppressMilliseconds: true });
+
+        const endTimeUTC = calcDateTime.plus({ hours: 1 }).toUTC().toISO({
+          suppressMilliseconds: true,
+        });
 
         const mockEvent = {
           id: draftId,
+
           isUnsaved: true,
+
           title: "",
           description: "",
-          timeRange: { start: startTimeUTC, end: endTimeUTC },
-          originalTimeRange: { start: startTimeUTC, end: endTimeUTC },
+
+          timeRange: {
+            start: startTimeUTC,
+            end: endTimeUTC,
+          },
+
+          originalTimeRange: {
+            start: startTimeUTC,
+            end: endTimeUTC,
+          },
+
           isFullDay: false,
+
           color: defaultEventColor,
+
           columnDate: columnDateStr,
         };
 
@@ -2477,92 +2559,207 @@ function useCalendarEventHandlers(props = {}) {
         setNewEvent(mockEvent);
         setEditingEventId(draftId);
 
+        /*
+         * Wait for React to render the draft event into the DOM.
+         */
         setTimeout(() => {
+          if (gestureCancelled) return;
+
           const liveEventBlock = document.querySelector(
             `[data-eventid="${draftId}"]`,
           );
-          if (liveEventBlock) {
-            draggableEventRef.current = {
-              ...mockEvent,
-              _element: liveEventBlock,
+
+          if (!liveEventBlock) return;
+
+          draggableEventRef.current = {
+            ...mockEvent,
+            _element: liveEventBlock,
+          };
+
+          if (isMobile) {
+            mobileInitialTouch.current = {
+              x: initialClientX,
+              y: initialClientY,
             };
-            if (isMobile) {
-              mobileInitialTouch.current = { x: clientX, y: clientY };
-              mobileEventRef.current = {
-                ...mockEvent,
-                _element: liveEventBlock,
-                _e: e,
-              };
-              setDraggableEvent({
-                ...mockEvent,
-                id: crypto.randomUUID(),
-                active: true,
-                isGhost: true,
-              });
-              setDragSourceId(mockEvent.id);
 
-              const mockTouchCoordinates = { clientX, clientY };
-              handleTouchMove(mockTouchCoordinates, "resize");
+            mobileEventRef.current = {
+              ...mockEvent,
 
-              document.addEventListener("touchmove", handleTouchMove, {
-                passive: false,
-              });
-              document.addEventListener("touchend", handleTouchEnd);
-              document.addEventListener("touchcancel", handleTouchEnd);
-            } else {
-              handleResizeStart(e, mockEvent, liveEventBlock);
-            }
+              _element: liveEventBlock,
+
+              _e: e,
+            };
+
+            setDraggableEvent({
+              ...mockEvent,
+
+              /*
+               * Keep your existing ghost-ID behavior.
+               */
+              id: crypto.randomUUID(),
+
+              active: true,
+              isGhost: true,
+            });
+
+            setDragSourceId(mockEvent.id);
+
+            /*
+             * Immediately initialize resize positioning.
+             */
+            handleTouchMove(
+              {
+                clientX: initialClientX,
+                clientY: initialClientY,
+              },
+              "resize",
+            );
+
+            document.addEventListener("touchmove", handleTouchMove, {
+              passive: false,
+            });
+
+            document.addEventListener("touchend", handleTouchEnd);
+
+            document.addEventListener("touchcancel", handleTouchEnd);
+          } else {
+            handleResizeStart(e, mockEvent, liveEventBlock);
           }
         }, 20);
 
         gridHoldTimerRef.current = null;
       }, 500);
 
+      /*
+       * POINTER MOVE
+       *
+       * Movement means this was a scroll/gesture,
+       * not a tap.
+       */
       const handleGridMoveCheck = (moveEv) => {
+        if (gestureCancelled || holdTriggered) return;
+
         const dx = moveEv.clientX - initialPointerPos.x;
+
         const dy = moveEv.clientY - initialPointerPos.y;
-        if (Math.sqrt(dx * dx + dy * dy) > 5) {
-          if (gridHoldTimerRef.current) {
-            clearTimeout(gridHoldTimerRef.current);
-            gridHoldTimerRef.current = null;
-            document.body.style.userSelect = "";
-            document.body.style.webkitUserSelect = "";
-          }
+
+        const distance = Math.hypot(dx, dy);
+
+        if (distance > 5) {
+          cancelGridGesture();
         }
       };
 
-      const handleGridUpCheck = (upEv) => {
-        document.body.style.userSelect = "";
-        document.body.style.webkitUserSelect = "";
-
-        if (gridHoldTimerRef.current) {
-          clearTimeout(gridHoldTimerRef.current);
-          gridHoldTimerRef.current = null;
-
-          const clickSyntheticEvent = {
-            ...upEv,
-            clientX: upEv.clientX,
-            clientY: upEv.clientY,
-            currentTarget: columnElement,
-            syntheticDateId: targetIsoString,
-          };
-          handleNewEventClick(clickSyntheticEvent);
+      /*
+       * POINTER CANCEL
+       *
+       * Browsers commonly fire this when native scrolling
+       * takes control of the interaction.
+       */
+      const handleGridCancel = () => {
+        if (holdTriggered) {
+          cleanupGridGesture();
+          return;
         }
-        window.removeEventListener("pointermove", handleGridMoveCheck);
-        window.removeEventListener("pointerup", handleGridUpCheck);
+
+        cancelGridGesture();
+      };
+
+      /*
+       * POINTER UP
+       */
+      const handleGridUpCheck = (upEv) => {
+        /*
+         * The hold already fired.
+         *
+         * The touch/resize handlers now own the interaction.
+         */
+        if (holdTriggered) {
+          cleanupGridGesture();
+          return;
+        }
+
+        if (gestureCancelled) {
+          cleanupGridGesture();
+          return;
+        }
+
+        /*
+         * If the timer still exists, this was a normal tap.
+         */
+        const wasTap = gridHoldTimerRef.current !== null;
+
+        cleanupGridGesture();
+
+        if (!wasTap) return;
+
+        /*
+         * IMPORTANT:
+         *
+         * Calculate the event time from pointerup coordinates
+         * and the CURRENT grid bounding rect.
+         */
+        const releaseDateTime = getDateTimeFromCoordinates(upEv.clientY);
+
+        const releaseIsoString = releaseDateTime.toUTC().toISO({
+          suppressMilliseconds: true,
+        });
+
+        /*
+         * Do NOT spread upEv.
+         *
+         * PointerEvent properties live on the prototype and
+         * spreading it does not reliably copy the event.
+         */
+        const clickSyntheticEvent = {
+          clientX: upEv.clientX,
+          clientY: upEv.clientY,
+
+          currentTarget: columnElement,
+
+          syntheticDateId: releaseIsoString,
+
+          pointerType: upEv.pointerType,
+
+          preventDefault: () => {
+            upEv.preventDefault();
+          },
+
+          stopPropagation: () => {
+            upEv.stopPropagation();
+          },
+        };
+
+        handleNewEventClick(clickSyntheticEvent);
       };
 
       window.addEventListener("pointermove", handleGridMoveCheck);
+
       window.addEventListener("pointerup", handleGridUpCheck);
+
+      window.addEventListener("pointercancel", handleGridCancel);
     },
     [
-      closePopup,
+      props.editingEventId,
+
+      addEditRef,
+
       isMobile,
+      mobileCellHeight,
+      desktopCellHeight,
+
       timeZoneOffset,
+      defaultEventColor,
+
       handleNewEventClick,
       handleResizeStart,
+      handleTouchMove,
+      handleTouchEnd,
+
       setNewEvent,
       setEditingEventId,
+      setDraggableEvent,
+      setDragSourceId,
     ],
   );
 

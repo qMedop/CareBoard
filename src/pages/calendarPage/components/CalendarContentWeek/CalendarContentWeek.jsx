@@ -17,7 +17,6 @@ import { useUserSettings } from "../../../../contexts/UserSettingsContext";
 
 function CalendarContentWeek({
   currentDate,
-  region = "EU",
   renderEvents,
   topHeight,
   setFullDayExpanded,
@@ -124,13 +123,6 @@ function CalendarContentWeek({
           <div className={styles.border}></div>
         </div>
         <div className={styles.left}>
-          {isMobile && (
-            <div className={styles.mobileTop}>
-              <p className={styles.month}>
-                {MONTHS_OF_THE_YEAR[currentDate.getMonth()].toUpperCase()}
-              </p>
-            </div>
-          )}
           <div className={styles.top}>
             {Array.from({ length: 7 }, (_, index) => {
               const date = new Date(startOfWeek);
@@ -315,10 +307,13 @@ function CalendarContentWeek({
       >
         <div className={styles.time}>
           {Array.from({ length: 24 }, (_, index) => (
-            <div key={`time-${index}`} className={styles.timeBlock}>
+            <div
+              key={`time-${index}`}
+              className={`${styles.timeBlock} ${!is24HourFormat && styles.timeBlock12h}`}
+            >
               <p>
                 {is24HourFormat
-                  ? `${index.toString().padStart(2, "0")}${!isMobile ? ":00" : ""}`
+                  ? `${(index + 1).toString().padStart(2, "0")}${!isMobile ? ":00" : ""}`
                   : `${index < 12 ? index + 1 : index - 11}`}
               </p>
               {!is24HourFormat && (
@@ -373,6 +368,7 @@ function CalendarContentWeek({
                   >
                     {isTodayColumn && (
                       <div
+                        data-id="current-hour-line"
                         className={styles.currentHour}
                         style={{
                           top: `${currentLineTop}px`,

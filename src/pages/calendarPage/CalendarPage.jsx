@@ -543,7 +543,7 @@ function CalendarPage() {
   ]);
 
   useLayoutEffect(() => {
-    const MAX_WIDTH_PCT = 90;
+    const MAX_WIDTH_PCT = isMobile ? 100 : 90;
     const GAP_PX = 4;
 
     const isOverlapping = (a, b) => {
@@ -675,8 +675,8 @@ function CalendarPage() {
         for (const event of group) {
           const leftPct =
             event._columnIndex * (widthPct + (GAP_PX * 100) / 300);
-          event.position.x = leftPct;
-          event.size.width = widthPct;
+          event.position.x = isMobile && event.isGhost ? 0 : leftPct;
+          event.size.width = isMobile && event.isGhost ? 100 : widthPct;
           delete event._columnIndex;
         }
       }
@@ -754,6 +754,18 @@ function CalendarPage() {
       }`}
       style={{ position: "relative", overflow: "hidden" }}
     >
+      {isMobile && (
+        <div className={styles.mobileTop}>
+          <CustomButton
+            ClickEffect={"scale"}
+            className={`${styles.monthBtn} default`}
+          >
+            <p className={styles.month}>
+              {MONTHS_OF_THE_YEAR[currentDate.getMonth()].toUpperCase()}
+            </p>
+          </CustomButton>
+        </div>
+      )}
       {isMobile ? (
         <MobileCalendarPager
           currentDate={swipingDate}
