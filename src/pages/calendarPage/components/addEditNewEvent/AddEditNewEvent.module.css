@@ -138,7 +138,7 @@
   width: calc(100% - 8px - 40px);
 }
 .addEditEvent .bottom .contContnet > div button {
-  background-color: var(--element-bg-color);
+  background-color: #252b40;
   padding: 4px 8px;
   border-radius: 24px;
   width: 100%;

@@ -5,6 +5,7 @@ import { DateTime } from "luxon";
 import { LockIcon, PlusIcon, RepeatIcon } from "../../../../assets/icons/Icon";
 import defaultAvatar from "../../../../assets/svg/user-avatar.svg";
 import { useUserSettings } from "../../../../contexts/UserSettingsContext";
+
 function EventBlock({
   event,
   handlePointerDown,
@@ -34,7 +35,6 @@ function EventBlock({
 
   const isMobileUnsaved = isMobile && isUnsaved;
   const isMobileGhost = isMobile && isGhost;
-  const isMobileActive = isMobile && isActive;
 
   const isDraged = event.id === dragSourceId;
 
@@ -65,7 +65,7 @@ function EventBlock({
         width: `${event?.size?.width || 90}%`,
         height: `${event?.size?.height}px`,
         zIndex: zIndex,
-        backgroundColor: `${isMobileUnsaved ? `${event?.editing ? "#ffffff00" : mobileGhostBg(0.2)}` : `${event?.color}99`}`,
+        backgroundColor: `${isMobileUnsaved ? `${event?.editing ? "#ffffff00" : mobileGhostBg(0.2)}` : `${event?.color}`}`,
         cursor: isShared ? "pointer" : "grab",
         border: isMobileUnsaved ? `2px solid ${mobileGhostBg(1)}` : "none",
         overflow: isMobileUnsaved ? "initial" : "hidden",
@@ -134,11 +134,6 @@ function EventBlock({
           {!isShared && (
             <span
               onPointerDown={(e) => {
-                // Mobile has no resize span - it detects resize spatially
-                // via edge-threshold checks in handlePointerDown/
-                // handleGridPointerDown instead. Let touch presses on this
-                // strip fall through to the parent block so that logic
-                // still runs.
                 if (e.pointerType === "touch") return;
                 e.stopPropagation();
                 onResizeStart(e, event, blockRef.current);

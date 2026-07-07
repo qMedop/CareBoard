@@ -387,13 +387,13 @@
   border: 1px solid var(--calender-borders);
   border-radius: 20px;
 }
-.calendarContainer .monthLayout > div {
+.calendarContainer .monthLayout > .weekRow {
   display: flex;
   width: 100%;
   height: calc(100% - 84px);
   position: relative;
 }
-.calendarContainer .monthLayout > div > div {
+.calendarContainer .monthLayout > .weekRow > .dayCell {
   width: 100%;
   display: flex;
   align-items: center;
@@ -405,7 +405,7 @@
 .calendarContainer .monthLayout .weekRow .dayCell:last-child {
   border-right: none;
 }
-.calendarContainer .monthLayout > div:last-child > div {
+.calendarContainer .monthLayout > .weekRow:last-child > .dayCell {
   border-bottom: none;
 }
 .calendarContainer .monthLayout .dayCell .dayOfWeek {
@@ -739,7 +739,6 @@ body:global(.resizing) .calendarContainer .eventBlock:not(.dragging) {
 }
 .calendarContainer .monthLayout .monthEvent {
   position: absolute;
-  height: 20px;
   font-weight: 500;
   font-size: 12px;
   color: var(--text-dark);
@@ -766,7 +765,7 @@ body:global(.resizing) .calendarContainer .eventBlock:not(.dragging) {
   box-shadow: 0px 0px 8px 1px #000000b5;
 }
 .calendarContainer .monthLayout .multiDayMonthEvent {
-  height: 100%;
+  min-height: 20px;
   border-radius: 4px;
   padding: 0 8px;
   display: flex;
@@ -776,15 +775,15 @@ body:global(.resizing) .calendarContainer .eventBlock:not(.dragging) {
 .calendarContainer .monthLayout .monthDayEvent {
   display: flex;
   align-items: center;
-  height: 20px;
-  padding: 0 6px;
+  min-height: 20px;
+  padding: 0 2px;
   border-radius: 4px;
 }
 .calendarContainer .monthLayout .monthDayEvent .circle {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  margin-right: 6px;
+  margin-right: 4px;
 }
 .calendarContainer .monthLayout .monthDayEvent span {
   font-size: 12px;
@@ -794,7 +793,6 @@ body:global(.resizing) .calendarContainer .eventBlock:not(.dragging) {
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
-  margin-left: 4px;
 }
 .daysPopup {
   position: fixed;
@@ -1005,6 +1003,8 @@ body:global(.mobile) {
     --top-space: 6px;
     --space-left: 4px;
     --items-width: 14.28%;
+    --calender-borders: #1d202d;
+
     background-color: transparent;
   }
   .calendarContainer .bottom::-webkit-scrollbar,
@@ -1108,6 +1108,7 @@ body:global(.mobile) {
   }
   .mobileTop .monthBtn p {
     font-size: 20px;
+    line-height: 24px;
     font-weight: bold;
     color: var(--text-light);
   }
@@ -1159,6 +1160,102 @@ body:global(.mobile) {
     border-radius: 0px;
     border: 0px;
     justify-self: center;
+  }
+  .monthTopWeek {
+    display: flex;
+    width: 100%;
+    padding: 0 6px 0px 4px;
+    margin: 12px 0 8px 0;
+  }
+  .monthTopWeek > div {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+  .monthTopWeek > div p {
+    font-size: 12px;
+    line-height: 15px;
+  }
+  .calendarContainer .monthLayout {
+    gap: 2px;
+    .weekRow {
+      gap: 2px;
+    }
+    .weekRow .monthEventContainer {
+      overflow: hidden;
+    }
+    .weekRow:last-child .dayCell {
+      border-bottom: 1px solid var(--calender-borders);
+    }
+    .dayCell {
+      border: 1px solid var(--calender-borders);
+      border-radius: 4px;
+      padding-top: 4px;
+    }
+    .dayCell.active {
+      border: 1px solid #555555;
+    }
+    /* .dayCell::after {
+      content: "";
+      position: absolute;
+      background-color: var(--bg-color, var(--calender-borders));
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      z-index: -1;
+      opacity: 0.2;
+      filter: brightness(0.4);
+    } */
+    .dayCell.today .dayButton {
+      position: relative;
+      background: none;
+      box-shadow: none;
+      border-radius: 4px;
+    }
+    .dayCell p {
+      position: relative;
+      font-size: 12px;
+      color: var(--text-light);
+    }
+    .dayCell.today p::after {
+      position: absolute;
+      content: "";
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 22px;
+      height: 22px;
+      z-index: -1;
+      background: rgba(50, 230, 227, 0.6);
+      border-radius: 4px;
+      box-shadow: 0px 0px 4px 2px rgba(0, 0, 0, 0.25);
+    }
+    .monthEvent .multiDayMonthEvent {
+      padding: 0 0px 0 2px;
+    }
+    .monthEvent .monthDayEvent {
+      padding: 0;
+    }
+    .monthEvent .monthDayEvent .circle {
+      width: 2px;
+      height: -webkit-fill-available;
+      margin-right: 2px;
+      border-radius: 2px;
+    }
+    .monthEvent span {
+      font-size: 11px;
+      margin: 0;
+      display: -webkit-box;
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow-wrap: anywhere;
+      word-break: break-all;
+      white-space: initial;
+    }
   }
 }
 

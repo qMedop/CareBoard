@@ -70,12 +70,13 @@ function CalendarPage() {
     loadedEvents,
     draggableEvent,
     setNewEvent,
-    region = "EU",
     activeFilterIds,
     setActiveFilterIds,
     isMobile,
     swipingDate,
   } = useTime();
+  const { userSettings } = useUserSettings();
+
   const navigate = useNavigate();
 
   const { view, year, month, day } = useParams();
@@ -118,8 +119,17 @@ function CalendarPage() {
     scrollTimeoutRef,
   });
 
-  const { userSettings } = useUserSettings();
   const weekStartDay = userSettings.weekStartDay;
+
+  const startOfWeek = new Date(currentDate);
+  const dayOfWeek = startOfWeek.getDay();
+
+  const offset =
+    weekStartDay <= dayOfWeek
+      ? weekStartDay - dayOfWeek
+      : weekStartDay - dayOfWeek - 7;
+
+  startOfWeek.setDate(startOfWeek.getDate() + offset);
 
   useEffect(() => {
     setMounted(true);
@@ -152,7 +162,7 @@ function CalendarPage() {
       end.setDate(end.getDate() + 7);
     }
     return { viewStart: start, viewEnd: end };
-  }, [currentDate, view, region]);
+  }, [currentDate, view]);
 
   //filter the events based on the user choice of his friends
   const visibleEvents = useMemo(() => {
@@ -535,7 +545,6 @@ function CalendarPage() {
     newEvent,
     draggableEvent,
     view,
-    region,
     currentDate,
     fullDayExpanded,
     editingEventId,
@@ -738,7 +747,6 @@ function CalendarPage() {
   });
 
   prevDateRef.current = currentDate;
-
   return (
     <div
       className={`${styles.calendarContainer} ${
@@ -764,6 +772,26 @@ function CalendarPage() {
               {MONTHS_OF_THE_YEAR[currentDate.getMonth()].toUpperCase()}
             </p>
           </CustomButton>
+        </div>
+      )}
+      {isMobile && displayedView === "month" && (
+        <div className={styles.monthTopWeek}>
+          {Array.from({ length: 7 }, (_, index) => {
+            const date = new Date(startOfWeek);
+            date.setDate(startOfWeek.getDate() + index);
+            const isToday = date.toDateString() === new Date().toDateString();
+            const dateStr = getLocalDateString(date);
+            const actualDay = date.getDay();
+            return (
+              <div key={dateStr} className={styles.dayBlock}>
+                <p>
+                  {isMobile
+                    ? DAYS_OF_WEEK[actualDay].slice(0, 1)
+                    : DAYS_OF_WEEK[actualDay]}
+                </p>
+              </div>
+            );
+          })}
         </div>
       )}
       {isMobile ? (
@@ -1139,15 +1167,13 @@ function CalendarNavControlls() {
       currentDate.getMonth() === now.getMonth() &&
       currentDate.getDate() === now.getDate()
     ) {
-      return; // Already viewing today
+      return;
     }
 
     const calculatedDirection = currentDate > now ? "prev" : "next";
     setDirection(calculatedDirection);
 
     if (isMobile) {
-      // 🟢 MOBILE ANIMATION TRACK TRIGGER:
-      // Dispatch a custom event to notify the MobileCalendarPager to slide over smoothly
       const todayAnimationEvent = new CustomEvent("animateToToday", {
         detail: { direction: calculatedDirection, targetDate: now },
       });

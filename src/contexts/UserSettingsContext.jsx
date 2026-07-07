@@ -4,7 +4,7 @@ const UserSettingsContext = createContext();
 
 function UserSettingsProvider({ children }) {
   const [userSettings, setUserSettings] = useState({
-    weekStartDay: 1,
+    weekStartDay: 6,
     timeFormat: "24h",
     language: "en",
     defaultView: "week",

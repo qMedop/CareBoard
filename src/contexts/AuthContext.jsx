@@ -30,7 +30,7 @@ import {
 import { auth, db } from "../../firebase";
 import {
   EVENT_AVAILABILITY,
-  EVENT_BG,
+  DEFAULT_EVENT_COLOR,
   EVENT_VISIBILITY,
 } from "../constants/constants";
 
@@ -1265,7 +1265,7 @@ export function AuthProvider({ children }) {
       const eventPlaintext = {
         title: eventData.title ?? "",
         description: eventData.description ?? "",
-        color: eventData.color ?? EVENT_BG,
+        color: eventData.color ?? DEFAULT_EVENT_COLOR,
         emoji: eventData.emoji ?? "",
         visibility: eventData.visibility ?? EVENT_VISIBILITY,
         availability: eventData.availability ?? EVENT_AVAILABILITY,
@@ -1409,6 +1409,7 @@ export function AuthProvider({ children }) {
     if (!currentUser?.id || !currentUser.userDek) {
       return { success: false, error: "Not authenticated." };
     }
+    console.log(eventData);
     try {
       const eventId = eventData.sourceEventId ?? eventData.id;
       if (!isNonEmptyString(eventId)) {

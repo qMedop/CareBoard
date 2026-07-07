@@ -26,7 +26,7 @@ function useCalendarEventHandlers(props = {}) {
     loadedEvents,
     isMobile,
     newEvent,
-    dragSourceId, // Used specifically for identity matching against ghosts
+    dragSourceId,
     setDragSourceId,
   } = useTime();
   const { openPopup, closePopup, hidePopup, showPopup } = usePopup();
@@ -57,7 +57,7 @@ function useCalendarEventHandlers(props = {}) {
   const desktopCellHeight = 52;
   const defaultEventDurationMinutes = 60;
   const defaultEventColor = "#ffd4a9ff";
-  const intervalSnapMinutes = 15;
+  const intervalSnapMinutes = 10;
 
   const autoScrollState = useRef({
     active: false,
@@ -88,13 +88,13 @@ function useCalendarEventHandlers(props = {}) {
   }, [loadedEvents]);
 
   // Handle cross-platform context menu suppressions cleanly
-  useEffect(() => {
-    const suppressMenu = (e) => e.preventDefault();
-    document.addEventListener("contextmenu", suppressMenu);
-    return () => {
-      document.removeEventListener("contextmenu", suppressMenu);
-    };
-  }, []);
+  // useEffect(() => {
+  //   const suppressMenu = (e) => e.preventDefault();
+  //   document.addEventListener("contextmenu", suppressMenu);
+  //   return () => {
+  //     document.removeEventListener("contextmenu", suppressMenu);
+  //   };
+  // }, []);
 
   const createConsoleLogProgress = (operationId) => (status) => {
     const notificationId = `event-save-progress-${operationId}`;
@@ -1320,14 +1320,18 @@ function useCalendarEventHandlers(props = {}) {
   const isScrolling = props.isScrolling;
   const setIsScrolling = props.setIsScrolling;
   const scrollTimeoutRef = props.scrollTimeoutRef;
+  const mobileGrabOffset = useRef({ x: 0, y: 0 });
+  const mobileResizeOffset = useRef(0);
 
   const handleHoldingMode = useCallback(
     (e, event, element) => {
       isHolding.current = true;
+
       if (navigator.vibrate) navigator.vibrate(50);
 
       const currentLoadedEvents = loadedEventsRef.current || [];
       const original = currentLoadedEvents.find((ev) => ev.id === event.id);
+
       originalEventSnapshot.current = original
         ? JSON.parse(JSON.stringify(original))
         : null;
@@ -1335,68 +1339,78 @@ function useCalendarEventHandlers(props = {}) {
       const elements = document.querySelectorAll(
         `[data-eventid="${event.id}"]`,
       );
+
       elements.forEach((el) => el.classList.add(styles.editing));
       editingElementRef.current = Array.from(elements);
 
       const timeRangeToUse = event.originalTimeRange || event.timeRange;
-      const container = dayTasksDiv.current;
-      const { _element, _e, ...cleanEvent } = event;
-      let relativeTop = 0;
+      const container = getActiveContainer();
 
-      if (container) {
-        const containerRect = container.getBoundingClientRect();
-        const elementRect = element.getBoundingClientRect();
-        const relativeLeft = elementRect.left - containerRect.left;
-        relativeTop = elementRect.top - containerRect.top;
+      if (!container) return;
 
-        const cellHeight = 64;
-        const initialTouchX = mobileInitialTouch.current.x;
-        const initialTouchY = mobileInitialTouch.current.y;
-        const scrollTop = container.scrollTop;
+      const scrollContainer =
+        container.closest("#bottom") ||
+        container.querySelector("#bottom") ||
+        container;
 
-        const rawY = initialTouchY - containerRect.top + scrollTop;
-        const minutesFromTopOfColumn = (rawY / cellHeight) * 60;
-        const columns = getColumnsInView() || [];
-        const matchedColumn = columns.find(
-          (col) =>
-            initialTouchX >= col.getBoundingClientRect().left &&
-            initialTouchX <= col.getBoundingClientRect().right,
-        );
+      if (!scrollContainer) return;
 
-        if (matchedColumn) {
-          const userZone = getUserZone(timeZoneOffset);
-          const pointerTime = DateTime.fromISO(
-            matchedColumn.getAttribute("data-column-date"),
-            { zone: userZone },
-          ).plus({ minutes: minutesFromTopOfColumn });
-          const eventStartTimeInUserZone = DateTime.fromISO(
-            timeRangeToUse.start,
-            { zone: "utc" },
-          ).setZone(userZone);
+      const elementRect = element.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
 
-          dragTimeOffsetMs.current = pointerTime
-            .diff(eventStartTimeInUserZone)
-            .as("milliseconds");
-          dragStartColumnDateRef.current =
-            matchedColumn.getAttribute("data-column-date");
-        }
+      const initialTouchX = mobileInitialTouch.current.x;
+      const initialTouchY = mobileInitialTouch.current.y;
 
-        setDraggableEvent({
-          ...cleanEvent,
-          id: event.id,
-          ghostId: `ghost-${event.id}`,
-          originalTimeRange: timeRangeToUse,
-          timeRange: timeRangeToUse,
-          active: true,
-          isGhost: true,
-          size: {
-            height: `${elementRect.height}px`,
-            width: `${elementRect.width}px`,
-          },
-          position: { x: relativeLeft + "px", y: relativeTop },
-        });
-        setDragSourceId(event.id);
+      mobileGrabOffset.current = {
+        x: initialTouchX - elementRect.left,
+        y: initialTouchY - elementRect.top,
+      };
+
+      const relativeLeft = elementRect.left - containerRect.left;
+      const relativeTop = elementRect.top - containerRect.top;
+
+      const columns = getColumnsInView() || [];
+
+      const matchedColumn = columns.find((col) => {
+        const rect = col.getBoundingClientRect();
+
+        return initialTouchX >= rect.left && initialTouchX <= rect.right;
+      });
+
+      if (matchedColumn) {
+        dragStartColumnDateRef.current =
+          matchedColumn.getAttribute("data-column-date");
       }
+
+      const { _element, _e, ...cleanEvent } = event;
+
+      const ghostState = {
+        ...cleanEvent,
+        id: event.id,
+        ghostId: `ghost-${event.id}`,
+        originalTimeRange: timeRangeToUse,
+        timeRange: timeRangeToUse,
+        active: true,
+        isGhost: true,
+        size: {
+          height: `${elementRect.height}px`,
+          width: `${elementRect.width}px`,
+        },
+        position: {
+          x: `${relativeLeft}px`,
+          y: relativeTop,
+        },
+        columnDate:
+          event.columnDate ||
+          DateTime.fromISO(timeRangeToUse.start, {
+            zone: "utc",
+          })
+            .setZone(getUserZone(timeZoneOffset))
+            .toISODate(),
+      };
+
+      setDraggableEvent(ghostState);
+      setDragSourceId(event.id);
 
       mobileEventRef.current = {
         ...cleanEvent,
@@ -1404,140 +1418,156 @@ function useCalendarEventHandlers(props = {}) {
         _e: e,
         initialY: relativeTop,
       };
-      draggableEventRef.current = {
-        ...cleanEvent,
-        originalTimeRange: timeRangeToUse,
-        timeRange: timeRangeToUse,
-        columnDate:
-          event.columnDate ||
-          DateTime.fromISO(timeRangeToUse.start)
-            .setZone(getUserZone(timeZoneOffset))
-            .toISODate(),
-      };
+
+      draggableEventRef.current = ghostState;
     },
     [
-      dayTasksDiv,
-      setDraggableEvent,
-      timeZoneOffset,
+      getActiveContainer,
       getColumnsInView,
+      setDraggableEvent,
       setDragSourceId,
+      timeZoneOffset,
     ],
   );
 
   const calculateMobileEventPosition = useCallback(
     (clientX, clientY, originalTimeRange) => {
       const container = getActiveContainer();
-      if (!container) return null;
 
-      const columns = getColumnsInView() || [];
-      const matchedColumn = columns.find((col) => {
-        const rect = col.getBoundingClientRect();
-        return clientX >= rect.left && clientX <= rect.right;
-      });
-      if (!matchedColumn) return null;
+      if (!container) return null;
 
       const scrollContainer =
         container.closest("#bottom") ||
         container.querySelector("#bottom") ||
         container;
+
+      if (!scrollContainer) return null;
+
+      const columns = getColumnsInView() || [];
+
+      const matchedColumn = columns.find((col) => {
+        const rect = col.getBoundingClientRect();
+
+        return clientX >= rect.left && clientX <= rect.right;
+      });
+
+      if (!matchedColumn) return null;
+
       const scrollRect = scrollContainer.getBoundingClientRect();
-
-      const cellHeight = 64;
-      const snapHeight = cellHeight / 4;
-
-      const rawY = clientY - scrollRect.top + scrollContainer.scrollTop - 32;
-      let minutesFromTopOfColumn = (rawY / cellHeight) * 60;
 
       const originalStart = DateTime.fromISO(originalTimeRange.start, {
         zone: "utc",
       });
+
       const originalEnd = DateTime.fromISO(originalTimeRange.end, {
         zone: "utc",
       });
+
       const durationMinutes = originalEnd.diff(
         originalStart,
         "minutes",
       ).minutes;
 
-      const minMinutes = 0;
-      const maxMinutes = 1440 - durationMinutes;
+      const rawTop =
+        clientY -
+        mobileGrabOffset.current.y -
+        scrollRect.top +
+        scrollContainer.scrollTop;
 
-      if (minutesFromTopOfColumn < minMinutes) {
-        minutesFromTopOfColumn = minMinutes;
-      } else if (minutesFromTopOfColumn > maxMinutes) {
-        minutesFromTopOfColumn = Math.max(minMinutes, maxMinutes);
-      }
+      const maxTop =
+        mobileCellHeight * 24 - (durationMinutes / 60) * mobileCellHeight;
+
+      const visualTop = Math.max(0, Math.min(rawTop, maxTop));
+
+      const rawStartMinutes = (visualTop / mobileCellHeight) * 60;
+
+      const snappedStartMinutes = Math.max(
+        0,
+        Math.min(
+          1440 - durationMinutes,
+          Math.round(rawStartMinutes / intervalSnapMinutes) *
+            intervalSnapMinutes,
+        ),
+      );
 
       const userZone = getUserZone(timeZoneOffset);
-      const pointerTime = DateTime.fromISO(
-        matchedColumn.getAttribute("data-column-date"),
-        { zone: userZone },
-      ).plus({ minutes: minutesFromTopOfColumn });
 
-      let newStartDateTime = pointerTime;
-      const snappedMinutes = Math.round(newStartDateTime.minute / 15) * 15;
-      newStartDateTime = newStartDateTime.set({
-        minute: snappedMinutes,
-        second: 0,
-        millisecond: 0,
+      const targetDay = DateTime.fromISO(
+        matchedColumn.getAttribute("data-column-date"),
+        {
+          zone: userZone,
+        },
+      ).startOf("day");
+
+      const newStartDateTime = targetDay.plus({
+        minutes: snappedStartMinutes,
       });
 
       const newEndDateTime = newStartDateTime.plus({
         minutes: durationMinutes,
       });
 
-      const newTimeRange = {
-        start: newStartDateTime.toUTC().toISO({ suppressMilliseconds: true }),
-        end: newEndDateTime.toUTC().toISO({ suppressMilliseconds: true }),
-      };
-
-      const yOffsetMinutes =
-        newStartDateTime.hour * 60 + newStartDateTime.minute;
-      const snappedY =
-        Math.round(((yOffsetMinutes / 60) * cellHeight) / snapHeight) *
-          snapHeight +
-        1;
-      const height = Math.max((durationMinutes / 60) * cellHeight - 2, 4);
-
       return {
-        position: { y: snappedY },
-        columnDate: newStartDateTime.toISODate(),
-        timeRange: newTimeRange,
+        position: {
+          y: visualTop,
+        },
+        columnDate: matchedColumn.getAttribute("data-column-date"),
+        timeRange: {
+          start: newStartDateTime.toUTC().toISO({ suppressMilliseconds: true }),
+          end: newEndDateTime.toUTC().toISO({ suppressMilliseconds: true }),
+        },
         size: {
-          height: height,
-          width: matchedColumn.getBoundingClientRect().width + "px",
+          height: Math.max((durationMinutes / 60) * mobileCellHeight - 2, 4),
+          width: `${matchedColumn.getBoundingClientRect().width}px`,
         },
       };
     },
-    [timeZoneOffset, getColumnsInView, getActiveContainer],
+    [getActiveContainer, getColumnsInView, timeZoneOffset],
   );
 
   const performMobileDragUpdate = useCallback(
     (clientX, clientY) => {
       const currentEvent = draggableEventRef.current;
+
       if (!currentEvent?.originalTimeRange) return;
 
       let tempOriginalRange = currentEvent.originalTimeRange;
 
       if (isFullDayDrag.current) {
-        const s = DateTime.fromISO(tempOriginalRange.start, { zone: "utc" });
+        const start = DateTime.fromISO(tempOriginalRange.start, {
+          zone: "utc",
+        });
+
         tempOriginalRange = {
-          start: s.toISO(),
-          end: s.plus({ hours: 1 }).toISO(),
+          start: start.toISO(),
+          end: start.plus({ hours: 1 }).toISO(),
         };
       }
 
-      const pos = calculateMobileEventPosition(
+      const positionData = calculateMobileEventPosition(
         clientX,
         clientY,
         tempOriginalRange,
       );
 
-      if (pos) {
-        const newState = { ...pos, isFullDay: false };
-        setDraggableEvent((prev) => ({ ...prev, ...newState }));
-        draggableEventRef.current = { ...currentEvent, ...newState };
-      }
+      if (!positionData) return;
+
+      const newState = {
+        ...positionData,
+        isFullDay: false,
+      };
+
+      const nextEvent = {
+        ...currentEvent,
+        ...newState,
+      };
+
+      draggableEventRef.current = nextEvent;
+
+      setDraggableEvent((prev) => ({
+        ...prev,
+        ...newState,
+      }));
     },
     [calculateMobileEventPosition, setDraggableEvent],
   );
@@ -1547,6 +1577,7 @@ function useCalendarEventHandlers(props = {}) {
       if (draggableEventRef.current?.isShared) return;
 
       const container = getActiveContainer();
+
       if (!container) return;
 
       const scrollContainer =
@@ -1554,86 +1585,122 @@ function useCalendarEventHandlers(props = {}) {
         container.querySelector("#bottom") ||
         container;
 
+      if (!scrollContainer) return;
+
       const dx = clientX - mobileInitialTouch.current.x;
       const dy = clientY - mobileInitialTouch.current.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
       if (!isDragging.current) return;
+
       if (!hasDragged.current) {
         if (distance < 5) return;
         hasDragged.current = true;
       }
 
       const currentEvent = draggableEventRef.current;
+
       if (!currentEvent?.originalTimeRange) return;
 
-      const containerRect = container.getBoundingClientRect();
       const scrollRect = scrollContainer.getBoundingClientRect();
-
-      const isTopArea = clientY < scrollRect.top;
       const columns = getColumnsInView() || [];
-      const matchedColumn = columns.find(
-        (col) =>
-          clientX >= col.getBoundingClientRect().left &&
-          clientX <= col.getBoundingClientRect().right,
-      );
+
+      const matchedColumn = columns.find((col) => {
+        const rect = col.getBoundingClientRect();
+
+        return clientX >= rect.left && clientX <= rect.right;
+      });
 
       if (!matchedColumn) return;
 
+      const isTopArea = clientY < scrollRect.top;
+
       if (isTopArea) {
         autoScrollState.current.active = false;
+
         if (autoScrollState.current.animationFrameId) {
           cancelAnimationFrame(autoScrollState.current.animationFrameId);
+
           autoScrollState.current.animationFrameId = null;
         }
 
         const targetDateStr = matchedColumn.getAttribute("data-column-date");
+
         const userZone = getUserZone(timeZoneOffset);
 
         const targetDate = DateTime.fromISO(targetDateStr, {
           zone: userZone,
         }).startOf("day");
+
         const initialDate = DateTime.fromISO(dragStartColumnDateRef.current, {
           zone: userZone,
         }).startOf("day");
+
         let newDayOffset = Math.round(
           targetDate.diff(initialDate, "days").days,
         );
 
         const viewStart = DateTime.fromISO(
           columns[0].getAttribute("data-column-date"),
-          { zone: userZone },
+          {
+            zone: userZone,
+          },
         ).startOf("day");
+
         const viewEnd = DateTime.fromISO(
           columns[columns.length - 1].getAttribute("data-column-date"),
-          { zone: userZone },
+          {
+            zone: userZone,
+          },
         ).startOf("day");
-        const oStart = DateTime.fromISO(currentEvent.originalTimeRange.start, {
-          zone: "utc",
-        })
+
+        const originalStartDay = DateTime.fromISO(
+          currentEvent.originalTimeRange.start,
+          {
+            zone: "utc",
+          },
+        )
           .setZone(userZone)
           .startOf("day");
-        let oEnd = DateTime.fromISO(currentEvent.originalTimeRange.end, {
-          zone: "utc",
-        }).setZone(userZone);
 
-        if (oEnd.hour === 0 && oEnd.minute === 0)
-          oEnd = oEnd.minus({ days: 1 });
-        oEnd = oEnd.startOf("day");
+        let originalEndDay = DateTime.fromISO(
+          currentEvent.originalTimeRange.end,
+          {
+            zone: "utc",
+          },
+        ).setZone(userZone);
 
-        const minOffset = Math.ceil(viewStart.diff(oEnd, "days").days);
-        const maxOffset = Math.floor(viewEnd.diff(oStart, "days").days);
+        if (originalEndDay.hour === 0 && originalEndDay.minute === 0) {
+          originalEndDay = originalEndDay.minus({ days: 1 });
+        }
+
+        originalEndDay = originalEndDay.startOf("day");
+
+        const minOffset = Math.ceil(
+          viewStart.diff(originalEndDay, "days").days,
+        );
+
+        const maxOffset = Math.floor(
+          viewEnd.diff(originalStartDay, "days").days,
+        );
+
         newDayOffset = Math.max(minOffset, Math.min(newDayOffset, maxOffset));
 
         if (newDayOffset !== dayOffset.current || !currentEvent.isFullDay) {
           dayOffset.current = newDayOffset;
+
           let originalStart = DateTime.fromISO(
             currentEvent.originalTimeRange.start,
-            { zone: "utc" },
+            {
+              zone: "utc",
+            },
           );
+
           let originalEnd = DateTime.fromISO(
             currentEvent.originalTimeRange.end,
-            { zone: "utc" },
+            {
+              zone: "utc",
+            },
           );
 
           if (!isFullDayDrag.current) {
@@ -1641,58 +1708,91 @@ function useCalendarEventHandlers(props = {}) {
               .setZone(userZone)
               .startOf("day")
               .toUTC();
+
             originalEnd = originalStart.plus({ days: 1 });
           }
 
-          const newStart = originalStart.plus({ days: newDayOffset });
-          const newEnd = originalEnd.plus({ days: newDayOffset });
-          const newTimeRange = {
-            start: newStart.toISO({ suppressMilliseconds: true }),
-            end: newEnd.toISO({ suppressMilliseconds: true }),
+          const newStart = originalStart.plus({
+            days: newDayOffset,
+          });
+
+          const newEnd = originalEnd.plus({
+            days: newDayOffset,
+          });
+
+          const newState = {
+            timeRange: {
+              start: newStart.toISO({
+                suppressMilliseconds: true,
+              }),
+              end: newEnd.toISO({
+                suppressMilliseconds: true,
+              }),
+            },
+            isFullDay: true,
           };
 
-          const newState = { timeRange: newTimeRange, isFullDay: true };
-          setDraggableEvent((prev) => ({ ...prev, ...newState }));
-          draggableEventRef.current = { ...currentEvent, ...newState };
+          const nextEvent = {
+            ...currentEvent,
+            ...newState,
+          };
+
+          draggableEventRef.current = nextEvent;
+
+          setDraggableEvent((prev) => ({
+            ...prev,
+            ...newState,
+          }));
         }
-      } else {
-        autoScrollState.current.clientX = clientX;
-        autoScrollState.current.clientY = clientY;
 
-        const threshold = 60;
-        let speed = 0;
+        return;
+      }
 
-        if (clientY < scrollRect.top + threshold) speed = -12;
-        else if (clientY > scrollRect.bottom - threshold) speed = 12;
+      autoScrollState.current.clientX = clientX;
+      autoScrollState.current.clientY = clientY;
 
-        if (speed !== 0) {
-          autoScrollState.current.speed = speed;
-          if (!autoScrollState.current.active) {
-            autoScrollState.current.active = true;
+      const threshold = 60;
+      let speed = 0;
 
-            const scrollLoop = () => {
-              if (!autoScrollState.current.active) return;
-              if (scrollContainer) {
-                scrollContainer.scrollTop += autoScrollState.current.speed;
-                performMobileDragUpdate(
-                  autoScrollState.current.clientX,
-                  autoScrollState.current.clientY,
-                );
-              }
-              autoScrollState.current.animationFrameId =
-                requestAnimationFrame(scrollLoop);
-            };
+      if (clientY < scrollRect.top + threshold) {
+        speed = -12;
+      } else if (clientY > scrollRect.bottom - threshold) {
+        speed = 12;
+      }
+
+      if (speed !== 0) {
+        autoScrollState.current.speed = speed;
+
+        if (!autoScrollState.current.active) {
+          autoScrollState.current.active = true;
+
+          const scrollLoop = () => {
+            if (!autoScrollState.current.active) return;
+
+            scrollContainer.scrollTop += autoScrollState.current.speed;
+
+            performMobileDragUpdate(
+              autoScrollState.current.clientX,
+              autoScrollState.current.clientY,
+            );
+
             autoScrollState.current.animationFrameId =
               requestAnimationFrame(scrollLoop);
-          }
-        } else {
-          autoScrollState.current.active = false;
-          if (autoScrollState.current.animationFrameId) {
-            cancelAnimationFrame(autoScrollState.current.animationFrameId);
-            autoScrollState.current.animationFrameId = null;
-          }
-          performMobileDragUpdate(clientX, clientY);
+          };
+
+          autoScrollState.current.animationFrameId =
+            requestAnimationFrame(scrollLoop);
         }
+      } else {
+        autoScrollState.current.active = false;
+
+        if (autoScrollState.current.animationFrameId) {
+          cancelAnimationFrame(autoScrollState.current.animationFrameId);
+
+          autoScrollState.current.animationFrameId = null;
+        }
+
+        performMobileDragUpdate(clientX, clientY);
       }
     },
     [
@@ -1700,6 +1800,7 @@ function useCalendarEventHandlers(props = {}) {
       performMobileDragUpdate,
       getColumnsInView,
       getActiveContainer,
+      setDraggableEvent,
     ],
   );
 

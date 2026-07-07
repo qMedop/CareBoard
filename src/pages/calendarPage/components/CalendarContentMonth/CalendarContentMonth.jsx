@@ -1,7 +1,7 @@
 import styles from "../../CalendarPage.module.css";
 import { useTime } from "../../../../contexts/TimeContext";
 import { useData } from "../../../../contexts/AuthContext";
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { useRef } from "react";
 import { getMonthLayout } from "../../../../utils/getMonthLayout";
 import { useEffect } from "react";
@@ -30,8 +30,9 @@ function CalendarContentMonth({
   infoPopupEventId,
   setInfoPopupEventId,
   handleRecurrenceAndSave,
+  initialContainerWidth,
 }) {
-  const { loadedEvents, setLoadedEvents } = useTime();
+  const { loadedEvents, setLoadedEvents, isMobile } = useTime();
   const { userSettings } = useUserSettings();
   const { openPopup, closePopup, hidePopup, showPopup } = usePopup();
   const { updateEvent } = useData();
@@ -40,9 +41,11 @@ function CalendarContentMonth({
   const [hoveredDate, setHoveredDate] = useState(null);
   const [hoveredEventId, setHoveredEventId] = useState(null);
   const [expandedDayStr, setExpandedDayStr] = useState(null);
-  const containerRef = useRef(null);
   const [maxSlotsPerWeek, setMaxSlotsPerWeek] = useState([]);
-  const addEditRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(
+    () => initialContainerWidth || window.innerWidth,
+  );
+  const [activeCreateDate, setActiveCreateDate] = useState(null);
   const [dragState, setDragState] = useState({
     active: false,
     event: null,
@@ -51,17 +54,15 @@ function CalendarContentMonth({
     startY: 0,
   });
 
+  const textMeasureCanvasRef = useRef(null);
+  const addEditRef = useRef(null);
+  const containerRef = useRef(null);
   const weekStartDay = userSettings?.weekStartDay ?? 1;
 
   const { weeks } = getMonthLayout(
     currentDate.getFullYear(),
     currentDate.getMonth(),
     weekStartDay,
-  );
-
-  const orderedDays = Array.from(
-    { length: 7 },
-    (_, i) => DAYS_OF_WEEK[(weekStartDay + i) % 7],
   );
 
   useEffect(() => {
@@ -89,6 +90,31 @@ function CalendarContentMonth({
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, [weeks.length]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+
+    if (!container) return;
+
+    const updateWidth = () => {
+      const nextWidth = container.getBoundingClientRect().width;
+
+      if (nextWidth > 0) {
+        setContainerWidth((previousWidth) =>
+          Math.abs(previousWidth - nextWidth) < 0.5 ? previousWidth : nextWidth,
+        );
+      }
+    };
+
+    updateWidth();
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   const userZone = getUserZone(timeZoneOffset);
 
@@ -378,7 +404,7 @@ function CalendarContentMonth({
         };
 
         openPopup(
-          "movable",
+          isMobile ? "centered" : "contextual",
           () => (
             <AddEditNewEvent
               eventId={eventId}
@@ -423,7 +449,50 @@ function CalendarContentMonth({
     );
   };
 
-  // 🔴 DEDUPLICATE GLOBAL EVENTS
+  const handleMonthCellClick = (e, dateStr) => {
+    e.stopPropagation();
+
+    if (closePopup() === false) return;
+
+    if (!isMobile) {
+      handleNewEventClick(e);
+      return;
+    }
+
+    if (activeCreateDate !== dateStr) {
+      setActiveCreateDate(dateStr);
+      return;
+    }
+
+    handleNewEventClick(e);
+  };
+
+  const getTextWidth = (text, font = "500 11px Google Sans") => {
+    if (!textMeasureCanvasRef.current) {
+      textMeasureCanvasRef.current = document.createElement("canvas");
+    }
+
+    const context = textMeasureCanvasRef.current.getContext("2d");
+    context.font = font;
+
+    return context.measureText(text).width;
+  };
+
+  const getMobileEventHeight = (event, availableWidth) => {
+    if (!isMobile) return 20;
+
+    if (availableWidth <= 0) {
+      return 20;
+    }
+
+    const title = event.title || "(No title)";
+    const reservedWidth = 4;
+    const textAvailableWidth = Math.max(0, availableWidth - reservedWidth);
+    const textWidth = getTextWidth(title);
+
+    return textWidth > textAvailableWidth ? 30 : 20;
+  };
+
   const allEventsRaw = newEvent
     ? [...expandedEvents, newEvent]
     : expandedEvents;
@@ -463,17 +532,25 @@ function CalendarContentMonth({
           const weekStartStr = getLocalDateString(week[0].date);
           const weekEndStr = getLocalDateString(week[6].date);
 
-          const weekStartMs = DateTime.fromISO(weekStartStr, { zone: userZone })
+          const weekStartMs = DateTime.fromISO(weekStartStr, {
+            zone: userZone,
+          })
             .startOf("day")
             .toMillis();
-          const weekEndMs = DateTime.fromISO(weekEndStr, { zone: userZone })
+
+          const weekEndMs = DateTime.fromISO(weekEndStr, {
+            zone: userZone,
+          })
             .endOf("day")
             .toMillis();
 
-          const baseTop = weekIndex === 0 ? 72 : 56;
+          const baseTop =
+            weekIndex === 0 ? (isMobile ? 32 : 72) : isMobile ? 32 : 56;
 
           const weekEventsRaw = globalAllEvents.filter((ev) => {
-            if (!ev.timeRange?.start || !ev.timeRange?.end) return false;
+            if (!ev.timeRange?.start || !ev.timeRange?.end) {
+              return false;
+            }
 
             const evStartMs = DateTime.fromISO(ev.timeRange.start, {
               zone: "utc",
@@ -486,6 +563,7 @@ function CalendarContentMonth({
             }).setZone(userZone);
 
             let evEndMs = endDt.toMillis();
+
             if (endDt.hour === 0 && endDt.minute === 0) {
               evEndMs -= 1000;
             }
@@ -494,19 +572,18 @@ function CalendarContentMonth({
           });
 
           const hasActiveUnsavedThisWeek = weekEventsRaw.some((ev) => {
-            return ev.isUnsaved || ev.id === String(editingEventId);
+            return ev.isUnsaved || String(ev.id) === String(editingEventId);
           });
-
-          const MAX_SLOTS = maxSlotsPerWeek[weekIndex] || 3;
-          const hoverReserved = hasActiveUnsavedThisWeek ? 0 : 1;
-          const SAFE_SLOTS = Math.max(1, MAX_SLOTS - hoverReserved);
-          const MAX_VISIBLE_EVENTS = Math.max(0, SAFE_SLOTS - 1);
 
           weekEventsRaw.sort((a, b) => {
             const aId = a.id;
             const bId = b.id;
-            const aIsTop = a.isUnsaved || aId === String(editingEventId);
-            const bIsTop = b.isUnsaved || bId === String(editingEventId);
+
+            const aIsTop =
+              a.isUnsaved || String(aId) === String(editingEventId);
+
+            const bIsTop =
+              b.isUnsaved || String(bId) === String(editingEventId);
 
             if (aIsTop && !bIsTop) return -1;
             if (!aIsTop && bIsTop) return 1;
@@ -514,6 +591,7 @@ function CalendarContentMonth({
             const aStart = DateTime.fromISO(a.timeRange.start, {
               zone: "utc",
             }).setZone(userZone);
+
             const bStart = DateTime.fromISO(b.timeRange.start, {
               zone: "utc",
             }).setZone(userZone);
@@ -521,25 +599,31 @@ function CalendarContentMonth({
             let aEnd = DateTime.fromISO(a.timeRange.end, {
               zone: "utc",
             }).setZone(userZone);
+
             let bEnd = DateTime.fromISO(b.timeRange.end, {
               zone: "utc",
             }).setZone(userZone);
 
-            if (aEnd.hour === 0 && aEnd.minute === 0)
+            if (aEnd.hour === 0 && aEnd.minute === 0) {
               aEnd = aEnd.minus({ days: 1 });
-            if (bEnd.hour === 0 && bEnd.minute === 0)
+            }
+
+            if (bEnd.hour === 0 && bEnd.minute === 0) {
               bEnd = bEnd.minus({ days: 1 });
+            }
 
             const aDays =
               Math.round(
                 aEnd.startOf("day").diff(aStart.startOf("day"), "days").days,
               ) + 1;
+
             const bDays =
               Math.round(
                 bEnd.startOf("day").diff(bStart.startOf("day"), "days").days,
               ) + 1;
 
             const aIsMultiOrFull = a.isFullDay || aDays > 1;
+
             const bIsMultiOrFull = b.isFullDay || bDays > 1;
 
             if (aIsMultiOrFull && !bIsMultiOrFull) return -1;
@@ -554,26 +638,32 @@ function CalendarContentMonth({
             }
 
             const aDurationMs = aEnd.toMillis() - aStart.toMillis();
+
             const bDurationMs = bEnd.toMillis() - bStart.toMillis();
 
             return bDurationMs - aDurationMs;
           });
 
-          const slotsByDay = Array(7)
-            .fill(null)
-            .map(() => []);
+          const slotsByDay = Array.from({ length: 7 }, () => []);
+
           const eventLayouts = [];
+
+          const weekRowWidth = containerWidth;
+
+          const dayWidth = weekRowWidth / 7;
 
           weekEventsRaw.forEach((ev) => {
             const evStart = DateTime.fromISO(ev.timeRange.start, {
               zone: "utc",
             }).setZone(userZone);
+
             let evEnd = DateTime.fromISO(ev.timeRange.end, {
               zone: "utc",
             }).setZone(userZone);
 
-            if (evEnd.hour === 0 && evEnd.minute === 0)
+            if (evEnd.hour === 0 && evEnd.minute === 0) {
               evEnd = evEnd.minus({ days: 1 });
+            }
 
             const isMultiDay =
               ev.isFullDay ||
@@ -581,11 +671,13 @@ function CalendarContentMonth({
                 evStart.startOf("day").toMillis();
 
             const clampedStartMs = Math.max(evStart.toMillis(), weekStartMs);
+
             const clampedEndMs = Math.min(evEnd.toMillis(), weekEndMs);
 
             const clampedStartStr = DateTime.fromMillis(clampedStartMs)
               .setZone(userZone)
               .toISODate();
+
             const clampedEndStr = DateTime.fromMillis(clampedEndMs)
               .setZone(userZone)
               .toISODate();
@@ -593,17 +685,23 @@ function CalendarContentMonth({
             const startDayIdx = week.findIndex(
               (d) => getLocalDateString(d.date) === clampedStartStr,
             );
+
             const endDayIdx = week.findIndex(
               (d) => getLocalDateString(d.date) === clampedEndStr,
             );
 
-            if (startDayIdx === -1 || endDayIdx === -1) return;
+            if (startDayIdx === -1 || endDayIdx === -1) {
+              return;
+            }
 
             let slot = 0;
+
             while (true) {
               let available = true;
+
               for (let i = startDayIdx; i <= endDayIdx; i++) {
                 const occupant = slotsByDay[i][slot];
+
                 if (occupant) {
                   if (
                     ev.isGhost &&
@@ -612,10 +710,14 @@ function CalendarContentMonth({
                   ) {
                     continue;
                   }
+
                   available = false;
+                  break;
                 }
               }
+
               if (available) break;
+
               slot++;
             }
 
@@ -623,21 +725,145 @@ function CalendarContentMonth({
               slotsByDay[i][slot] = ev;
             }
 
+            const eventWidth =
+              dayWidth * (endDayIdx - startDayIdx + 1) - (isMobile ? 4 : 8);
+
+            const eventHeight = getMobileEventHeight(
+              ev,
+              Math.max(0, eventWidth),
+            );
+
             eventLayouts.push({
               event: ev,
               startDayIdx,
               endDayIdx,
               slot,
+              eventHeight,
               isMultiDay,
+
               contBackward: evStart.toMillis() < weekStartMs,
+
               contForward: evEnd.toMillis() > weekEndMs,
             });
           });
 
-          const dayMaxVisibles = slotsByDay.map((slots) => {
-            const total = slots.filter((ev) => ev && !ev.isGhost).length;
-            return total <= SAFE_SLOTS ? SAFE_SLOTS : MAX_VISIBLE_EVENTS;
+          const DEFAULT_EVENT_HEIGHT = 20;
+          const SLOT_GAP = 4;
+
+          // Height required by each slot on each day.
+          const slotHeightsByDay = Array.from({ length: 7 }, () => []);
+
+          eventLayouts.forEach((layout) => {
+            for (let day = layout.startDayIdx; day <= layout.endDayIdx; day++) {
+              slotHeightsByDay[day][layout.slot] = Math.max(
+                slotHeightsByDay[day][layout.slot] ?? 0,
+                layout.eventHeight,
+              );
+            }
           });
+
+          const slotTopsByDay = Array.from({ length: 7 }, () => []);
+
+          for (let day = 0; day < 7; day++) {
+            let runningTop = baseTop;
+
+            for (let slot = 0; slot < slotHeightsByDay[day].length; slot++) {
+              slotTopsByDay[day][slot] = runningTop;
+
+              runningTop +=
+                (slotHeightsByDay[day][slot] || DEFAULT_EVENT_HEIGHT) +
+                SLOT_GAP;
+            }
+          }
+
+          const getDaySlotTop = (dayIdx, slot) => {
+            let top = baseTop;
+
+            for (let previousSlot = 0; previousSlot < slot; previousSlot++) {
+              const height =
+                slotHeightsByDay[dayIdx]?.[previousSlot] ??
+                DEFAULT_EVENT_HEIGHT;
+
+              top += height + SLOT_GAP;
+            }
+
+            return top;
+          };
+
+          const getEventTop = (
+            layout,
+            startDayIdx,
+            endDayIdx,
+            slot = layout.slot,
+          ) => {
+            let top = baseTop;
+
+            for (let previousSlot = 0; previousSlot < slot; previousSlot++) {
+              let requiredHeight = DEFAULT_EVENT_HEIGHT;
+
+              for (let day = startDayIdx; day <= endDayIdx; day++) {
+                requiredHeight = Math.max(
+                  requiredHeight,
+                  slotHeightsByDay[day]?.[previousSlot] ?? DEFAULT_EVENT_HEIGHT,
+                );
+              }
+
+              top += requiredHeight + SLOT_GAP;
+            }
+
+            return top;
+          };
+
+          const weekRows = containerRef.current?.querySelectorAll(
+            `.${styles.weekRow}`,
+          );
+
+          const weekRowHeight = weekRows?.[weekIndex]?.clientHeight || 0;
+
+          const availableHeight = Math.max(0, weekRowHeight - baseTop);
+
+          const RESERVED_ROW_HEIGHT = DEFAULT_EVENT_HEIGHT + SLOT_GAP;
+
+          const reservedHeight = hasActiveUnsavedThisWeek
+            ? RESERVED_ROW_HEIGHT
+            : RESERVED_ROW_HEIGHT * 2;
+
+          const eventHeightBudget = Math.max(
+            0,
+            availableHeight - reservedHeight,
+          );
+
+          const slotHeights = [];
+
+          eventLayouts.forEach((layout) => {
+            slotHeights[layout.slot] = Math.max(
+              slotHeights[layout.slot] || DEFAULT_EVENT_HEIGHT,
+              layout.eventHeight,
+            );
+          });
+
+          let visibleSlotCount = 0;
+          let usedHeight = 0;
+
+          for (let slot = 0; slot < slotHeights.length; slot++) {
+            const slotHeight = slotHeights[slot] || DEFAULT_EVENT_HEIGHT;
+
+            const requiredHeight =
+              slotHeight + (visibleSlotCount > 0 ? SLOT_GAP : 0);
+
+            if (usedHeight + requiredHeight > eventHeightBudget) {
+              break;
+            }
+
+            usedHeight += requiredHeight;
+            visibleSlotCount++;
+          }
+
+          const SAFE_SLOTS = isMobile
+            ? slotHeights.length
+            : Math.max(1, visibleSlotCount);
+
+          const dayMaxVisibles = slotsByDay.map(() => SAFE_SLOTS);
 
           return (
             <div key={weekIndex} className={styles.weekRow}>
@@ -650,44 +876,62 @@ function CalendarContentMonth({
                 const dayMaxVisible = dayMaxVisibles[dayIndex];
 
                 let maxVis = -1;
-                for (let i = 0; i < dayMaxVisible; i++) {
-                  if (dailySlots[i] && !dailySlots[i].isGhost) maxVis = i;
-                }
-                const hasMore = totalDayEvents > dayMaxVisible;
-                const previewSlot = hasMore ? dayMaxVisible + 1 : maxVis + 1;
-                const safeSlot = Math.min(previewSlot, MAX_SLOTS - 1);
-                const hoverTopPx = baseTop + safeSlot * 24;
 
+                for (let i = 0; i < dayMaxVisible; i++) {
+                  if (dailySlots[i] && !dailySlots[i].isGhost) {
+                    maxVis = i;
+                  }
+                }
+
+                const hasMore = totalDayEvents > dayMaxVisible;
+
+                const moreTopPx = getDaySlotTop(dayIndex, dayMaxVisible);
+
+                const hoverTopPx = hasMore
+                  ? moreTopPx + RESERVED_ROW_HEIGHT
+                  : getDaySlotTop(dayIndex, maxVis + 1);
+
+                const firstRealEvent = dailySlots.find(
+                  (ev) => ev && !ev.isGhost,
+                );
+
+                const cellBackgroundColor =
+                  firstRealEvent?.color || "#ffffff4f";
                 return (
                   <div
                     key={dayIndex}
-                    className={`${styles.dayCell} ${styles[dayObj.type]} ${dayObj.isToday ? styles.today : ""}`}
-                    style={{ flex: 1, position: "relative" }}
+                    className={`${styles.dayCell} ${styles[dayObj.type]} ${dayObj.isToday ? styles.today : ""} ${activeCreateDate === dateStr ? styles.active : ""}`}
+                    style={{
+                      flex: 1,
+                      position: "relative",
+                      "--bg-color": cellBackgroundColor,
+                    }}
                   >
                     <div
                       onClick={(e) => e.stopPropagation()}
                       onMouseEnter={() => setHoveredDate(null)}
                     >
-                      <p className={styles.dayOfWeek}>
-                        {orderedDays[dayIndex]}
-                      </p>
-                      <CustomButton
-                        style={{
-                          opacity: `${dayObj.type !== "current" ? 0.6 : 1}`,
-                        }}
-                        className={styles.dayButton}
-                        link={true}
-                        href={`/calendar/day/${dayObj.date.getDate()}/${dayObj.date.getMonth() + 1}/${dayObj.date.getFullYear()}`}
-                      >
-                        {dayObj.day}
-                      </CustomButton>
+                      {isMobile ? (
+                        <p>{dayObj.day}</p>
+                      ) : (
+                        <CustomButton
+                          ClickEffect={"scale"}
+                          style={{
+                            opacity: `${dayObj.type !== "current" ? 0.6 : 1}`,
+                          }}
+                          className={styles.dayButton}
+                          link={true}
+                          href={`/calendar/day/${dayObj.date.getDate()}/${dayObj.date.getMonth() + 1}/${dayObj.date.getFullYear()}`}
+                        >
+                          {dayObj.day}
+                        </CustomButton>
+                      )}
                     </div>
                     <div
                       id={`top-${dateStr}`}
                       data-date={dateStr}
                       onClick={(e) => {
-                        if (closePopup() === false) return;
-                        handleNewEventClick(e);
+                        handleMonthCellClick(e, dateStr);
                       }}
                       onMouseEnter={() => setHoveredDate(dateStr)}
                       onMouseLeave={() => setHoveredDate(null)}
@@ -697,11 +941,12 @@ function CalendarContentMonth({
                         bottom: 0,
                         left: 0,
                         right: 0,
-                        cursor: "pointer",
+                        cursor: `${isMobile ? "none" : "pointer"}`,
                         zIndex: 1,
                       }}
                     />
                     {hoveredDate === dateStr &&
+                      !isMobile &&
                       !dragState.active &&
                       expandedDayStr !== dateStr && (
                         <div
@@ -714,6 +959,7 @@ function CalendarContentMonth({
                             pointerEvents: "none",
                             zIndex: 15,
                             position: "absolute",
+                            height: "20px",
                           }}
                         ></div>
                       )}
@@ -779,8 +1025,12 @@ function CalendarContentMonth({
                     const realId = layout.event.id;
                     const isUnsaved = layout.event.isUnsaved;
 
-                    const topPx = baseTop + seg.slot * 24;
-
+                    const topPx = getEventTop(
+                      layout,
+                      seg.start,
+                      seg.end,
+                      seg.slot,
+                    );
                     const isDraggedOriginal =
                       dragState.active &&
                       dragState.event &&
@@ -831,9 +1081,10 @@ function CalendarContentMonth({
                         }
                         className={`${styles.monthEvent}`}
                         style={{
-                          left: `calc(${leftPct}% + 4px)`,
-                          width: `calc(${widthPct}% - 8px)`,
+                          left: `calc(${leftPct}% + ${isMobile ? 2 : 4}px)`,
+                          width: `calc(${widthPct}% - ${isMobile ? 4 : 8}px)`,
                           top: `${topPx}px`,
+                          height: `${layout.eventHeight}px`,
                           pointerEvents:
                             isGhost || dragState.active ? "none" : "auto",
                           cursor: isGhost ? "grabbing" : "pointer",
@@ -854,7 +1105,9 @@ function CalendarContentMonth({
                             isHovered && !isGhost ? "brightness(0.95)" : "none",
                           transition: isGhost
                             ? "none"
-                            : "left 0.1s ease, width 0.1s ease, top 0.1s ease, box-shadow 0.1s ease",
+                            : isMobile
+                              ? "left 0.1s ease, width 0.1s ease, box-shadow 0.1s ease"
+                              : "left 0.1s ease, width 0.1s ease, top 0.1s ease, box-shadow 0.1s ease",
                         }}
                       >
                         {layout.isMultiDay ? (
@@ -905,18 +1158,21 @@ function CalendarContentMonth({
                                     : "var(--text-light)",
                               }}
                             >
-                              {`${DateTime.fromISO(layout.event.timeRange.start)
-                                .setZone(userZone)
-                                .toFormat(
-                                  userSettings?.timeFormat === "12h"
-                                    ? "h:mm a"
-                                    : "HH:mm",
-                                )
-                                .toLowerCase()
-                                .split(" ")
-                                .join(
-                                  "",
-                                )} ${layout.event.title || "(No title)"}`}
+                              {`${
+                                !isMobile
+                                  ? `${DateTime.fromISO(
+                                      layout.event.timeRange.start,
+                                    )
+                                      .setZone(userZone)
+                                      .toFormat(
+                                        userSettings?.timeFormat === "12h"
+                                          ? "h:mm a"
+                                          : "HH:mm",
+                                      )
+                                      .toLowerCase()
+                                      .replace(" ", "")} `
+                                  : ""
+                              }${layout.event.title || "(No title)"}`}
                             </span>
                           </div>
                         )}
@@ -927,21 +1183,25 @@ function CalendarContentMonth({
 
                 {slotsByDay.map((slots, dayIdx) => {
                   const dateStr = getLocalDateString(week[dayIdx].date);
+
                   const totalDayEvents = slots.filter(
                     (ev) => ev && !ev.isGhost,
                   ).length;
+
                   const dayMaxVisible = dayMaxVisibles[dayIdx];
 
-                  if (totalDayEvents > dayMaxVisible) {
+                  if (!isMobile && totalDayEvents > dayMaxVisible) {
                     const hiddenCount = totalDayEvents - dayMaxVisible;
+
                     const leftPct = (dayIdx / 7) * 100;
-                    const topPx = baseTop + dayMaxVisible * 24;
-                    console.log(leftPct, topPx);
+
+                    const topPx = getDaySlotTop(dayIdx, dayMaxVisible);
                     return (
                       <CustomButton
                         key={`more-${weekIndex}-${dayIdx}`}
                         onClick={(e) => {
                           e.stopPropagation();
+
                           openPopup(
                             "centered",
                             () => (
@@ -972,12 +1232,14 @@ function CalendarContentMonth({
                           width: `${100 / 7}%`,
                           top: `${topPx}px`,
                           pointerEvents: dragState.active ? "none" : "auto",
+                          height: "20px",
                         }}
                       >
                         +{hiddenCount} more
                       </CustomButton>
                     );
                   }
+
                   return null;
                 })}
               </div>
@@ -1308,7 +1570,6 @@ function ExpandedDayCarousel({
                       data-sourceid={realId}
                       onMouseDown={(e) => {
                         e.stopPropagation();
-                        // 🔴 Let it run (it stops drag inside the handler if shared)
                         handleEventMouseDown(e, ev);
                       }}
                       onClick={(e) => handleEventClick(e, realId)}

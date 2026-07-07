@@ -70,7 +70,8 @@ export default function MobileCalendarPager({
   handleGridPointerDown,
 }) {
   const navigate = useNavigate();
-  const { setDirection, setTodayDeferred, draggableEvent } = useTime();
+  const { setDirection, setTodayDeferred, draggableEvent, isMobile } =
+    useTime();
   const { closePopup } = usePopup();
 
   const containerRef = useRef(null);
@@ -80,6 +81,7 @@ export default function MobileCalendarPager({
   const [visualDate, setVisualDate] = useState(() => new Date(currentDate));
   const [destinationDate, setDestinationDate] = useState(null);
   const [destinationDirection, setDestinationDirection] = useState(null);
+  const [pageWidth, setPageWidth] = useState(() => window.innerWidth);
 
   const touchStart = useRef({ x: 0, y: 0 });
   const gestureStartTime = useRef(0);
@@ -101,6 +103,29 @@ export default function MobileCalendarPager({
   useEffect(() => {
     if (isScrolling) clearInteractionState();
   }, [isScrolling, clearInteractionState]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+
+    if (!container) return;
+
+    const updateWidth = () => {
+      const width = container.getBoundingClientRect().width;
+
+      if (width > 0) {
+        setPageWidth(width);
+      }
+    };
+
+    updateWidth();
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   const generateDateOffset = useCallback(
     (date, offset) => {
@@ -529,6 +554,7 @@ export default function MobileCalendarPager({
           infoPopupEventId={infoPopupEventId}
           setInfoPopupEventId={setInfoPopupEventId}
           handleRecurrenceAndSave={handleRecurrenceAndSave}
+          initialContainerWidth={pageWidth}
         />
       );
     }
@@ -574,7 +600,7 @@ export default function MobileCalendarPager({
       style={{
         position: "relative",
         width: "100%",
-        height: "100%",
+        height: `${isMobile && displayedView === "month" ? "calc(100% - 140px)" : "100%"}`,
         overflow: "hidden",
       }}
       onPointerDownCapture={handlePointerDownCapture}

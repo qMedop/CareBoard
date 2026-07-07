@@ -1,4 +1,3 @@
-// ... existing imports
 import {
   useEffect,
   useMemo,
@@ -7,28 +6,11 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
+
+import styles from "./AddEditNewEvent.module.css";
+
 import { DateTime } from "luxon";
 import { AnimatePresence, motion } from "framer-motion";
-import styles from "./AddEditNewEvent.module.css";
-import { usePopup } from "../../../../contexts/PopupContext";
-import { useData } from "../../../../contexts/AuthContext";
-import { useTime } from "../../../../contexts/TimeContext";
-import { formatDurationFromMinutes } from "../../../../utils/formatDurationFromMinutes";
-import CustomButton from "../../../../components/button/Button";
-import EmojiPopup from "../../../../components/emojiPopup/EmojiPopup";
-import PickDay from "../../../../components/pickDay/pickDay";
-import CheckBox from "../../../../components/checkBox/checkBox";
-import ConfirmPopup from "../../../../components/confirmPopup/confirmPopup";
-import RecurrenceUpdatePopup from "../RecurrenceUpdatePopup/RecurrenceUpdatePopup";
-import CheckboxGroup from "../../../../components/checkboxGroup/CheckboxGroup";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-} from "firebase/firestore";
 
 import {
   AvailabilityIcon,
@@ -43,10 +25,59 @@ import {
   ErrorIcon,
   CloseIcon,
 } from "../../../../assets/icons/Icon";
-import Loading from "../../../../components/loading/Loading";
+
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+} from "firebase/firestore";
 import { db } from "../../../../../firebase";
-import defaultAvatar from "../../../../assets/svg/user-avatar.svg";
+
+import { usePopup } from "../../../../contexts/PopupContext";
+import { useData } from "../../../../contexts/AuthContext";
+import { useTime } from "../../../../contexts/TimeContext";
+
+import CustomButton from "../../../../components/button/Button";
+import EmojiPopup from "../../../../components/emojiPopup/EmojiPopup";
+import PickDay from "../../../../components/pickDay/pickDay";
+import CheckBox from "../../../../components/checkBox/checkBox";
+import ConfirmPopup from "../../../../components/confirmPopup/confirmPopup";
+import RecurrenceUpdatePopup from "../RecurrenceUpdatePopup/RecurrenceUpdatePopup";
+import CheckboxGroup from "../../../../components/checkboxGroup/CheckboxGroup";
+import Loading from "../../../../components/loading/Loading";
+
+import { formatDurationFromMinutes } from "../../../../utils/formatDurationFromMinutes";
 import { getUserZone } from "../../../../utils/getUserZone";
+
+import {
+  COLOR_OPTIONS,
+  DEFAULT_EVENT_COLOR,
+  DEFAULT_EVENT_VISIBILITY,
+  DEFAULT_EVENT_AVAILABILITY,
+  DEFAULT_EVENT_NOTIFICATION,
+  DEFAULT_EVENT_RECURRENCE,
+  EVENT_VISIBILITY,
+  EVENT_AVAILABILITY,
+  EVENT_AVAILABILITY_OPTIONS,
+  EVENT_NOTIFICATION_OPTIONS,
+  RECURRENCE_TYPE,
+  RECURRENCE_END_TYPE,
+  RECURRENCE_UPDATE_MODE,
+  DEFAULT_RECURRENCE_INTERVAL,
+  DEFAULT_RECURRENCE_COUNT,
+  WEEKDAY_RECURRENCE_DAYS,
+  EVENT_EDITOR_TYPE,
+  EVENT_EDITOR_TYPES,
+  EVENT_SAVE_STATUS,
+  EVENT_SUCCESS_CLOSE_DELAY,
+  EVENT_ERROR_RESET_DELAY,
+  EVENT_TIME_SLOT_MINUTES,
+  EVENT_TIME_SLOTS_PER_DAY,
+} from "../../../../constants/constants";
+import { useUserSettings } from "../../../../contexts/UserSettingsContext";
 
 const AddEditNewEvent = forwardRef(
   ({ eventId: incomingEventId, onClose }, ref) => {
@@ -61,21 +92,25 @@ const AddEditNewEvent = forwardRef(
       isMobile,
     } = useTime();
 
-    // 🔴 BUGFIX #1: Draft Detection
-    // Safely identify if incomingEventId belongs to the current unsaved draft UUID
     const isDraft = newEvent && incomingEventId === newEvent.id;
     const eventId = isDraft ? null : incomingEventId;
 
     const { addEvent, updateEvent } = useData();
     const { openPopup, closePopup: closeContextPopup } = usePopup();
+    const { timeFormat } = useUserSettings();
+    const is24Format = timeFormat === "24h";
 
-    // --- CONSTANTS ---
-    const is24Format = false;
     const userZone = getUserZone(timeZoneOffset);
 
-    // 🔴 FETCH FRIENDS FOR SPECIFIC INVITES
+    // REFACTOR: Cleanup refs for timers
+    const successTimeoutRef = useRef(null);
+    const errorTimeoutRef = useRef(null);
+
     const [friends, setFriends] = useState([]);
+
+    // REFACTOR: Fixed N+1 queries and prevented state updates on unmounted component
     useEffect(() => {
+      let isMounted = true;
       async function loadFriends() {
         if (!currentUser?.id) return;
         try {
@@ -89,34 +124,57 @@ const AddEditNewEvent = forwardRef(
             d.data().users.find((id) => id !== currentUser.id),
           );
 
-          const friendsData = [];
-          for (const fid of friendIds) {
-            const fSnap = await getDoc(doc(db, "users", fid));
-            if (fSnap.exists()) {
-              friendsData.push({ id: fSnap.id, ...fSnap.data() });
-            }
+          if (friendIds.length === 0) {
+            if (isMounted) setFriends([]);
+            return;
           }
-          setFriends(friendsData);
+
+          // Fetch all friends concurrently instead of sequential awaits
+          const friendPromises = friendIds.map((fid) =>
+            getDoc(doc(db, "users", fid)),
+          );
+          const friendSnaps = await Promise.all(friendPromises);
+
+          const friendsData = friendSnaps
+            .filter((fSnap) => fSnap.exists())
+            .map((fSnap) => ({ id: fSnap.id, ...fSnap.data() }));
+
+          if (isMounted) setFriends(friendsData);
         } catch (err) {
           console.error("Failed to load friends", err);
         }
       }
       loadFriends();
+
+      return () => {
+        isMounted = false;
+      };
     }, [currentUser]);
 
-    // --- 1. RESOLVE SOURCE EVENT ---
+    // Cleanup timers on unmount
+    useEffect(() => {
+      return () => {
+        if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);
+        if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+      };
+    }, []);
+
     const sourceEvent = useMemo(() => {
       if (!eventId) return newEvent;
       const exactMatch = loadedEvents.find((ev) => ev.id === eventId);
       if (exactMatch) return exactMatch;
 
       if (typeof eventId === "string" && eventId.includes("_")) {
-        const [realId, timestamp] = eventId.split("_");
+        // Keeping string split ONLY for timestamp resolution if fallback mapping is needed,
+        // but removing it from core ID logic below.
+        const lastUnderscoreIndex = eventId.lastIndexOf("_");
+        const realId = eventId.substring(0, lastUnderscoreIndex);
+        const timestamp = eventId.substring(lastUnderscoreIndex + 1);
+
         const parent = loadedEvents.find((ev) => ev.id === realId);
         if (parent) {
           const instanceStartMs = parseInt(timestamp, 10);
           if (!isNaN(instanceStartMs)) {
-            // 🔴 BUGFIX #2: Fallback mapping if DB stripped timeRange
             const parentStart = DateTime.fromISO(
               parent.timeRange?.start || parent.start,
               { zone: "utc" },
@@ -133,7 +191,6 @@ const AddEditNewEvent = forwardRef(
             return {
               ...parent,
               id: eventId,
-              // sourceEventId REMOVED per Phase 2
               timeRange: {
                 start: instanceStart.toISO(),
                 end: instanceEnd.toISO(),
@@ -145,23 +202,22 @@ const AddEditNewEvent = forwardRef(
       return newEvent;
     }, [eventId, loadedEvents, newEvent]);
 
-    // Local state for the form
     const [isFullDay, setIsFullDay] = useState(false);
     const prevTimeRange = useRef(null);
     const [isExpanded, setIsExpanded] = useState(false);
-    const [eventType, setEventType] = useState("Event");
-    const [loadingStatus, setLoadingStatus] = useState("idle");
+    const [eventType, setEventType] = useState(EVENT_EDITOR_TYPES[0]);
+    const [loadingStatus, setLoadingStatus] = useState(EVENT_SAVE_STATUS.IDLE);
 
     const [eventData, setEventData] = useState({
       title: "",
       description: "",
       timeRange: { start: "", end: "" },
-      color: "#FFD4A9",
-      visibility: "visible",
-      availability: "busy",
-      notification: 0,
+      color: DEFAULT_EVENT_COLOR,
+      visibility: DEFAULT_EVENT_VISIBILITY,
+      availability: DEFAULT_EVENT_AVAILABILITY,
+      notification: DEFAULT_EVENT_NOTIFICATION,
       emoji: "",
-      recurrence: { type: "NONE" },
+      recurrence: { ...DEFAULT_EVENT_RECURRENCE },
       group_id: null,
       invitedIds: [],
       invitedFriendsFull: [],
@@ -181,11 +237,14 @@ const AddEditNewEvent = forwardRef(
 
     useEffect(() => {
       if (sourceEvent) {
-        if (!originalEventRef.current) {
-          originalEventRef.current = JSON.parse(JSON.stringify(sourceEvent));
+        // REFACTOR: Use structuredClone for deep copy instead of JSON parse/stringify
+        if (
+          !originalEventRef.current ||
+          originalEventRef.current.id !== sourceEvent.id
+        ) {
+          originalEventRef.current = structuredClone(sourceEvent);
         }
 
-        // 🔴 BUGFIX #3: Prevent DB schema mismatch from creating { timeRange: { start: "", end: "" } }
         const safeStart =
           sourceEvent.timeRange?.start || sourceEvent.start || "";
         const safeEnd = sourceEvent.timeRange?.end || sourceEvent.end || "";
@@ -197,18 +256,19 @@ const AddEditNewEvent = forwardRef(
             start: safeStart,
             end: safeEnd,
           },
-          color: sourceEvent.color || "#FFD4A9",
-          visibility: sourceEvent.visibility || "visible",
-          availability: sourceEvent.availability || "busy",
-          notification: sourceEvent.notification || 0,
+          color: sourceEvent.color || DEFAULT_EVENT_COLOR,
+          visibility: sourceEvent.visibility || DEFAULT_EVENT_VISIBILITY,
+          availability: sourceEvent.availability || DEFAULT_EVENT_AVAILABILITY,
+          notification: sourceEvent.notification || DEFAULT_EVENT_NOTIFICATION,
           emoji: sourceEvent.emoji || "",
-          recurrence: sourceEvent.recurrence || { type: "NONE" },
+          recurrence: sourceEvent.recurrence || { ...DEFAULT_EVENT_RECURRENCE },
           group_id: sourceEvent.group_id,
           invitedIds: sourceEvent.invitedIds || [],
           invitedFriendsFull: sourceEvent.invitedFriendsFull || [],
         });
         setIsFullDay(sourceEvent.isFullDay || false);
       }
+
       return () => {
         if (eventId) {
           setLoadedEvents((prev) =>
@@ -216,7 +276,7 @@ const AddEditNewEvent = forwardRef(
           );
         }
       };
-    }, [sourceEvent]);
+    }, [sourceEvent, eventId, setLoadedEvents]);
 
     const hasChanges = useMemo(() => {
       if (!eventId) return true;
@@ -228,11 +288,14 @@ const AddEditNewEvent = forwardRef(
       return (
         current.title !== (original.title || "") ||
         current.description !== (original.description || "") ||
-        current.color !== (original.color || "#FFD4A9") ||
+        current.color !== (original.color || DEFAULT_EVENT_COLOR) ||
         current.emoji !== (original.emoji || "") ||
-        current.visibility !== (original.visibility || "visible") ||
-        current.availability !== (original.availability || "busy") ||
-        current.notification !== (original.notification || 0) ||
+        current.visibility !==
+          (original.visibility || DEFAULT_EVENT_VISIBILITY) ||
+        current.availability !==
+          (original.availability || DEFAULT_EVENT_AVAILABILITY) ||
+        current.notification !==
+          (original.notification || DEFAULT_EVENT_NOTIFICATION) ||
         current.timeRange.start !==
           (original.timeRange?.start || original.start) ||
         current.timeRange.end !== (original.timeRange?.end || original.end) ||
@@ -240,7 +303,7 @@ const AddEditNewEvent = forwardRef(
         JSON.stringify(current.invitedIds) !==
           JSON.stringify(original.invitedIds || []) ||
         JSON.stringify(current.recurrence) !==
-          JSON.stringify(original.recurrence || { type: "NONE" })
+          JSON.stringify(original.recurrence || { ...DEFAULT_EVENT_RECURRENCE })
       );
     }, [eventData, isFullDay, eventId]);
 
@@ -254,7 +317,7 @@ const AddEditNewEvent = forwardRef(
           prev.filter((ev) => ev.id !== shadowIdRef.current),
         );
         const isRecurring =
-          originalEventRef.current.recurrence?.type !== "NONE";
+          originalEventRef.current.recurrence?.type !== RECURRENCE_TYPE.NONE;
         if (!isRecurring) {
           setLoadedEvents((prev) =>
             prev.map((ev) =>
@@ -287,57 +350,65 @@ const AddEditNewEvent = forwardRef(
       discardChanges: () => handleRevert(),
     }));
 
-    const updateGlobalState = (updates, overrideIsFullDay = isFullDay) => {
-      setEventData((prev) => ({ ...prev, ...updates }));
-      const newData = {
-        ...eventData,
-        ...updates,
-        isFullDay: overrideIsFullDay,
-      };
+    // REFACTOR: Fixed stale closure by using functional state updates entirely
+    const updateGlobalState = (updates, overrideIsFullDay = null) => {
+      setEventData((prevEventData) => {
+        const newData = { ...prevEventData, ...updates };
+        const activeIsFullDay =
+          overrideIsFullDay !== null ? overrideIsFullDay : isFullDayRef.current;
 
-      if (!eventId) {
-        setNewEvent((prev) =>
-          prev ? { ...prev, ...updates, isFullDay: overrideIsFullDay } : prev,
-        );
-      } else {
-        const isRecurring =
-          originalEventRef.current.recurrence?.type !== "NONE";
-        if (!isRecurring) {
-          setLoadedEvents((prev) =>
-            prev.map((ev) =>
-              ev.id === eventId
-                ? { ...ev, ...updates, isFullDay: overrideIsFullDay }
-                : ev,
-            ),
+        if (!eventId) {
+          setNewEvent((prev) =>
+            prev ? { ...prev, ...newData, isFullDay: activeIsFullDay } : prev,
           );
         } else {
-          setLoadedEvents((prev) => {
-            const filtered = prev.filter((ev) => ev.id !== shadowIdRef.current);
-            const shadowEvent = {
-              ...originalEventRef.current,
-              ...newData,
-              id: shadowIdRef.current,
-              // sourceEventId REMOVED per Phase 2
-              recurrence: { type: "NONE" },
-            };
-            return [...filtered, shadowEvent];
-          });
+          const isRecurring =
+            originalEventRef.current?.recurrence?.type !== RECURRENCE_TYPE.NONE;
+          if (!isRecurring) {
+            setLoadedEvents((prev) =>
+              prev.map((ev) =>
+                ev.id === eventId
+                  ? { ...ev, ...newData, isFullDay: activeIsFullDay }
+                  : ev,
+              ),
+            );
+          } else {
+            setLoadedEvents((prev) => {
+              const filtered = prev.filter(
+                (ev) => ev.id !== shadowIdRef.current,
+              );
+              const shadowEvent = {
+                ...originalEventRef.current,
+                ...newData,
+                id: shadowIdRef.current,
+                isFullDay: activeIsFullDay,
+                recurrence: { type: RECURRENCE_TYPE.NONE },
+              };
+              return [...filtered, shadowEvent];
+            });
+          }
         }
-      }
+        return newData;
+      });
     };
 
     async function handleSave() {
       if (eventId && !hasChanges) return;
-      if (loadingStatus !== "idle") return;
-
+      if (loadingStatus !== EVENT_SAVE_STATUS.IDLE) {
+        return;
+      }
       if (!eventId) {
         await executeAdd();
         return;
       }
 
-      // 🔴 BUGFIX #4: Safe ID extraction without `sourceEventId` reliance
-      const realId = originalEventRef.current.id.split("_")[0];
-      const parentEvent = loadedEvents.find((ev) => ev.id === realId);
+      // REFACTOR: Extract exact matching parent without dangerous split("_")[0] logic
+      // This checks if the eventId starts with the parent ID prefix, safely handling native underscores.
+      const parentEvent = loadedEvents.find(
+        (ev) =>
+          originalEventRef.current.id === ev.id ||
+          originalEventRef.current.id.startsWith(`${ev.id}_`),
+      );
 
       if (!parentEvent) return;
 
@@ -345,7 +416,7 @@ const AddEditNewEvent = forwardRef(
         parentEvent.recurrence && parentEvent.recurrence.type !== "NONE";
 
       if (!isRecurring) {
-        setLoadingStatus("encrypting");
+        setLoadingStatus(EVENT_SAVE_STATUS.ENCRYPTING);
         const onProgress = (s) => setLoadingStatus(s);
 
         try {
@@ -357,15 +428,12 @@ const AddEditNewEvent = forwardRef(
             ),
           );
 
-          // 🔴 BUGFIX #5: Enforce start/end on root for Updates too!
           const updatePayload = {
             id: parentEvent.id,
             ...eventData,
             isFullDay,
-            start: eventData.timeRange.start,
-            end: eventData.timeRange.end,
+            timeRange: eventData.timeRange,
           };
-          delete updatePayload.timeRange; // Strip UI state before DB push
 
           const result = await updateEvent(updatePayload, onProgress);
           if (result.success) finishSuccess();
@@ -397,12 +465,18 @@ const AddEditNewEvent = forwardRef(
         .setZone(userZone)
         .toISODate();
 
-      let allowedModes = ["THIS_EVENT", "THIS_AND_FOLLOWING"];
-      if (oldDateStr === newDateStr) allowedModes.push("ALL_EVENTS");
+      let allowedModes = [
+        RECURRENCE_UPDATE_MODE.THIS_EVENT,
+        RECURRENCE_UPDATE_MODE.THIS_AND_FOLLOWING,
+      ];
+
+      if (oldDateStr === newDateStr) {
+        allowedModes.push(RECURRENCE_UPDATE_MODE.ALL_EVENTS);
+      }
 
       const contextCurrentEvent = {
         ...originalEventRef.current,
-        originalTimeRange: eventData.timeRange, // Fallback safe
+        originalTimeRange: eventData.timeRange,
       };
 
       openPopup(
@@ -436,15 +510,13 @@ const AddEditNewEvent = forwardRef(
     }
 
     async function executeAdd() {
-      setLoadingStatus("encrypting");
+      setLoadingStatus(EVENT_SAVE_STATUS.ENCRYPTING);
       const onProgress = (s) => setLoadingStatus(s);
 
       try {
         const payload = { ...eventData, isFullDay };
 
         const result = await addEvent(payload, onProgress);
-
-        // --- DEBUG LOG (Trace 6) ---
 
         if (result.success) {
           const created = {
@@ -464,17 +536,20 @@ const AddEditNewEvent = forwardRef(
     }
 
     function finishSuccess() {
-      setLoadingStatus("success");
-      setTimeout(() => {
+      setLoadingStatus(EVENT_SAVE_STATUS.SUCCESS);
+      successTimeoutRef.current = setTimeout(() => {
         if (onClose) onClose();
         else closeContextPopup();
-      }, 800);
+      }, EVENT_SUCCESS_CLOSE_DELAY);
     }
 
     function handleError(e) {
       console.error(e);
-      setLoadingStatus("error");
-      setTimeout(() => setLoadingStatus("idle"), 2000);
+      setLoadingStatus(EVENT_SAVE_STATUS.ERROR);
+      errorTimeoutRef.current = setTimeout(
+        () => setLoadingStatus(EVENT_SAVE_STATUS.IDLE),
+        EVENT_ERROR_RESET_DELAY,
+      );
     }
 
     // --- TIME HANDLERS ---
@@ -871,20 +946,6 @@ const AddEditNewEvent = forwardRef(
 
     const shouldShowExpanded = isFullDay || isMultiDay || isExpanded;
 
-    const colorOptions = [
-      "#FFD4A9",
-      "#F2BAE1",
-      "#D9E6A2",
-      "#D8DCFF",
-      "#BFF2FC",
-      "#898989",
-      "#ABE9CE",
-      "#DBDBDB",
-      "#D1EAED",
-    ];
-    const notificationOptions = [5, 10, 15, 30, 60, 1440];
-    const availabilityOptions = ["busy", "free"];
-
     const handleDescriptionClick = (e) => {
       openPopup(
         "centered",
@@ -918,7 +979,7 @@ const AddEditNewEvent = forwardRef(
         "contextual",
         () => (
           <div className={`${styles.colorPickerPopup} ${styles.addEventPopup}`}>
-            {colorOptions.map((color) => (
+            {COLOR_OPTIONS.map((color) => (
               <div
                 key={color}
                 className={styles.colorOptionWrapper}
@@ -955,7 +1016,7 @@ const AddEditNewEvent = forwardRef(
           <div
             className={`${styles.availabilityPopup} ${styles.optionsPopup} ${styles.addEventPopup}`}
           >
-            {availabilityOptions.map((av) => (
+            {EVENT_AVAILABILITY_OPTIONS.map((av) => (
               <CustomButton
                 key={av}
                 ClickEffect={"scale"}
@@ -978,7 +1039,7 @@ const AddEditNewEvent = forwardRef(
           <div
             className={`${styles.notificationPopup} ${styles.optionsPopup} ${styles.addEventPopup}`}
           >
-            {notificationOptions.map((notification) => (
+            {EVENT_NOTIFICATION_OPTIONS.map((notification) => (
               <CustomButton
                 key={notification}
                 ClickEffect={"scale"}
@@ -1204,7 +1265,6 @@ const AddEditNewEvent = forwardRef(
                 ClickEffect={"scale"}
                 type="list"
                 className={`default disabled`}
-                // onClick={handleRepeatClick}
               >
                 <div className={styles.icon}>
                   <RepeatIcon />
@@ -1309,7 +1369,7 @@ const AddEditNewEvent = forwardRef(
               </div>
             </div>
             <div className={styles.eventType}>
-              {["Event", "Task", "Birthday"].map((type) => (
+              {EVENT_EDITOR_TYPES.map((type) => (
                 <CustomButton
                   key={type}
                   className={`default ${styles.tabButton} ${eventType === type ? styles.activeTab : ""}`}
@@ -1322,7 +1382,7 @@ const AddEditNewEvent = forwardRef(
             </div>
           </div>
           <AnimatePresence mode="wait">
-            {eventType === "Event"
+            {eventType === EVENT_EDITOR_TYPE.EVENT
               ? renderEventForm()
               : renderPlaceholderForm(eventType)}
           </AnimatePresence>
@@ -1345,6 +1405,123 @@ const AddEditNewEvent = forwardRef(
     );
   },
 );
+
+function TimeListPopup({ baseDate, onPick, is12Format, closePopup }) {
+  const listRef = useRef(null);
+  const itemRefs = useRef([]);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+
+  const timeSlots = useMemo(() => {
+    const slots = [];
+    const startOfDay = new Date(baseDate);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < EVENT_TIME_SLOTS_PER_DAY; i++) {
+      const d = new Date(startOfDay);
+
+      d.setMinutes(i * EVENT_TIME_SLOT_MINUTES);
+
+      slots.push(d);
+    }
+    return slots;
+  }, [baseDate]);
+
+  useEffect(() => {
+    if (!listRef.current) return;
+
+    const currentMinutes = baseDate.getHours() * 60 + baseDate.getMinutes();
+    let closestIndex = Math.round(currentMinutes / EVENT_TIME_SLOT_MINUTES);
+
+    if (closestIndex >= EVENT_TIME_SLOTS_PER_DAY) {
+      closestIndex = 0;
+    }
+
+    setHighlightedIndex(closestIndex);
+    if (itemRefs.current[closestIndex])
+      itemRefs.current[closestIndex].scrollIntoView({
+        block: "center",
+        behavior: "auto",
+      });
+
+    listRef.current.focus();
+  }, []);
+
+  const scrollToItem = (index) => {
+    if (itemRefs.current[index])
+      itemRefs.current[index].scrollIntoView({
+        block: "center",
+        behavior: "auto",
+      });
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = (highlightedIndex + 1) % timeSlots.length;
+      setHighlightedIndex(next);
+      scrollToItem(next);
+      onPick(timeSlots[next]);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = (highlightedIndex - 1 + timeSlots.length) % timeSlots.length;
+      setHighlightedIndex(next);
+      scrollToItem(next);
+      onPick(timeSlots[next]);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (highlightedIndex !== -1) {
+        onPick(timeSlots[highlightedIndex]);
+        if (closePopup) closePopup();
+      }
+    }
+  };
+
+  const handleItemClick = (date) => {
+    onPick(date);
+    if (closePopup) closePopup();
+  };
+
+  const formatTime = (date) =>
+    is12Format
+      ? date
+          .toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          })
+          .toLowerCase()
+      : date.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+
+  return (
+    <div
+      className={`${styles.timeListPopup} default-scrollbar`}
+      ref={listRef}
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+    >
+      {timeSlots.map((date, i) => (
+        <button
+          key={i}
+          ref={(el) => (itemRefs.current[i] = el)}
+          className={`${styles.timeBtn} ${
+            date.getHours() === baseDate.getHours() &&
+            date.getMinutes() === baseDate.getMinutes()
+              ? styles.selectedTime
+              : ""
+          } ${highlightedIndex === i ? styles.highlightedTime : ""}`}
+          onClick={() => handleItemClick(date)}
+          onMouseEnter={() => setHighlightedIndex(i)}
+        >
+          {formatTime(date)}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function VisibilityPopup({
   eventData,
@@ -1402,7 +1579,7 @@ function VisibilityPopup({
             {eventData.invitedIds.slice(0, 3).map((id) => {
               const f = friends.find((x) => x.id === id);
               return f ? (
-                <img key={id} src={f.pfpUrl || defaultAvatar} alt="friend" />
+                <img key={id} src={f.pfpUrl || "defaultAvatar"} alt="friend" />
               ) : null;
             })}
             {eventData.invitedIds.length > 3 && (
@@ -1426,7 +1603,7 @@ function SpecificFriendsPopup({
   const items = friends.map((f) => ({
     id: f.id,
     label: f.displayName,
-    icon: f.pfpUrl || defaultAvatar,
+    icon: f.pfpUrl || "defaultAvatar",
   }));
   const [selected, setSelected] = useState(eventData.invitedIds || []);
 
@@ -1728,122 +1905,9 @@ function CustomRecurrencePopup({ startDate, onSave, closeParent }) {
   );
 }
 
-function TimeListPopup({ baseDate, onPick, is12Format, closePopup }) {
-  const listRef = useRef(null);
-  const itemRefs = useRef([]);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
-
-  const timeSlots = useMemo(() => {
-    const slots = [];
-    const startOfDay = new Date(baseDate);
-    startOfDay.setHours(0, 0, 0, 0);
-
-    for (let i = 0; i < 96; i++) {
-      const d = new Date(startOfDay);
-      d.setMinutes(i * 15);
-      slots.push(d);
-    }
-    return slots;
-  }, [baseDate]);
-
-  useEffect(() => {
-    if (!listRef.current) return;
-
-    const currentMinutes = baseDate.getHours() * 60 + baseDate.getMinutes();
-    let closestIndex = Math.round(currentMinutes / 15);
-    if (closestIndex >= 96) closestIndex = 0;
-
-    setHighlightedIndex(closestIndex);
-    if (itemRefs.current[closestIndex])
-      itemRefs.current[closestIndex].scrollIntoView({
-        block: "center",
-        behavior: "auto",
-      });
-
-    listRef.current.focus();
-  }, []);
-
-  const scrollToItem = (index) => {
-    if (itemRefs.current[index])
-      itemRefs.current[index].scrollIntoView({
-        block: "center",
-        behavior: "auto",
-      });
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      const next = (highlightedIndex + 1) % timeSlots.length;
-      setHighlightedIndex(next);
-      scrollToItem(next);
-      onPick(timeSlots[next]);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      const next = (highlightedIndex - 1 + timeSlots.length) % timeSlots.length;
-      setHighlightedIndex(next);
-      scrollToItem(next);
-      onPick(timeSlots[next]);
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (highlightedIndex !== -1) {
-        onPick(timeSlots[highlightedIndex]);
-        if (closePopup) closePopup();
-      }
-    }
-  };
-
-  const handleItemClick = (date) => {
-    onPick(date);
-    if (closePopup) closePopup();
-  };
-
-  const formatTime = (date) =>
-    is12Format
-      ? date
-          .toLocaleTimeString([], {
-            hour: "numeric",
-            minute: "2-digit",
-            hour12: true,
-          })
-          .toLowerCase()
-      : date.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        });
-
-  return (
-    <div
-      className={`${styles.timeListPopup} default-scrollbar`}
-      ref={listRef}
-      tabIndex={-1}
-      onKeyDown={handleKeyDown}
-    >
-      {timeSlots.map((date, i) => (
-        <button
-          key={i}
-          ref={(el) => (itemRefs.current[i] = el)}
-          className={`${styles.timeBtn} ${
-            date.getHours() === baseDate.getHours() &&
-            date.getMinutes() === baseDate.getMinutes()
-              ? styles.selectedTime
-              : ""
-          } ${highlightedIndex === i ? styles.highlightedTime : ""}`}
-          onClick={() => handleItemClick(date)}
-          onMouseEnter={() => setHighlightedIndex(i)}
-        >
-          {formatTime(date)}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function getOrdinal(n) {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
   return s[(v - 20) % 10] || s[v] || s[0];
 }
-
 export default AddEditNewEvent;
