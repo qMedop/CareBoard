@@ -72,6 +72,8 @@ function EventSheetProvider({ children }) {
   const childOpenFrameRef = useRef(null);
 
   const childSecondOpenFrameRef = useRef(null);
+  const reopenFrameRef = useRef(null);
+  const reopenSecondFrameRef = useRef(null);
 
   /*
    * Prevent duplicate close requests while the sheet
@@ -182,26 +184,42 @@ function EventSheetProvider({ children }) {
     [clearChildCloseTimer, clearChildOpenFrames],
   );
 
-  /*
-   * Used when:
-   *
-   * Main event sheet was dragged fully closed,
-   * unsaved confirmation appeared,
-   * user pressed Cancel.
-   */
   const reopenEventSheet = useCallback(() => {
-    setSheetState((current) => {
-      if (!current.eventId) {
-        return current;
-      }
+    /*
+     * Force react-modal-sheet back into a known closed state.
+     */
+    setSheetState((current) => ({
+      ...current,
+      isOpen: false,
+    }));
 
-      return {
-        ...current,
-        isOpen: true,
-      };
+    if (reopenFrameRef.current !== null) {
+      cancelAnimationFrame(reopenFrameRef.current);
+    }
+
+    if (reopenSecondFrameRef.current !== null) {
+      cancelAnimationFrame(reopenSecondFrameRef.current);
+    }
+
+    reopenFrameRef.current = requestAnimationFrame(() => {
+      reopenFrameRef.current = null;
+
+      reopenSecondFrameRef.current = requestAnimationFrame(() => {
+        reopenSecondFrameRef.current = null;
+
+        setSheetState((current) => {
+          if (!current.eventId) {
+            return current;
+          }
+
+          return {
+            ...current,
+            isOpen: true,
+          };
+        });
+      });
     });
   }, []);
-
   /*
    * --------------------------------------------------
    * OPEN CHILD SHEET

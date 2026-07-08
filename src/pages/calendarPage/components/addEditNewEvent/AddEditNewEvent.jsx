@@ -316,7 +316,7 @@ const AddEditNewEvent = forwardRef(
       );
     }, [eventData, isFullDay, eventId]);
 
-    const handleRevert = () => {
+    const handleRevert = useCallback(() => {
       if (originalEventRef.current) {
         setEventData({ ...originalEventRef.current });
         setIsFullDay(originalEventRef.current.isFullDay || false);
@@ -337,76 +337,77 @@ const AddEditNewEvent = forwardRef(
       } else {
         setNewEvent({ ...originalEventRef.current });
       }
-    };
+    }, [eventId, setEventData, setIsFullDay, setLoadedEvents, setNewEvent]);
 
-    useImperativeHandle(ref, () => ({
-      hasUnsavedChanges: () =>
-        loadingStatus === EVENT_SAVE_STATUS.IDLE && hasChanges,
+    useImperativeHandle(
+      ref,
+      () => ({
+        hasUnsavedChanges: () =>
+          loadingStatus === EVENT_SAVE_STATUS.IDLE && hasChanges,
 
-      requestClose: () => {
-        if (isMobile) {
+        requestClose: () => {
           /*
-           * react-modal-sheet has already moved/closed the main
-           * sheet by the time the confirmation is being shown.
+           * IMPORTANT:
            *
-           * The confirmation itself is a child sheet.
+           * Confirmation popup always uses the old centered
+           * PopupContext system.
+           *
+           * Mobile and desktop behave the same here.
            */
-          openEventSubSheet({
-            content: (
+          openPopup(
+            "centered",
+            () => (
               <ConfirmPopup
                 message="You have unsaved changes. Are you sure you want to discard them?"
                 onYes={() => {
                   handleRevert();
 
-                  forceCloseEventSubSheet();
+                  closeContextPopup("unsaved-changes-popup", true);
 
                   if (onClose) {
                     onClose();
                   }
                 }}
                 onNo={() => {
-                  forceCloseEventSubSheet();
+                  closeContextPopup("unsaved-changes-popup", true);
 
                   /*
-                   * Wait for the confirmation sheet state to clear
-                   * before reopening the editor.
+                   * On mobile, dragging the sheet to 0 means the
+                   * library has already visually closed it.
+                   *
+                   * Reopen it after closing the centered popup.
                    */
-                  requestAnimationFrame(() => {
-                    reopenEventSheet();
-                  });
+                  if (isMobile) {
+                    requestAnimationFrame(() => {
+                      reopenEventSheet();
+                    });
+                  }
                 }}
               />
             ),
-            snapPoints: [0, 1],
-            initialSnap: 1,
-          });
+            document.body,
+            "center",
+            null,
+            null,
+            "unsaved-changes-popup",
+          );
+        },
 
-          return;
-        }
-
-        openPopup(
-          "centered",
-          () => (
-            <ConfirmPopup
-              message="You have unsaved changes. Are you sure you want to discard them?"
-              onYes={() => {
-                handleRevert();
-                closeContextPopup();
-
-                if (onClose) {
-                  onClose();
-                }
-              }}
-              onNo={closeContextPopup}
-            />
-          ),
-          document.body,
-          "center",
-        );
-      },
-
-      discardChanges: () => handleRevert(),
-    }));
+        discardChanges: () => {
+          handleRevert();
+        },
+      }),
+      [
+        loadingStatus,
+        hasChanges,
+        openPopup,
+        closeContextPopup,
+        handleRevert,
+        onClose,
+        isMobile,
+        reopenEventSheet,
+      ],
+    );
 
     // REFACTOR: Fixed stale closure by using functional state updates entirely
     const updateGlobalState = (updates, overrideIsFullDay = null) => {
