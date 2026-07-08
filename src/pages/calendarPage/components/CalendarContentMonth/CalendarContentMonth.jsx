@@ -1087,7 +1087,11 @@ function CalendarContentMonth({
                           height: `${layout.eventHeight}px`,
                           pointerEvents:
                             isGhost || dragState.active ? "none" : "auto",
-                          cursor: isGhost ? "grabbing" : "pointer",
+                          cursor: isMobile
+                            ? "none"
+                            : isGhost
+                              ? "grabbing"
+                              : "pointer",
                           zIndex: isGhost
                             ? 50
                             : isUnsaved
@@ -1263,6 +1267,8 @@ function ExpandedDayCarousel({
   setHoveredEventId,
   editingEventId,
 }) {
+  const { isMobile } = useTime();
+
   const [activeDate, setActiveDate] = useState(
     DateTime.fromISO(initialDateStr, { zone: userZone }).startOf("day"),
   );
@@ -1577,7 +1583,7 @@ function ExpandedDayCarousel({
                       onMouseLeave={() => setHoveredEventId(null)}
                       style={{
                         height: "26px",
-                        cursor: "pointer",
+                        cursor: `${isMobile ? "none" : "pointer"}`,
                         borderRadius: "4px",
                         position: "relative",
                         flexShrink: 0,
