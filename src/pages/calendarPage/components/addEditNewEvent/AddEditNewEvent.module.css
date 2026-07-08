@@ -263,15 +263,19 @@
   background-color: var(--element-bg-color);
   border-radius: 24px;
 }
-.addEditEvent .submit {
+.addEditEvent > .bottomSubmit {
   display: flex;
   justify-content: end;
-  padding: 0px 18px 8px;
+  gap: 12px;
+  padding: 0 12px;
 }
 .addEditEvent .submit button {
+  background-color: var(--main-cyan);
+}
+.addEditEvent > .bottomSubmit button {
+  padding: 0px 18px 8px;
   line-height: 42px;
   padding: 0 12px;
-  background-color: var(--main-cyan);
   color: var(--text-dark);
   font-size: 16px;
   border-radius: 22px;
@@ -816,25 +820,14 @@
 /* Mobile View */
 body:global(.mobile) {
   .addEditEvent {
-    width: 100dvw;
-    height: 100dvh;
+    width: 100%;
     border-radius: 0;
+    height: auto;
   }
   .addEditEvent .content {
     padding: 12px;
-    height: calc(100% - (54px + 48px));
-  }
-  .mobileOnly {
-    display: flex;
-    justify-content: flex-end;
-  }
-  .mobileOnly button {
-    border-radius: 50%;
-    width: 32px;
-    height: 32px;
-    margin: 4px;
-    padding: 4px;
-    box-sizing: content-box;
+    height: auto;
+    overflow: visible;
   }
 
   .addEditEvent .bottom .detailsContainter .contContnet {

@@ -43,6 +43,8 @@ export const TimeProvider = ({ children }) => {
   const [topBottomHeight, setTopBottomHeight] = useState(0);
   const [dayTasksDiv, setDayTasksDiv] = useState(null);
   const [draggableRef, setDraggableRef] = useState(null);
+  const [movingTimePosition, setMovingTimePosition] = useState(null);
+
   const resizeRef = useRef(null);
 
   const defaultAvatarUrl = (user) => {
@@ -372,6 +374,8 @@ export const TimeProvider = ({ children }) => {
         dragSourceId,
         defaultAvatarUrl,
         setToday,
+        setMovingTimePosition,
+        movingTimePosition,
       }}
     >
       {children}

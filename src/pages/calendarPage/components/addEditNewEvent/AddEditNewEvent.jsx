@@ -5,6 +5,7 @@ import {
   useState,
   forwardRef,
   useImperativeHandle,
+  useCallback,
 } from "react";
 
 import styles from "./AddEditNewEvent.module.css";
@@ -78,6 +79,7 @@ import {
   EVENT_TIME_SLOTS_PER_DAY,
 } from "../../../../constants/constants";
 import { useUserSettings } from "../../../../contexts/UserSettingsContext";
+import { useEventSheet } from "../../../../contexts/EventSheetContext";
 
 const AddEditNewEvent = forwardRef(
   ({ eventId: incomingEventId, onClose }, ref) => {
@@ -91,6 +93,13 @@ const AddEditNewEvent = forwardRef(
       timeZoneOffset,
       isMobile,
     } = useTime();
+
+    const {
+      openEventSubSheet,
+      closeEventSubSheet,
+      forceCloseEventSubSheet,
+      reopenEventSheet,
+    } = useEventSheet();
 
     const isDraft = newEvent && incomingEventId === newEvent.id;
     const eventId = isDraft ? null : incomingEventId;
@@ -330,23 +339,72 @@ const AddEditNewEvent = forwardRef(
       }
     };
 
-    const handleConfirmExitYes = () => {
-      handleRevert();
-      closeContextPopup();
-      if (onClose) onClose();
-    };
-
     useImperativeHandle(ref, () => ({
-      hasUnsavedChanges: () => loadingStatus === "idle" && hasChanges,
+      hasUnsavedChanges: () =>
+        loadingStatus === EVENT_SAVE_STATUS.IDLE && hasChanges,
+
       requestClose: () => {
-        openPopup("centered", () => (
-          <ConfirmPopup
-            message="You have unsaved changes. Are you sure you want to discard them?"
-            onYes={handleConfirmExitYes}
-            onNo={() => closeContextPopup()}
-          />
-        ));
+        if (isMobile) {
+          /*
+           * react-modal-sheet has already moved/closed the main
+           * sheet by the time the confirmation is being shown.
+           *
+           * The confirmation itself is a child sheet.
+           */
+          openEventSubSheet({
+            content: (
+              <ConfirmPopup
+                message="You have unsaved changes. Are you sure you want to discard them?"
+                onYes={() => {
+                  handleRevert();
+
+                  forceCloseEventSubSheet();
+
+                  if (onClose) {
+                    onClose();
+                  }
+                }}
+                onNo={() => {
+                  forceCloseEventSubSheet();
+
+                  /*
+                   * Wait for the confirmation sheet state to clear
+                   * before reopening the editor.
+                   */
+                  requestAnimationFrame(() => {
+                    reopenEventSheet();
+                  });
+                }}
+              />
+            ),
+            snapPoints: [0, 1],
+            initialSnap: 1,
+          });
+
+          return;
+        }
+
+        openPopup(
+          "centered",
+          () => (
+            <ConfirmPopup
+              message="You have unsaved changes. Are you sure you want to discard them?"
+              onYes={() => {
+                handleRevert();
+                closeContextPopup();
+
+                if (onClose) {
+                  onClose();
+                }
+              }}
+              onNo={closeContextPopup}
+            />
+          ),
+          document.body,
+          "center",
+        );
       },
+
       discardChanges: () => handleRevert(),
     }));
 
@@ -391,6 +449,51 @@ const AddEditNewEvent = forwardRef(
         return newData;
       });
     };
+
+    const openEditorPopup = useCallback(
+      ({
+        desktopType = "contextual",
+        content,
+        target = null,
+        position = "bottomRight",
+
+        snapPoints = [0, 1],
+        initialSnap = 1,
+      }) => {
+        if (isMobile) {
+          openEventSubSheet({
+            content,
+            snapPoints,
+            initialSnap,
+          });
+
+          return;
+        }
+
+        openPopup(desktopType, () => content, target, position);
+      },
+      [isMobile, openEventSubSheet, openPopup],
+    );
+
+    const closeEditorPopup = useCallback(() => {
+      if (isMobile) {
+        closeEventSubSheet();
+
+        return;
+      }
+
+      closeContextPopup();
+    }, [isMobile, closeEventSubSheet, closeContextPopup]);
+
+    const forceCloseEditorPopup = useCallback(() => {
+      if (isMobile) {
+        forceCloseEventSubSheet();
+
+        return;
+      }
+
+      closeContextPopup();
+    }, [isMobile, forceCloseEventSubSheet, closeContextPopup]);
 
     async function handleSave() {
       if (eventId && !hasChanges) return;
@@ -629,22 +732,26 @@ const AddEditNewEvent = forwardRef(
     };
 
     const handleDayPick = (e) => {
-      openPopup(
-        "contextual",
-        () => (
+      openEditorPopup({
+        desktopType: "contextual",
+
+        content: (
           <PickDay
             today={eventDataRef.current.timeRange.start}
             onPick={(selectedDate) => {
               const newStartDayLocal =
                 DateTime.fromISO(selectedDate).setZone(userZone);
+
               const currentStartLocal = DateTime.fromISO(
                 eventDataRef.current.timeRange.start,
                 { zone: "utc" },
               ).setZone(userZone);
+
               const currentEndLocal = DateTime.fromISO(
                 eventDataRef.current.timeRange.end,
                 { zone: "utc" },
               ).setZone(userZone);
+
               const duration = currentEndLocal.diff(currentStartLocal);
 
               const newStart = newStartDayLocal.set({
@@ -653,30 +760,48 @@ const AddEditNewEvent = forwardRef(
                 second: 0,
                 millisecond: 0,
               });
+
               const newEnd = newStart.plus(duration);
 
-              const newStartIso = newStart
-                .toUTC()
-                .toISO({ suppressMilliseconds: true });
-              const newEndIso = newEnd
-                .toUTC()
-                .toISO({ suppressMilliseconds: true });
+              const newStartIso = newStart.toUTC().toISO({
+                suppressMilliseconds: true,
+              });
+
+              const newEndIso = newEnd.toUTC().toISO({
+                suppressMilliseconds: true,
+              });
 
               const newIsFullDay = isRangeFullDay(newStartIso, newEndIso);
+
               setIsFullDay(newIsFullDay);
 
               updateGlobalState(
                 {
-                  timeRange: { start: newStartIso, end: newEndIso },
+                  timeRange: {
+                    start: newStartIso,
+                    end: newEndIso,
+                  },
                 },
                 newIsFullDay,
               );
+
+              /*
+               * PickDay apparently doesn't close itself in your
+               * current usage, so explicitly close mobile sheet.
+               *
+               * Remove this if you intentionally want PickDay
+               * to stay open after selection.
+               */
+              if (isMobile) {
+                closeEventSubSheet();
+              }
             }}
           />
         ),
-        e.currentTarget,
-        "bottomLeft",
-      );
+
+        target: e.currentTarget,
+        position: "bottomLeft",
+      });
     };
 
     const handleEndDayPick = (e) => {
@@ -855,39 +980,44 @@ const AddEditNewEvent = forwardRef(
     const handleEmojiChange = (emoji) => updateGlobalState({ emoji });
     const handleColorChange = (color) => {
       updateGlobalState({ color });
-      closeContextPopup();
+      closeEditorPopup();
     };
     const handleAvailabilityChange = (availability) => {
       updateGlobalState({ availability });
-      closeContextPopup();
+      closeEditorPopup();
     };
     const handleNotificationChange = (minutes) => {
       updateGlobalState({ notification: minutes });
-      closeContextPopup();
+      closeEditorPopup();
     };
     const handleRecurrenceChange = (recurrenceRule) => {
       updateGlobalState({ recurrence: recurrenceRule });
-      closeContextPopup();
+      closeEditorPopup();
     };
     const handleDescriptionSave = (newDescription) => {
       updateGlobalState({ description: newDescription });
     };
 
     const handleVisibiltyClick = (e) => {
-      openPopup(
-        "contextual",
-        () => (
+      openEditorPopup({
+        desktopType: "contextual",
+
+        content: (
           <VisibilityPopup
             eventData={eventData}
             updateGlobalState={updateGlobalState}
             friends={friends}
-            openSubPopup={openPopup}
-            closeParent={closeContextPopup}
+            openCenteredPopup={openPopup}
+            closeCenteredPopup={() =>
+              closeContextPopup("specific-friends-popup", true)
+            }
+            closeParent={closeEditorPopup}
           />
         ),
-        e.currentTarget,
-        "bottomRight",
-      );
+
+        target: e.currentTarget,
+        position: "bottomRight",
+      });
     };
 
     const isRangeFullDay = (startIso, endIso) => {
@@ -947,17 +1077,20 @@ const AddEditNewEvent = forwardRef(
     const shouldShowExpanded = isFullDay || isMultiDay || isExpanded;
 
     const handleDescriptionClick = (e) => {
-      openPopup(
-        "centered",
-        () => (
+      openEditorPopup({
+        desktopType: "centered",
+
+        content: (
           <DescriptionPopup
             initialDescription={eventData.description}
             onSave={handleDescriptionSave}
+            closePopup={closeEditorPopup}
           />
         ),
-        e.currentTarget,
-        "bottomLeft",
-      );
+
+        target: e.currentTarget,
+        position: "bottomLeft",
+      });
     };
     const handleRepeatClick = (e) => {
       openPopup(
@@ -975,9 +1108,10 @@ const AddEditNewEvent = forwardRef(
       );
     };
     const handleColorClick = (e) => {
-      openPopup(
-        "contextual",
-        () => (
+      openEditorPopup({
+        desktopType: "contextual",
+
+        content: (
           <div className={`${styles.colorPickerPopup} ${styles.addEventPopup}`}>
             {COLOR_OPTIONS.map((color) => (
               <div
@@ -988,31 +1122,38 @@ const AddEditNewEvent = forwardRef(
                 <div
                   className={styles.colorHover}
                   style={{ backgroundColor: color }}
-                ></div>
+                />
+
                 <span
                   className={styles.colorDot}
                   style={{ backgroundColor: color }}
-                ></span>
+                />
               </div>
             ))}
           </div>
         ),
-        e.currentTarget,
-        "bottomRight",
-      );
+
+        target: e.currentTarget,
+        position: "bottomRight",
+
+        snapPoints: [0, 1],
+        initialSnap: 1,
+      });
     };
     const handleEmojiClick = (e) => {
-      openPopup(
-        "contextual",
-        () => <EmojiPopup handleEmojiChange={handleEmojiChange} />,
-        e.currentTarget,
-        "bottomRight",
-      );
+      openEditorPopup({
+        desktopType: "contextual",
+        content: <EmojiPopup handleEmojiChange={handleEmojiChange} />,
+        target: e.currentTarget,
+        position: "bottomRight",
+      });
     };
+
     const handleAvailabilityClick = (e) => {
-      openPopup(
-        "contextual",
-        () => (
+      openEditorPopup({
+        desktopType: "contextual",
+
+        content: (
           <div
             className={`${styles.availabilityPopup} ${styles.optionsPopup} ${styles.addEventPopup}`}
           >
@@ -1028,14 +1169,18 @@ const AddEditNewEvent = forwardRef(
             ))}
           </div>
         ),
-        e.currentTarget,
-        "bottomRight",
-      );
+
+        target: e.currentTarget,
+        position: "bottomRight",
+
+        snapPoints: [0, 1],
+        initialSnap: 1,
+      });
     };
     const handleNotificationClick = (e) => {
-      openPopup(
-        "contextual",
-        () => (
+      openEditorPopup({
+        desktopType: "contextual",
+        content: (
           <div
             className={`${styles.notificationPopup} ${styles.optionsPopup} ${styles.addEventPopup}`}
           >
@@ -1051,9 +1196,12 @@ const AddEditNewEvent = forwardRef(
             ))}
           </div>
         ),
-        e.currentTarget,
-        "bottomRight",
-      );
+        target: e.currentTarget,
+        position: "bottomRight",
+
+        snapPoints: [0, 1],
+        initialSnap: 1,
+      });
     };
 
     const renderEventForm = () => (
@@ -1314,18 +1462,6 @@ const AddEditNewEvent = forwardRef(
 
     return (
       <div className={styles.addEditEvent}>
-        {isMobile && (
-          <div className={styles.mobileOnly}>
-            <CustomButton
-              ClickEffect={"scale"}
-              onClick={() => {
-                if (onClose) onClose();
-              }}
-            >
-              <CloseIcon />
-            </CustomButton>
-          </div>
-        )}
         <AnimatePresence>
           {loadingStatus !== "idle" && (
             <motion.div
@@ -1387,19 +1523,34 @@ const AddEditNewEvent = forwardRef(
               : renderPlaceholderForm(eventType)}
           </AnimatePresence>
         </div>
-        <div className={styles.submit}>
-          <CustomButton
-            className="default"
-            type="submit"
-            onClick={handleSave}
-            style={{
-              opacity: eventId && !hasChanges ? 0.5 : 1,
-              cursor: eventId && !hasChanges ? "not-allowed" : "pointer",
-              pointerEvents: eventId && !hasChanges ? "none" : "auto",
-            }}
-          >
-            {eventId ? "Save Changes" : "Add Event"}
-          </CustomButton>
+        <div className={styles.bottomSubmit}>
+          {isMobile && (
+            <div className={styles.mobileOnly}>
+              <CustomButton
+                className="default"
+                type="submit"
+                onClick={() => {
+                  if (onClose) onClose();
+                }}
+              >
+                {"Close"}
+              </CustomButton>
+            </div>
+          )}
+          <div className={styles.submit}>
+            <CustomButton
+              className="default"
+              type="submit"
+              onClick={handleSave}
+              style={{
+                opacity: eventId && !hasChanges ? 0.5 : 1,
+                cursor: eventId && !hasChanges ? "not-allowed" : "pointer",
+                pointerEvents: eventId && !hasChanges ? "none" : "auto",
+              }}
+            >
+              {eventId ? "Save Changes" : "Add Event"}
+            </CustomButton>
+          </div>
         </div>
       </div>
     );
@@ -1527,27 +1678,34 @@ function VisibilityPopup({
   eventData,
   updateGlobalState,
   friends,
-  openSubPopup,
+  openCenteredPopup,
+  closeCenteredPopup,
   closeParent,
 }) {
   const handleSelect = (val) => {
-    updateGlobalState({ visibility: val });
+    updateGlobalState({
+      visibility: val,
+    });
+
     closeParent();
   };
 
-  const handleSpecificClick = (e) => {
-    openSubPopup(
+  const handleSpecificClick = () => {
+    openCenteredPopup(
       "centered",
       () => (
         <SpecificFriendsPopup
           friends={friends}
           eventData={eventData}
           updateGlobalState={updateGlobalState}
-          closePopup={closeParent}
+          closePopup={closeCenteredPopup}
         />
       ),
-      null,
+      document.body,
       "center",
+      null,
+      null,
+      "specific-friends-popup",
     );
   };
 
@@ -1556,32 +1714,44 @@ function VisibilityPopup({
       className={`${styles.visibilityPopup} ${styles.optionsPopup} ${styles.addEventPopup}`}
     >
       <CustomButton
-        ClickEffect={"scale"}
-        className={`default ${eventData.visibility === "visible" ? styles.activeVis : ""}`}
+        ClickEffect="scale"
+        className={`default ${
+          eventData.visibility === "visible" ? styles.activeVis : ""
+        }`}
         onClick={() => handleSelect("visible")}
       >
         <p>Visible for friends</p>
       </CustomButton>
+
       <CustomButton
-        ClickEffect={"scale"}
-        className={`default ${eventData.visibility === "private" ? styles.activeVis : ""}`}
+        ClickEffect="scale"
+        className={`default ${
+          eventData.visibility === "private" ? styles.activeVis : ""
+        }`}
         onClick={() => handleSelect("private")}
       >
         <p>Private</p>
       </CustomButton>
 
-      <div className={styles.divider}></div>
+      <div className={styles.divider} />
 
       <div className={styles.onlyShareWith} onClick={handleSpecificClick}>
         <p>Only share with...</p>
+
         {eventData.invitedIds?.length > 0 && (
           <div className={styles.avatarsRow}>
             {eventData.invitedIds.slice(0, 3).map((id) => {
-              const f = friends.find((x) => x.id === id);
-              return f ? (
-                <img key={id} src={f.pfpUrl || "defaultAvatar"} alt="friend" />
+              const friend = friends.find((item) => item.id === id);
+
+              return friend ? (
+                <img
+                  key={id}
+                  src={friend.pfpUrl || "defaultAvatar"}
+                  alt="friend"
+                />
               ) : null;
             })}
+
             {eventData.invitedIds.length > 3 && (
               <div className={styles.moreAvatars}>
                 +{eventData.invitedIds.length - 3}
@@ -1648,9 +1818,8 @@ function SpecificFriendsPopup({
   );
 }
 
-function DescriptionPopup({ initialDescription, onSave }) {
+function DescriptionPopup({ initialDescription, onSave, closePopup }) {
   const [text, setText] = useState(initialDescription || "");
-  const { closePopup } = usePopup();
 
   const handleSave = () => {
     onSave(text);
@@ -1666,6 +1835,7 @@ function DescriptionPopup({ initialDescription, onSave }) {
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
+
       <div className={styles.descriptionActions}>
         <CustomButton onClick={handleSave} className="default">
           Save

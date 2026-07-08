@@ -9,6 +9,7 @@ import { TimeProvider } from "./contexts/TimeContext";
 import { PopupProvider } from "./contexts/PopupContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
 import { UserSettingsProvider } from "./contexts/UserSettingsContext";
+import { EventSheetProvider } from "./contexts/EventSheetContext";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
@@ -19,7 +20,9 @@ createRoot(document.getElementById("root")).render(
             <NotificationProvider>
               <InfoProvider>
                 <PopupProvider>
-                  <App />
+                  <EventSheetProvider>
+                    <App />
+                  </EventSheetProvider>
                 </PopupProvider>
               </InfoProvider>
             </NotificationProvider>
