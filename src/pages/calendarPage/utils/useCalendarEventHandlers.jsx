@@ -12,7 +12,7 @@ import AddEditNewEvent from "../components/addEditNewEvent/AddEditNewEvent";
 import EventInfoPopup from "../components/EventInfoPopup/EventInfoPopup";
 import RecurrenceUpdatePopup from "../components/RecurrenceUpdatePopup/RecurrenceUpdatePopup";
 import { getUserZone } from "../../../utils/getUserZone";
-import { useEventSheet } from "../../../contexts/EventSheetContext";
+import { useEventSheet } from "../../../contexts/PopupContext";
 
 function useCalendarEventHandlers(props = {}) {
   const { notify } = useNotification();

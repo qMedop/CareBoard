@@ -3,14 +3,20 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 
 import Popup from "../components/popup/Popup";
+import BottomSheet from "../components/popup/BottomSheet";
+
+import AddEditNewEvent from "../pages/calendarPage/components/addEditNewEvent/AddEditNewEvent";
 
 const PopupContext = createContext(null);
+
+const CHILD_SHEET_ANIMATION_MS = 300;
 
 function createPopupId() {
   if (
@@ -24,17 +30,26 @@ function createPopupId() {
 }
 
 function safelyCall(callback) {
-  if (typeof callback !== "function") return true;
+  if (typeof callback !== "function") {
+    return true;
+  }
 
   try {
     return callback();
   } catch (error) {
     console.error("Popup callback failed:", error);
+
     return false;
   }
 }
 
 function PopupProvider({ children }) {
+  /*
+   * ==================================================
+   * POPUP LOGIC
+   * ==================================================
+   */
+
   const [popups, setPopupsState] = useState([]);
 
   const popupsRef = useRef([]);
@@ -52,7 +67,9 @@ function PopupProvider({ children }) {
 
   const closePopupByObject = useCallback(
     (popup, force = false) => {
-      if (!popup) return true;
+      if (!popup) {
+        return true;
+      }
 
       if (closingIdsRef.current.has(popup.id)) {
         return false;
@@ -293,29 +310,568 @@ function PopupProvider({ children }) {
     [setPopups],
   );
 
+  /*
+   * ==================================================
+   * MAIN EVENT SHEET
+   * ==================================================
+   */
+
+  const [sheetState, setSheetState] = useState({
+    isOpen: false,
+    eventId: null,
+  });
+
+  const addEditRef = useRef(null);
+
+  const attemptCloseRef = useRef(null);
+
+  const reopenFrameRef = useRef(null);
+
+  const reopenSecondFrameRef = useRef(null);
+
+  /*
+   * ==================================================
+   * CHILD SHEET LOGIC
+   * ==================================================
+   */
+
+  const [childSheetStack, setChildSheetStack] = useState([]);
+
+  const [renderedChildSheet, setRenderedChildSheet] = useState(null);
+
+  const [isChildSheetOpen, setIsChildSheetOpen] = useState(false);
+
+  const childSheetIdRef = useRef(0);
+
+  const childCloseTimerRef = useRef(null);
+
+  const childOpenFrameRef = useRef(null);
+
+  const childSecondOpenFrameRef = useRef(null);
+
+  const childIsClosingRef = useRef(false);
+
+  /*
+   * ==================================================
+   * CHILD SHEET INTERNAL HELPERS
+   * ==================================================
+   */
+
+  const clearChildCloseTimer = useCallback(() => {
+    if (childCloseTimerRef.current !== null) {
+      clearTimeout(childCloseTimerRef.current);
+
+      childCloseTimerRef.current = null;
+    }
+  }, []);
+
+  const clearChildOpenFrames = useCallback(() => {
+    if (childOpenFrameRef.current !== null) {
+      cancelAnimationFrame(childOpenFrameRef.current);
+
+      childOpenFrameRef.current = null;
+    }
+
+    if (childSecondOpenFrameRef.current !== null) {
+      cancelAnimationFrame(childSecondOpenFrameRef.current);
+
+      childSecondOpenFrameRef.current = null;
+    }
+  }, []);
+
+  const scheduleChildSheetOpen = useCallback(() => {
+    clearChildOpenFrames();
+
+    childOpenFrameRef.current = requestAnimationFrame(() => {
+      childOpenFrameRef.current = null;
+
+      childSecondOpenFrameRef.current = requestAnimationFrame(() => {
+        childSecondOpenFrameRef.current = null;
+
+        setIsChildSheetOpen(true);
+      });
+    });
+  }, [clearChildOpenFrames]);
+
+  const mountAndOpenChildSheet = useCallback(
+    (sheet) => {
+      clearChildCloseTimer();
+
+      clearChildOpenFrames();
+
+      childIsClosingRef.current = false;
+
+      setIsChildSheetOpen(false);
+
+      setRenderedChildSheet(sheet);
+
+      scheduleChildSheetOpen();
+    },
+    [clearChildCloseTimer, clearChildOpenFrames, scheduleChildSheetOpen],
+  );
+
+  /*
+   * ==================================================
+   * MAIN EVENT SHEET API
+   * ==================================================
+   */
+
+  const openEventSheet = useCallback(
+    ({ eventId, attemptClose }) => {
+      attemptCloseRef.current =
+        typeof attemptClose === "function" ? attemptClose : null;
+
+      clearChildCloseTimer();
+
+      clearChildOpenFrames();
+
+      childIsClosingRef.current = false;
+
+      setChildSheetStack([]);
+
+      setRenderedChildSheet(null);
+
+      setIsChildSheetOpen(false);
+
+      setSheetState({
+        isOpen: true,
+        eventId,
+      });
+    },
+    [clearChildCloseTimer, clearChildOpenFrames],
+  );
+
+  const reopenEventSheet = useCallback(() => {
+    setSheetState((current) => ({
+      ...current,
+      isOpen: false,
+    }));
+
+    if (reopenFrameRef.current !== null) {
+      cancelAnimationFrame(reopenFrameRef.current);
+    }
+
+    if (reopenSecondFrameRef.current !== null) {
+      cancelAnimationFrame(reopenSecondFrameRef.current);
+    }
+
+    reopenFrameRef.current = requestAnimationFrame(() => {
+      reopenFrameRef.current = null;
+
+      reopenSecondFrameRef.current = requestAnimationFrame(() => {
+        reopenSecondFrameRef.current = null;
+
+        setSheetState((current) => {
+          if (!current.eventId) {
+            return current;
+          }
+
+          return {
+            ...current,
+            isOpen: true,
+          };
+        });
+      });
+    });
+  }, []);
+
+  /*
+   * ==================================================
+   * CHILD SHEET API
+   * ==================================================
+   */
+
+  const openEventSubSheet = useCallback(
+    ({
+      content,
+      snapPoints = [0, 1],
+      initialSnap = 1,
+      onBeforeClose = null,
+    }) => {
+      if (!content) {
+        return null;
+      }
+
+      const id = ++childSheetIdRef.current;
+
+      const newSheet = {
+        id,
+        content,
+        snapPoints,
+        initialSnap,
+        onBeforeClose:
+          typeof onBeforeClose === "function" ? onBeforeClose : null,
+      };
+
+      if (!renderedChildSheet) {
+        setChildSheetStack([newSheet]);
+
+        mountAndOpenChildSheet(newSheet);
+
+        return id;
+      }
+
+      if (childIsClosingRef.current) {
+        return null;
+      }
+
+      childIsClosingRef.current = true;
+
+      clearChildCloseTimer();
+
+      clearChildOpenFrames();
+
+      setIsChildSheetOpen(false);
+
+      childCloseTimerRef.current = setTimeout(() => {
+        childCloseTimerRef.current = null;
+
+        setChildSheetStack((current) => [...current, newSheet]);
+
+        mountAndOpenChildSheet(newSheet);
+      }, CHILD_SHEET_ANIMATION_MS);
+
+      return id;
+    },
+    [
+      renderedChildSheet,
+      mountAndOpenChildSheet,
+      clearChildCloseTimer,
+      clearChildOpenFrames,
+    ],
+  );
+
+  const closeEventSubSheet = useCallback(() => {
+    if (!renderedChildSheet || childIsClosingRef.current) {
+      return false;
+    }
+
+    if (renderedChildSheet.onBeforeClose) {
+      const result = renderedChildSheet.onBeforeClose();
+
+      if (result === false) {
+        return false;
+      }
+    }
+
+    childIsClosingRef.current = true;
+
+    clearChildCloseTimer();
+
+    clearChildOpenFrames();
+
+    setIsChildSheetOpen(false);
+
+    childCloseTimerRef.current = setTimeout(() => {
+      childCloseTimerRef.current = null;
+
+      setChildSheetStack((current) => {
+        if (current.length === 0) {
+          setRenderedChildSheet(null);
+
+          childIsClosingRef.current = false;
+
+          return current;
+        }
+
+        const nextStack = current.slice(0, -1);
+
+        const previousSheet =
+          nextStack.length > 0 ? nextStack[nextStack.length - 1] : null;
+
+        if (!previousSheet) {
+          setRenderedChildSheet(null);
+
+          setIsChildSheetOpen(false);
+
+          childIsClosingRef.current = false;
+
+          return nextStack;
+        }
+
+        setRenderedChildSheet(previousSheet);
+
+        setIsChildSheetOpen(false);
+
+        childIsClosingRef.current = false;
+
+        scheduleChildSheetOpen();
+
+        return nextStack;
+      });
+    }, CHILD_SHEET_ANIMATION_MS);
+
+    return true;
+  }, [
+    renderedChildSheet,
+    clearChildCloseTimer,
+    clearChildOpenFrames,
+    scheduleChildSheetOpen,
+  ]);
+
+  const forceCloseEventSubSheet = useCallback(() => {
+    if (!renderedChildSheet || childIsClosingRef.current) {
+      return false;
+    }
+
+    childIsClosingRef.current = true;
+
+    clearChildCloseTimer();
+
+    clearChildOpenFrames();
+
+    setIsChildSheetOpen(false);
+
+    childCloseTimerRef.current = setTimeout(() => {
+      childCloseTimerRef.current = null;
+
+      setChildSheetStack((current) => {
+        const nextStack = current.slice(0, -1);
+
+        const previousSheet =
+          nextStack.length > 0 ? nextStack[nextStack.length - 1] : null;
+
+        if (!previousSheet) {
+          setRenderedChildSheet(null);
+
+          setIsChildSheetOpen(false);
+
+          childIsClosingRef.current = false;
+
+          return nextStack;
+        }
+
+        setRenderedChildSheet(previousSheet);
+
+        setIsChildSheetOpen(false);
+
+        childIsClosingRef.current = false;
+
+        scheduleChildSheetOpen();
+
+        return nextStack;
+      });
+    }, CHILD_SHEET_ANIMATION_MS);
+
+    return true;
+  }, [
+    renderedChildSheet,
+    clearChildCloseTimer,
+    clearChildOpenFrames,
+    scheduleChildSheetOpen,
+  ]);
+
+  const closeAllEventSubSheets = useCallback(() => {
+    clearChildCloseTimer();
+
+    clearChildOpenFrames();
+
+    if (!renderedChildSheet) {
+      setChildSheetStack([]);
+
+      setIsChildSheetOpen(false);
+
+      childIsClosingRef.current = false;
+
+      return;
+    }
+
+    childIsClosingRef.current = true;
+
+    setIsChildSheetOpen(false);
+
+    childCloseTimerRef.current = setTimeout(() => {
+      childCloseTimerRef.current = null;
+
+      setChildSheetStack([]);
+
+      setRenderedChildSheet(null);
+
+      setIsChildSheetOpen(false);
+
+      childIsClosingRef.current = false;
+    }, CHILD_SHEET_ANIMATION_MS);
+  }, [renderedChildSheet, clearChildCloseTimer, clearChildOpenFrames]);
+
+  /*
+   * ==================================================
+   * MAIN SHEET CLOSE API
+   * ==================================================
+   */
+
+  const requestCloseEventSheet = useCallback(() => {
+    if (renderedChildSheet) {
+      closeEventSubSheet();
+
+      return false;
+    }
+
+    const attemptClose = attemptCloseRef.current;
+
+    if (attemptClose) {
+      const canClose = attemptClose();
+
+      if (canClose === false) {
+        return false;
+      }
+    }
+
+    setSheetState((current) => ({
+      ...current,
+      isOpen: false,
+    }));
+
+    return true;
+  }, [renderedChildSheet, closeEventSubSheet]);
+
+  const forceCloseEventSheet = useCallback(() => {
+    attemptCloseRef.current = null;
+
+    clearChildCloseTimer();
+
+    clearChildOpenFrames();
+
+    childIsClosingRef.current = false;
+
+    setChildSheetStack([]);
+
+    setRenderedChildSheet(null);
+
+    setIsChildSheetOpen(false);
+
+    setSheetState({
+      isOpen: false,
+      eventId: null,
+    });
+  }, [clearChildCloseTimer, clearChildOpenFrames]);
+
+  /*
+   * ==================================================
+   * CLEANUP
+   * ==================================================
+   */
+
+  useEffect(() => {
+    return () => {
+      if (childCloseTimerRef.current !== null) {
+        clearTimeout(childCloseTimerRef.current);
+      }
+
+      if (childOpenFrameRef.current !== null) {
+        cancelAnimationFrame(childOpenFrameRef.current);
+      }
+
+      if (childSecondOpenFrameRef.current !== null) {
+        cancelAnimationFrame(childSecondOpenFrameRef.current);
+      }
+
+      if (reopenFrameRef.current !== null) {
+        cancelAnimationFrame(reopenFrameRef.current);
+      }
+
+      if (reopenSecondFrameRef.current !== null) {
+        cancelAnimationFrame(reopenSecondFrameRef.current);
+      }
+    };
+  }, []);
+
+  /*
+   * ==================================================
+   * POPUP RENDER INFO
+   * ==================================================
+   */
+
   let topmostVisibleIndex = -1;
 
   for (let index = popups.length - 1; index >= 0; index -= 1) {
     if (!popups[index].isHidden) {
       topmostVisibleIndex = index;
+
       break;
     }
   }
 
+  /*
+   * ==================================================
+   * CONTEXT VALUE
+   * ==================================================
+   */
+
   const contextValue = useMemo(
     () => ({
+      /*
+       * Popup API
+       */
+
       openPopup,
       closePopup,
       hidePopup,
       showPopup,
       closeAllPopups,
+
+      /*
+       * Main event sheet API
+       */
+
+      openEventSheet,
+      reopenEventSheet,
+      requestCloseEventSheet,
+      forceCloseEventSheet,
+
+      isEventSheetOpen: sheetState.isOpen,
+
+      eventSheetId: sheetState.eventId,
+
+      addEditRef,
+
+      /*
+       * Child sheet API
+       */
+
+      openEventSubSheet,
+      closeEventSubSheet,
+      forceCloseEventSubSheet,
+      closeAllEventSubSheets,
+
+      hasEventSubSheet: childSheetStack.length > 0,
+
+      eventSubSheetDepth: childSheetStack.length,
     }),
-    [openPopup, closePopup, hidePopup, showPopup, closeAllPopups],
+    [
+      openPopup,
+      closePopup,
+      hidePopup,
+      showPopup,
+      closeAllPopups,
+
+      openEventSheet,
+      reopenEventSheet,
+      requestCloseEventSheet,
+      forceCloseEventSheet,
+
+      sheetState.isOpen,
+      sheetState.eventId,
+
+      openEventSubSheet,
+      closeEventSubSheet,
+      forceCloseEventSubSheet,
+      closeAllEventSubSheets,
+
+      childSheetStack.length,
+    ],
   );
+
+  /*
+   * ==================================================
+   * RENDER
+   * ==================================================
+   */
 
   return (
     <PopupContext.Provider value={contextValue}>
       {children}
+
+      {/* EXISTING POPUPS */}
 
       <AnimatePresence>
         {popups.map((popup, index) => (
@@ -334,6 +890,34 @@ function PopupProvider({ children }) {
           </Popup>
         ))}
       </AnimatePresence>
+
+      {/* MAIN EVENT SHEET */}
+
+      <BottomSheet
+        isOpen={sheetState.isOpen}
+        onClose={requestCloseEventSheet}
+        snapPoints={[0, 1]}
+        initialSnap={1}
+      >
+        {sheetState.eventId && (
+          <AddEditNewEvent
+            ref={addEditRef}
+            eventId={sheetState.eventId}
+            onClose={forceCloseEventSheet}
+          />
+        )}
+      </BottomSheet>
+
+      {/* CHILD / NESTED SHEET */}
+
+      <BottomSheet
+        isOpen={isChildSheetOpen}
+        onClose={closeEventSubSheet}
+        snapPoints={renderedChildSheet?.snapPoints || [0, 1]}
+        initialSnap={renderedChildSheet?.initialSnap ?? 1}
+      >
+        {renderedChildSheet?.content}
+      </BottomSheet>
     </PopupContext.Provider>
   );
 }
@@ -348,4 +932,25 @@ function usePopup() {
   return context;
 }
 
-export { PopupProvider, usePopup };
+/*
+ * Compatibility hook.
+ *
+ * This lets existing imports of useEventSheet continue
+ * working while both systems now use the same context.
+ *
+ * You can either:
+ *
+ * 1. Import useEventSheet from PopupContext.jsx, or
+ * 2. Update old EventSheetContext.jsx to re-export it.
+ */
+function useEventSheet() {
+  const context = useContext(PopupContext);
+
+  if (!context) {
+    throw new Error("useEventSheet must be used within PopupProvider.");
+  }
+
+  return context;
+}
+
+export { PopupProvider, usePopup, useEventSheet };

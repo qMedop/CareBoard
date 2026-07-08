@@ -52,6 +52,7 @@ import Loading from "../../../../components/loading/Loading";
 
 import { formatDurationFromMinutes } from "../../../../utils/formatDurationFromMinutes";
 import { getUserZone } from "../../../../utils/getUserZone";
+import { useEventSheet } from "../../../../contexts/PopupContext";
 
 import {
   COLOR_OPTIONS,
@@ -79,7 +80,6 @@ import {
   EVENT_TIME_SLOTS_PER_DAY,
 } from "../../../../constants/constants";
 import { useUserSettings } from "../../../../contexts/UserSettingsContext";
-import { useEventSheet } from "../../../../contexts/EventSheetContext";
 
 const AddEditNewEvent = forwardRef(
   ({ eventId: incomingEventId, onClose }, ref) => {
