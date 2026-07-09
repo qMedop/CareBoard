@@ -1,29 +1,34 @@
 import { Sheet } from "react-modal-sheet";
 
 import styles from "./BottomSheet.module.css";
+import { useMemo } from "react";
 
 function BottomSheet({
   isOpen,
   onClose,
+  onCloseEnd,
   children,
-  snapPoints = [0, 0.6, 1],
-  initialSnap = 2,
+  detent = "default",
+  snapPoints,
+  initialSnap,
 }) {
+  const mountPoint = useMemo(() => document.getElementById("root"), []);
   return (
     <Sheet
+      className={styles.sheet}
       isOpen={isOpen}
       onClose={onClose}
-      detent="content-height"
+      onCloseEnd={onCloseEnd}
+      detent={detent}
       snapPoints={snapPoints}
       initialSnap={initialSnap}
-      className={styles.sheet}
+      mountPoint={mountPoint}
+      data-event-sheet={"true"}
     >
-      <Sheet.Container className={styles.container} data-event-sheet="true">
-        <Sheet.Header className={styles.header} />
+      <Sheet.Container className={styles.container}>
+        <Sheet.Header />
 
-        <Sheet.Content className={styles.content} disableDrag={false}>
-          {children}
-        </Sheet.Content>
+        <Sheet.Content className={styles.content}>{children}</Sheet.Content>
       </Sheet.Container>
 
       <Sheet.Backdrop onTap={onClose} />

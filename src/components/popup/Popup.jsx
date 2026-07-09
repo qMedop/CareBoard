@@ -121,19 +121,32 @@ function getTransformOrigin(direction) {
 function getMotionVariants(type, direction) {
   if (type === "centered") {
     return {
-      initial: {
-        opacity: 0,
-        scale: 0.94,
+      container: {
+        initial: {
+          opacity: 0,
+        },
+
+        animate: {
+          opacity: 1,
+        },
+
+        exit: {
+          opacity: 0,
+        },
       },
 
-      animate: {
-        opacity: 1,
-        scale: 1,
-      },
+      child: {
+        initial: {
+          scale: 0.9,
+        },
 
-      exit: {
-        opacity: 0,
-        scale: 0.96,
+        animate: {
+          scale: 1,
+        },
+
+        exit: {
+          scale: 0.8,
+        },
       },
     };
   }
@@ -410,55 +423,46 @@ function Popup({
 
       top: {
         top: triggerRect.top - popupHeight - GAP,
-
         left: centerX,
       },
 
       topLeft: {
         top: triggerRect.top - popupHeight - GAP,
-
         left: triggerRect.left,
       },
 
       topRight: {
         top: triggerRect.top - popupHeight - GAP,
-
         left: triggerRect.right - popupWidth,
       },
 
       right: {
         top: centerY,
-
         left: triggerRect.right + GAP,
       },
 
       rightTop: {
         top: triggerRect.top,
-
         left: triggerRect.right + GAP,
       },
 
       rightBottom: {
         top: triggerRect.bottom - popupHeight,
-
         left: triggerRect.right + GAP,
       },
 
       left: {
         top: centerY,
-
         left: triggerRect.left - popupWidth - GAP,
       },
 
       leftTop: {
         top: triggerRect.top,
-
         left: triggerRect.left - popupWidth - GAP,
       },
 
       leftBottom: {
         top: triggerRect.bottom - popupHeight,
-
         left: triggerRect.left - popupWidth - GAP,
       },
     };
@@ -526,12 +530,10 @@ function Popup({
 
       const availableHeight = Math.max(
         MIN_MOVABLE_HEIGHT,
-
         viewportHeight - MIN_TOP - MIN_BOTTOM,
       );
 
       popup.style.maxWidth = `${availableWidth}px`;
-
       popup.style.maxHeight = `${availableHeight}px`;
 
       const currentRect = popup.getBoundingClientRect();
@@ -545,9 +547,7 @@ function Popup({
 
       const desiredHeight = Math.min(
         MAX_MOVABLE_HEIGHT,
-
         naturalMovableHeightRef.current,
-
         availableHeight,
       );
 
@@ -573,7 +573,6 @@ function Popup({
         top = triggerRect.top;
       } else {
         left = currentRect.left || GAP;
-
         top = currentRect.top || MIN_TOP;
       }
 
@@ -588,23 +587,16 @@ function Popup({
 
       const finalHeight = clamp(
         Math.min(desiredHeight, availableBelow),
-
         MIN_MOVABLE_HEIGHT,
-
         desiredHeight,
       );
 
       setDynamicStyles({
         top: `${top}px`,
-
         left: `${left}px`,
-
         height: `${finalHeight}px`,
-
         maxWidth: `${availableWidth}px`,
-
         maxHeight: `${availableHeight}px`,
-
         opacity: 1,
       });
     },
@@ -621,7 +613,6 @@ function Popup({
     const update = () => scheduleFrame(calculateContextualPosition);
 
     window.addEventListener("resize", update);
-
     document.addEventListener("scroll", update, true);
 
     const observer =
@@ -637,7 +628,6 @@ function Popup({
 
     return () => {
       window.removeEventListener("resize", update);
-
       document.removeEventListener("scroll", update, true);
 
       observer?.disconnect();
@@ -673,7 +663,6 @@ function Popup({
     };
 
     window.addEventListener("resize", updateFromTrigger);
-
     document.addEventListener("scroll", updateFromTrigger, true);
 
     const observer =
@@ -697,7 +686,6 @@ function Popup({
 
     return () => {
       window.removeEventListener("resize", updateFromTrigger);
-
       document.removeEventListener("scroll", updateFromTrigger, true);
 
       observer?.disconnect();
@@ -739,18 +727,13 @@ function Popup({
 
       movableDragRef.current = {
         pointerId: event.pointerId,
-
         startX: event.clientX,
-
         startY: event.clientY,
-
         initialLeft: rect.left,
-
         initialTop: rect.top,
 
         desiredHeight: Math.min(
           MAX_MOVABLE_HEIGHT,
-
           naturalMovableHeightRef.current || rect.height,
         ),
       };
@@ -771,7 +754,6 @@ function Popup({
         }
 
         const viewportWidth = document.documentElement.clientWidth;
-
         const viewportHeight = document.documentElement.clientHeight;
 
         const popupRect = currentPopup.getBoundingClientRect();
@@ -779,7 +761,6 @@ function Popup({
         const popupWidth = popupRect.width;
 
         const rawLeft = state.initialLeft + moveEvent.clientX - state.startX;
-
         const rawTop = state.initialTop + moveEvent.clientY - state.startY;
 
         const nextLeft = clamp(rawLeft, GAP, viewportWidth - popupWidth - GAP);
@@ -792,16 +773,12 @@ function Popup({
 
         const nextHeight = clamp(
           Math.min(state.desiredHeight, availableBelow),
-
           MIN_MOVABLE_HEIGHT,
-
           state.desiredHeight,
         );
 
         currentPopup.style.left = `${nextLeft}px`;
-
         currentPopup.style.top = `${nextTop}px`;
-
         currentPopup.style.height = `${nextHeight}px`;
       };
 
@@ -825,9 +802,7 @@ function Popup({
             ...current,
 
             top: `${rectAfterDrag.top}px`,
-
             left: `${rectAfterDrag.left}px`,
-
             height: `${rectAfterDrag.height}px`,
           }));
         }
@@ -836,16 +811,12 @@ function Popup({
       };
 
       document.addEventListener("pointermove", handlePointerMove);
-
       document.addEventListener("pointerup", finishDrag);
-
       document.addEventListener("pointercancel", finishDrag);
 
       dragCleanupRef.current = () => {
         document.removeEventListener("pointermove", handlePointerMove);
-
         document.removeEventListener("pointerup", finishDrag);
-
         document.removeEventListener("pointercancel", finishDrag);
       };
     },
@@ -856,6 +827,9 @@ function Popup({
     BR != null ? (typeof BR === "number" ? `${BR}px` : BR) : undefined;
 
   const motionVariants = getMotionVariants(type, direction);
+
+  const activeMotionVariants =
+    type === "centered" ? motionVariants.container : motionVariants;
 
   const style =
     type === "contextual" || type === "movable"
@@ -900,6 +874,27 @@ function Popup({
             borderRadius,
           };
 
+  const childMotionProps =
+    type === "centered"
+      ? {
+          initial: motionVariants.child.initial,
+
+          animate: isHidden
+            ? {
+                ...motionVariants.child.animate,
+                opacity: 0,
+              }
+            : motionVariants.child.animate,
+
+          exit: motionVariants.child.exit,
+
+          transition: {
+            duration: 0.16,
+            ease: "easeOut",
+          },
+        }
+      : {};
+
   return (
     <motion.div
       ref={popupContainerRef}
@@ -913,23 +908,27 @@ function Popup({
         type === "movable" ? "shadow-effect" : ""
       }`}
       style={style}
-      initial={motionVariants.initial}
+      initial={activeMotionVariants.initial}
       animate={
         isHidden
           ? {
-              ...motionVariants.animate,
+              ...activeMotionVariants.animate,
               opacity: 0,
             }
-          : motionVariants.animate
+          : activeMotionVariants.animate
       }
-      exit={motionVariants.exit}
+      exit={activeMotionVariants.exit}
       transition={{
         duration: 0.16,
         ease: "easeOut",
       }}
       aria-hidden={isHidden}
     >
-      <motion.div ref={popupContentRef} className={styles.popupContent}>
+      <motion.div
+        ref={popupContentRef}
+        className={styles.popupContent}
+        {...childMotionProps}
+      >
         {type === "movable" ? (
           <div className={styles.movableContainer}>
             <div

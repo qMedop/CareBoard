@@ -1,4 +1,5 @@
 import { AnimatePresence } from "framer-motion";
+
 import {
   createContext,
   useCallback,
@@ -53,7 +54,14 @@ function PopupProvider({ children }) {
   const [popups, setPopupsState] = useState([]);
 
   const popupsRef = useRef([]);
+
   const closingIdsRef = useRef(new Set());
+
+  /*
+   * Prevent the popup underneath an exiting popup from
+   * immediately receiving another outside click.
+   */
+  const popupTransitionLockRef = useRef(false);
 
   const setPopups = useCallback((updater) => {
     setPopupsState((current) => {
@@ -156,12 +164,19 @@ function PopupProvider({ children }) {
 
       const nextPopup = {
         type,
+
         render: contentRenderer,
+
         triggerElement,
+
         direction,
+
         onClose: typeof onClose === "function" ? onClose : () => {},
+
         BR,
+
         id,
+
         isHidden: false,
       };
 
@@ -209,6 +224,7 @@ function PopupProvider({ children }) {
           popup.id === id
             ? {
                 ...popup,
+
                 isHidden: true,
               }
             : popup,
@@ -233,6 +249,7 @@ function PopupProvider({ children }) {
           popup.id === id
             ? {
                 ...popup,
+
                 isHidden: false,
 
                 triggerElement:
@@ -259,6 +276,8 @@ function PopupProvider({ children }) {
 
       if (force === true) {
         closingIdsRef.current.clear();
+
+        popupTransitionLockRef.current = false;
 
         setPopups([]);
 
@@ -300,6 +319,8 @@ function PopupProvider({ children }) {
       }
 
       if (closableIds.size > 0) {
+        popupTransitionLockRef.current = true;
+
         setPopups((latest) =>
           latest.filter((popup) => !closableIds.has(popup.id)),
         );
@@ -318,6 +339,7 @@ function PopupProvider({ children }) {
 
   const [sheetState, setSheetState] = useState({
     isOpen: false,
+
     eventId: null,
   });
 
@@ -325,9 +347,11 @@ function PopupProvider({ children }) {
 
   const attemptCloseRef = useRef(null);
 
-  const reopenFrameRef = useRef(null);
-
-  const reopenSecondFrameRef = useRef(null);
+  /*
+   * If another event sheet is requested while the
+   * current one is still closing, wait for onCloseEnd.
+   */
+  const pendingEventSheetOpenRef = useRef(null);
 
   /*
    * ==================================================
@@ -418,8 +442,11 @@ function PopupProvider({ children }) {
 
   const openEventSheet = useCallback(
     ({ eventId, attemptClose }) => {
-      attemptCloseRef.current =
-        typeof attemptClose === "function" ? attemptClose : null;
+      const nextSheet = {
+        eventId,
+
+        attemptClose: typeof attemptClose === "function" ? attemptClose : null,
+      };
 
       clearChildCloseTimer();
 
@@ -433,46 +460,90 @@ function PopupProvider({ children }) {
 
       setIsChildSheetOpen(false);
 
+      /*
+       * If a sheet is currently open, finish closing it
+       * before opening the next one.
+       */
+      if (sheetState.isOpen) {
+        pendingEventSheetOpenRef.current = nextSheet;
+
+        setSheetState((current) => ({
+          ...current,
+
+          isOpen: false,
+        }));
+
+        return;
+      }
+
+      attemptCloseRef.current = nextSheet.attemptClose;
+
       setSheetState({
         isOpen: true,
-        eventId,
+
+        eventId: nextSheet.eventId,
       });
     },
-    [clearChildCloseTimer, clearChildOpenFrames],
+    [sheetState.isOpen, clearChildCloseTimer, clearChildOpenFrames],
   );
 
+  /*
+   * Kept for API compatibility.
+   *
+   * Instead of manually toggling false/true through
+   * animation frames, reopen through the normal sheet
+   * lifecycle.
+   */
   const reopenEventSheet = useCallback(() => {
+    const currentEventId = sheetState.eventId;
+
+    if (!currentEventId) {
+      return false;
+    }
+
+    pendingEventSheetOpenRef.current = {
+      eventId: currentEventId,
+
+      attemptClose: attemptCloseRef.current,
+    };
+
     setSheetState((current) => ({
       ...current,
+
       isOpen: false,
     }));
 
-    if (reopenFrameRef.current !== null) {
-      cancelAnimationFrame(reopenFrameRef.current);
-    }
+    return true;
+  }, [sheetState.eventId]);
 
-    if (reopenSecondFrameRef.current !== null) {
-      cancelAnimationFrame(reopenSecondFrameRef.current);
-    }
+  const handleEventSheetCloseEnd = useCallback(() => {
+    const pending = pendingEventSheetOpenRef.current;
 
-    reopenFrameRef.current = requestAnimationFrame(() => {
-      reopenFrameRef.current = null;
+    if (pending) {
+      pendingEventSheetOpenRef.current = null;
 
-      reopenSecondFrameRef.current = requestAnimationFrame(() => {
-        reopenSecondFrameRef.current = null;
+      attemptCloseRef.current = pending.attemptClose;
 
-        setSheetState((current) => {
-          if (!current.eventId) {
-            return current;
-          }
+      setSheetState({
+        isOpen: true,
 
-          return {
-            ...current,
-            isOpen: true,
-          };
-        });
+        eventId: pending.eventId,
       });
+
+      return;
+    }
+
+    /*
+     * Only clear the content after the library's exit
+     * animation has completed.
+     */
+    setSheetState({
+      isOpen: false,
+
+      eventId: null,
     });
+
+    attemptCloseRef.current = null;
   }, []);
 
   /*
@@ -484,8 +555,11 @@ function PopupProvider({ children }) {
   const openEventSubSheet = useCallback(
     ({
       content,
+
       snapPoints = [0, 1],
+
       initialSnap = 1,
+
       onBeforeClose = null,
     }) => {
       if (!content) {
@@ -496,9 +570,13 @@ function PopupProvider({ children }) {
 
       const newSheet = {
         id,
+
         content,
+
         snapPoints,
+
         initialSnap,
+
         onBeforeClose:
           typeof onBeforeClose === "function" ? onBeforeClose : null,
       };
@@ -535,8 +613,11 @@ function PopupProvider({ children }) {
     },
     [
       renderedChildSheet,
+
       mountAndOpenChildSheet,
+
       clearChildCloseTimer,
+
       clearChildOpenFrames,
     ],
   );
@@ -604,8 +685,11 @@ function PopupProvider({ children }) {
     return true;
   }, [
     renderedChildSheet,
+
     clearChildCloseTimer,
+
     clearChildOpenFrames,
+
     scheduleChildSheetOpen,
   ]);
 
@@ -656,8 +740,11 @@ function PopupProvider({ children }) {
     return true;
   }, [
     renderedChildSheet,
+
     clearChildCloseTimer,
+
     clearChildOpenFrames,
+
     scheduleChildSheetOpen,
   ]);
 
@@ -718,6 +805,7 @@ function PopupProvider({ children }) {
 
     setSheetState((current) => ({
       ...current,
+
       isOpen: false,
     }));
 
@@ -726,6 +814,8 @@ function PopupProvider({ children }) {
 
   const forceCloseEventSheet = useCallback(() => {
     attemptCloseRef.current = null;
+
+    pendingEventSheetOpenRef.current = null;
 
     clearChildCloseTimer();
 
@@ -739,10 +829,14 @@ function PopupProvider({ children }) {
 
     setIsChildSheetOpen(false);
 
-    setSheetState({
+    /*
+     * Keep eventId mounted until onCloseEnd.
+     */
+    setSheetState((current) => ({
+      ...current,
+
       isOpen: false,
-      eventId: null,
-    });
+    }));
   }, [clearChildCloseTimer, clearChildOpenFrames]);
 
   /*
@@ -763,14 +857,6 @@ function PopupProvider({ children }) {
 
       if (childSecondOpenFrameRef.current !== null) {
         cancelAnimationFrame(childSecondOpenFrameRef.current);
-      }
-
-      if (reopenFrameRef.current !== null) {
-        cancelAnimationFrame(reopenFrameRef.current);
-      }
-
-      if (reopenSecondFrameRef.current !== null) {
-        cancelAnimationFrame(reopenSecondFrameRef.current);
       }
     };
   }, []);
@@ -804,9 +890,13 @@ function PopupProvider({ children }) {
        */
 
       openPopup,
+
       closePopup,
+
       hidePopup,
+
       showPopup,
+
       closeAllPopups,
 
       /*
@@ -814,8 +904,11 @@ function PopupProvider({ children }) {
        */
 
       openEventSheet,
+
       reopenEventSheet,
+
       requestCloseEventSheet,
+
       forceCloseEventSheet,
 
       isEventSheetOpen: sheetState.isOpen,
@@ -829,8 +922,11 @@ function PopupProvider({ children }) {
        */
 
       openEventSubSheet,
+
       closeEventSubSheet,
+
       forceCloseEventSubSheet,
+
       closeAllEventSubSheets,
 
       hasEventSubSheet: childSheetStack.length > 0,
@@ -839,22 +935,33 @@ function PopupProvider({ children }) {
     }),
     [
       openPopup,
+
       closePopup,
+
       hidePopup,
+
       showPopup,
+
       closeAllPopups,
 
       openEventSheet,
+
       reopenEventSheet,
+
       requestCloseEventSheet,
+
       forceCloseEventSheet,
 
       sheetState.isOpen,
+
       sheetState.eventId,
 
       openEventSubSheet,
+
       closeEventSubSheet,
+
       forceCloseEventSubSheet,
+
       closeAllEventSubSheets,
 
       childSheetStack.length,
@@ -873,14 +980,30 @@ function PopupProvider({ children }) {
 
       {/* EXISTING POPUPS */}
 
-      <AnimatePresence>
+      <AnimatePresence
+        onExitComplete={() => {
+          popupTransitionLockRef.current = false;
+        }}
+      >
         {popups.map((popup, index) => (
           <Popup
             key={popup.id}
             type={popup.type}
             direction={popup.direction}
             triggerElement={popup.triggerElement}
-            onClose={() => closePopup(popup.id)}
+            onClose={() => {
+              if (popupTransitionLockRef.current) {
+                return false;
+              }
+
+              const closed = closePopup(popup.id);
+
+              if (closed) {
+                popupTransitionLockRef.current = true;
+              }
+
+              return closed;
+            }}
             isTopmost={index === topmostVisibleIndex}
             BR={popup.BR}
             isHidden={popup.isHidden}
@@ -896,14 +1019,15 @@ function PopupProvider({ children }) {
       <BottomSheet
         isOpen={sheetState.isOpen}
         onClose={requestCloseEventSheet}
-        snapPoints={[0, 1]}
-        initialSnap={1}
+        onCloseEnd={handleEventSheetCloseEnd}
+        detent="content-height"
       >
         {sheetState.eventId && (
           <AddEditNewEvent
             ref={addEditRef}
             eventId={sheetState.eventId}
             onClose={forceCloseEventSheet}
+            isBottomSheet
           />
         )}
       </BottomSheet>
@@ -932,17 +1056,6 @@ function usePopup() {
   return context;
 }
 
-/*
- * Compatibility hook.
- *
- * This lets existing imports of useEventSheet continue
- * working while both systems now use the same context.
- *
- * You can either:
- *
- * 1. Import useEventSheet from PopupContext.jsx, or
- * 2. Update old EventSheetContext.jsx to re-export it.
- */
 function useEventSheet() {
   const context = useContext(PopupContext);
 
