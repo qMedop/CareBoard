@@ -13,8 +13,6 @@ import {
 import Popup from "../components/popup/Popup";
 import BottomSheet from "../components/popup/BottomSheet";
 
-import AddEditNewEvent from "../pages/calendarPage/components/addEditNewEvent/AddEditNewEvent";
-
 const PopupContext = createContext(null);
 
 const CHILD_SHEET_ANIMATION_MS = 300;
@@ -57,10 +55,6 @@ function PopupProvider({ children }) {
 
   const closingIdsRef = useRef(new Set());
 
-  /*
-   * Prevent the popup underneath an exiting popup from
-   * immediately receiving another outside click.
-   */
   const popupTransitionLockRef = useRef(false);
 
   const setPopups = useCallback((updater) => {
@@ -224,7 +218,6 @@ function PopupProvider({ children }) {
           popup.id === id
             ? {
                 ...popup,
-
                 isHidden: true,
               }
             : popup,
@@ -339,18 +332,14 @@ function PopupProvider({ children }) {
 
   const [sheetState, setSheetState] = useState({
     isOpen: false,
-
-    eventId: null,
+    id: null,
+    render: null,
   });
 
   const addEditRef = useRef(null);
 
   const attemptCloseRef = useRef(null);
 
-  /*
-   * If another event sheet is requested while the
-   * current one is still closing, wait for onCloseEnd.
-   */
   const pendingEventSheetOpenRef = useRef(null);
 
   /*
@@ -441,80 +430,76 @@ function PopupProvider({ children }) {
    */
 
   const openEventSheet = useCallback(
-    ({ eventId, attemptClose }) => {
+    ({ id, attemptClose, content }) => {
+      if (typeof content !== "function") {
+        console.error(
+          "openEventSheet requires content to be a render function.",
+        );
+
+        return false;
+      }
+
       const nextSheet = {
-        eventId,
+        id,
+
+        render: content,
 
         attemptClose: typeof attemptClose === "function" ? attemptClose : null,
       };
 
       clearChildCloseTimer();
-
       clearChildOpenFrames();
 
       childIsClosingRef.current = false;
 
       setChildSheetStack([]);
-
       setRenderedChildSheet(null);
-
       setIsChildSheetOpen(false);
 
-      /*
-       * If a sheet is currently open, finish closing it
-       * before opening the next one.
-       */
       if (sheetState.isOpen) {
         pendingEventSheetOpenRef.current = nextSheet;
 
         setSheetState((current) => ({
           ...current,
-
           isOpen: false,
         }));
 
-        return;
+        return true;
       }
 
       attemptCloseRef.current = nextSheet.attemptClose;
 
       setSheetState({
         isOpen: true,
-
-        eventId: nextSheet.eventId,
+        id: nextSheet.id,
+        render: nextSheet.render,
       });
+
+      return true;
     },
     [sheetState.isOpen, clearChildCloseTimer, clearChildOpenFrames],
   );
 
-  /*
-   * Kept for API compatibility.
-   *
-   * Instead of manually toggling false/true through
-   * animation frames, reopen through the normal sheet
-   * lifecycle.
-   */
   const reopenEventSheet = useCallback(() => {
-    const currentEventId = sheetState.eventId;
-
-    if (!currentEventId) {
+    if (!sheetState.id || !sheetState.render) {
       return false;
     }
 
     pendingEventSheetOpenRef.current = {
-      eventId: currentEventId,
+      id: sheetState.id,
+
+      render: sheetState.render,
 
       attemptClose: attemptCloseRef.current,
     };
 
     setSheetState((current) => ({
       ...current,
-
       isOpen: false,
     }));
 
     return true;
-  }, [sheetState.eventId]);
+  }, [sheetState.id, sheetState.render]);
 
   const handleEventSheetCloseEnd = useCallback(() => {
     const pending = pendingEventSheetOpenRef.current;
@@ -526,21 +511,17 @@ function PopupProvider({ children }) {
 
       setSheetState({
         isOpen: true,
-
-        eventId: pending.eventId,
+        id: pending.id,
+        render: pending.render,
       });
 
       return;
     }
 
-    /*
-     * Only clear the content after the library's exit
-     * animation has completed.
-     */
     setSheetState({
       isOpen: false,
-
-      eventId: null,
+      id: null,
+      render: null,
     });
 
     attemptCloseRef.current = null;
@@ -613,11 +594,8 @@ function PopupProvider({ children }) {
     },
     [
       renderedChildSheet,
-
       mountAndOpenChildSheet,
-
       clearChildCloseTimer,
-
       clearChildOpenFrames,
     ],
   );
@@ -685,11 +663,8 @@ function PopupProvider({ children }) {
     return true;
   }, [
     renderedChildSheet,
-
     clearChildCloseTimer,
-
     clearChildOpenFrames,
-
     scheduleChildSheetOpen,
   ]);
 
@@ -740,11 +715,8 @@ function PopupProvider({ children }) {
     return true;
   }, [
     renderedChildSheet,
-
     clearChildCloseTimer,
-
     clearChildOpenFrames,
-
     scheduleChildSheetOpen,
   ]);
 
@@ -786,6 +758,17 @@ function PopupProvider({ children }) {
    * ==================================================
    */
 
+  /*
+   * DRAG-TO-CLOSE PATH.
+   *
+   * Keep the current behavior exactly as it is.
+   *
+   * The library has already dragged the sheet out.
+   * attemptClose() may open the confirmation popup.
+   *
+   * If it returns false, your existing logic restores /
+   * reopens the sheet.
+   */
   const requestCloseEventSheet = useCallback(() => {
     if (renderedChildSheet) {
       closeEventSubSheet();
@@ -812,6 +795,60 @@ function PopupProvider({ children }) {
     return true;
   }, [renderedChildSheet, closeEventSubSheet]);
 
+  /*
+   * BACKDROP PATH.
+   *
+   * The sheet has NOT moved.
+   *
+   * Only ask AddEditNewEvent whether it may close.
+   *
+   * If there are unsaved changes:
+   *   attemptClose() opens the confirmation popup.
+   *
+   * "No":
+   *   confirmation closes
+   *   sheet remains untouched
+   *
+   * "Yes":
+   *   your existing attemptClose / handleDiscard flow
+   *   closes the sheet through forceCloseEventSheet().
+   */
+  const requestCloseEventSheetFromBackdrop = useCallback(() => {
+    /*
+     * Nested sheet exists:
+     * treat backdrop as a request to close the child.
+     */
+    if (renderedChildSheet) {
+      closeEventSubSheet();
+
+      return;
+    }
+
+    /*
+     * IMPORTANT:
+     *
+     * We do NOT touch sheetState.
+     *
+     * We do NOT set isOpen false.
+     *
+     * We do NOT reopen the sheet.
+     *
+     * We only ask AddEdit whether closing is allowed.
+     *
+     * If dirty:
+     * attemptClose() opens Are You Sure.
+     *
+     * NO:
+     * confirmation disappears.
+     * Nothing else happens.
+     *
+     * YES:
+     * your existing confirmation callback eventually
+     * calls forceCloseEventSheet().
+     */
+    attemptCloseRef.current?.();
+  }, [renderedChildSheet, closeEventSubSheet]);
+
   const forceCloseEventSheet = useCallback(() => {
     attemptCloseRef.current = null;
 
@@ -829,9 +866,6 @@ function PopupProvider({ children }) {
 
     setIsChildSheetOpen(false);
 
-    /*
-     * Keep eventId mounted until onCloseEnd.
-     */
     setSheetState((current) => ({
       ...current,
 
@@ -885,10 +919,6 @@ function PopupProvider({ children }) {
 
   const contextValue = useMemo(
     () => ({
-      /*
-       * Popup API
-       */
-
       openPopup,
 
       closePopup,
@@ -898,10 +928,6 @@ function PopupProvider({ children }) {
       showPopup,
 
       closeAllPopups,
-
-      /*
-       * Main event sheet API
-       */
 
       openEventSheet,
 
@@ -913,13 +939,9 @@ function PopupProvider({ children }) {
 
       isEventSheetOpen: sheetState.isOpen,
 
-      eventSheetId: sheetState.eventId,
+      eventSheetId: sheetState.id,
 
       addEditRef,
-
-      /*
-       * Child sheet API
-       */
 
       openEventSubSheet,
 
@@ -954,7 +976,7 @@ function PopupProvider({ children }) {
 
       sheetState.isOpen,
 
-      sheetState.eventId,
+      sheetState.id,
 
       openEventSubSheet,
 
@@ -977,8 +999,6 @@ function PopupProvider({ children }) {
   return (
     <PopupContext.Provider value={contextValue}>
       {children}
-
-      {/* EXISTING POPUPS */}
 
       <AnimatePresence
         onExitComplete={() => {
@@ -1019,17 +1039,13 @@ function PopupProvider({ children }) {
       <BottomSheet
         isOpen={sheetState.isOpen}
         onClose={requestCloseEventSheet}
+        onBackdropTap={requestCloseEventSheetFromBackdrop}
         onCloseEnd={handleEventSheetCloseEnd}
         detent="content-height"
+        snapPoints={[0, 1]}
+        initialSnap={1}
       >
-        {sheetState.eventId && (
-          <AddEditNewEvent
-            ref={addEditRef}
-            eventId={sheetState.eventId}
-            onClose={forceCloseEventSheet}
-            isBottomSheet
-          />
-        )}
+        {sheetState.render?.()}
       </BottomSheet>
 
       {/* CHILD / NESTED SHEET */}

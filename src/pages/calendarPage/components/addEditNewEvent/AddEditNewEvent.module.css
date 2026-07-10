@@ -56,13 +56,13 @@
   caret-color: var(--cyan);
   width: 100%;
 }
-.addEditEvent .top .eventType {
+.addEditEvent .eventType {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
 }
-.addEditEvent .top .eventType button {
+.addEditEvent .eventType button {
   font-size: 14px;
   color: var(--text-light);
   line-height: 36px;
@@ -70,10 +70,10 @@
   border-radius: 8px;
   transition: 0.2s;
 }
-.addEditEvent .top .eventType button:not(.activeTab):hover {
+.addEditEvent .eventType button:not(.activeTab):hover {
   background-color: rgba(40, 44, 64, 0.6);
 }
-.addEditEvent .top .eventType button.activeTab {
+.addEditEvent .eventType button.activeTab {
   background-color: var(--main-cyan);
   color: var(--text-dark);
   transition: color 300ms;
@@ -138,7 +138,7 @@
   width: calc(100% - 8px - 40px);
 }
 .addEditEvent .bottom .contContnet > div button {
-  background-color: #252b40;
+  background-color: #1c253b;
   padding: 4px 8px;
   border-radius: 24px;
   width: 100%;
@@ -221,7 +221,7 @@
   transform: translateY(-50%);
   display: flex;
   align-items: center;
-  background-color: var(--element-bg-color);
+  background-color: #1c253b;
   padding: 2px 8px 2px 2px;
   border-radius: 24px;
 }
@@ -260,10 +260,11 @@
   display: flex;
   justify-content: start;
   padding: 4px 8px;
-  background-color: var(--element-bg-color);
+  background-color: #1c253b;
   border-radius: 24px;
 }
-.addEditEvent > .bottomSubmit {
+.addEditEvent > .bottomSubmit .submitContent {
+  align-items: center;
   display: flex;
   justify-content: end;
   gap: 12px;
@@ -409,7 +410,7 @@
 }
 
 .highlightedTime {
-  background-color: var(--element-bg-color);
+  background-color: #1c253b;
 }
 
 .selectedTime {
@@ -457,7 +458,7 @@
 .descriptionTextarea {
   width: 100%;
   min-height: 100px;
-  background-color: var(--element-bg-color);
+  background-color: #1c253b;
   border: 1px solid var(--calender-borders);
   border-radius: 8px;
   color: var(--text-light);
@@ -526,7 +527,7 @@
 }
 
 .crNumberInput {
-  background: var(--element-bg-color);
+  background: #1c253b;
   border: 1px solid var(--calender-borders);
   color: var(--text-light);
   border-radius: 4px;
@@ -534,7 +535,7 @@
   width: 60px;
 }
 .crNumberInputSmall {
-  background: var(--element-bg-color);
+  background: #1c253b;
   border: 1px solid var(--calender-borders);
   color: var(--text-light);
   border-radius: 4px;
@@ -543,7 +544,7 @@
   margin: 0 8px;
 }
 .crSelect {
-  background: var(--element-bg-color);
+  background: #1c253b;
   border: 1px solid var(--calender-borders);
   color: var(--text-light);
   border-radius: 4px;
@@ -588,7 +589,7 @@
 }
 
 .crDateInput {
-  background: var(--element-bg-color);
+  background: #1c253b;
   border: 1px solid var(--calender-borders);
   color: var(--text-light);
   border-radius: 4px;
@@ -743,7 +744,7 @@
   border-radius: 50%;
   border: 2px solid var(--popup-bg-color);
   margin-left: -8px;
-  background-color: var(--element-bg-color);
+  background-color: #1c253b;
   color: var(--text-light);
   font-size: 10px;
   font-weight: bold;
@@ -828,8 +829,26 @@ body:global(.mobile) {
     padding: 12px;
     height: auto;
     overflow: visible;
+    padding-bottom: calc(12px + 8px);
   }
-
+  .addEditEvent .eventType {
+    margin: 2px 12px 8px 12px;
+    display: flex;
+    background-color: rgba(37, 43, 64, 0.4);
+    border-radius: 48px;
+    padding: 4px;
+    justify-content: center;
+  }
+  .addEditEvent .eventType button {
+    border-radius: 48px;
+    width: 100%;
+    color: var(--text-light);
+    padding: 4px;
+  }
+  .addEditEvent .eventType button.activeTab {
+    background-color: #429edf;
+    color: var(--text-dark);
+  }
   .addEditEvent .bottom .detailsContainter .contContnet {
     display: grid;
     grid-template-columns: 1fr;
@@ -857,6 +876,49 @@ body:global(.mobile) {
   .addEditEvent .content::-webkit-scrollbar {
     display: none;
   }
+  .addEditEvent .bottomSubmit {
+    position: sticky;
+    justify-content: center;
+    width: 100%;
+    bottom: 8px;
+  }
+  .addEditEvent .bottomSubmit .submitContent {
+    padding: 2px 12px;
+    margin: 0 auto;
+    background: rgba(28, 37, 59, 0.5);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    border: 1px solid #181a2681;
+    border-radius: 48px;
+    width: fit-content;
+  }
+  .addEditEvent .bottomSubmit::after {
+    content: "";
+    position: absolute;
+    bottom: -8px;
+    left: 0;
+    width: 100%;
+    height: 74px;
+    background: linear-gradient(
+      to top,
+      rgba(0, 0, 0, 0.75) 0%,
+      rgba(0, 0, 0, 0.3) 30%,
+      transparent 75%
+    );
+    z-index: -1;
+  }
+  .addEditEvent .bottomSubmit button {
+    padding: 0 16px;
+    color: var(--text-light);
+    background-color: transparent;
+    cursor: none;
+  }
+  .addEditEvent .bottomSubmit span {
+    background-color: #78797ca9;
+    height: 24px;
+    width: 1px;
+  }
+
   @media (max-width: 420px) {
     .addEditEvent .contContnet {
       flex-direction: column;

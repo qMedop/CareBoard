@@ -1,19 +1,33 @@
 .sheet {
   z-index: 999 !important;
 }
+
 .container {
   background-color: var(--popup-bg-color) !important;
+
   border-radius: 24px 24px 0 0 !important;
+
   max-height: calc(95dvh - 34px);
+
   overflow: hidden;
 }
 
 .content {
   min-height: 0;
-  overflow: hidden auto;
-  overscroll-behavior: contain;
+
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+
+  overscroll-behavior-y: contain;
+
   -webkit-overflow-scrolling: touch;
-  overflow: hidden;
+}
+.contentMeasurement {
+  width: 100%;
+
+  /* IMPORTANT */
+  height: auto;
+  min-height: 0;
 }
 .header {
   height: 32px;

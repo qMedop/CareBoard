@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useLayoutEffect,
   forwardRef,
   useImperativeHandle,
   useCallback,
@@ -111,13 +112,11 @@ const AddEditNewEvent = forwardRef(
 
     const userZone = getUserZone(timeZoneOffset);
 
-    // REFACTOR: Cleanup refs for timers
     const successTimeoutRef = useRef(null);
     const errorTimeoutRef = useRef(null);
 
     const [friends, setFriends] = useState([]);
 
-    // REFACTOR: Fixed N+1 queries and prevented state updates on unmounted component
     useEffect(() => {
       let isMounted = true;
       async function loadFriends() {
@@ -138,7 +137,6 @@ const AddEditNewEvent = forwardRef(
             return;
           }
 
-          // Fetch all friends concurrently instead of sequential awaits
           const friendPromises = friendIds.map((fid) =>
             getDoc(doc(db, "users", fid)),
           );
@@ -160,7 +158,6 @@ const AddEditNewEvent = forwardRef(
       };
     }, [currentUser]);
 
-    // Cleanup timers on unmount
     useEffect(() => {
       return () => {
         if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);
@@ -174,8 +171,6 @@ const AddEditNewEvent = forwardRef(
       if (exactMatch) return exactMatch;
 
       if (typeof eventId === "string" && eventId.includes("_")) {
-        // Keeping string split ONLY for timestamp resolution if fallback mapping is needed,
-        // but removing it from core ID logic below.
         const lastUnderscoreIndex = eventId.lastIndexOf("_");
         const realId = eventId.substring(0, lastUnderscoreIndex);
         const timestamp = eventId.substring(lastUnderscoreIndex + 1);
@@ -215,6 +210,16 @@ const AddEditNewEvent = forwardRef(
     const prevTimeRange = useRef(null);
     const [isExpanded, setIsExpanded] = useState(false);
     const [eventType, setEventType] = useState(EVENT_EDITOR_TYPES[0]);
+    const [tabDirection, setTabDirection] = useState(0);
+    const eventTypeRef = useRef(EVENT_EDITOR_TYPES[0]);
+    const activeTabPanelRef = useRef(null);
+    const resizeObserverRef = useRef(null);
+    const initialTabHeightMeasuredRef = useRef(false);
+    const [activeTabPanelNode, setActiveTabPanelNode] = useState(null);
+    const [measuredTabHeight, setMeasuredTabHeight] = useState(0);
+
+    eventTypeRef.current = eventType;
+
     const [loadingStatus, setLoadingStatus] = useState(EVENT_SAVE_STATUS.IDLE);
 
     const [eventData, setEventData] = useState({
@@ -246,7 +251,6 @@ const AddEditNewEvent = forwardRef(
 
     useEffect(() => {
       if (sourceEvent) {
-        // REFACTOR: Use structuredClone for deep copy instead of JSON parse/stringify
         if (
           !originalEventRef.current ||
           originalEventRef.current.id !== sourceEvent.id
@@ -346,14 +350,6 @@ const AddEditNewEvent = forwardRef(
           loadingStatus === EVENT_SAVE_STATUS.IDLE && hasChanges,
 
         requestClose: () => {
-          /*
-           * IMPORTANT:
-           *
-           * Confirmation popup always uses the old centered
-           * PopupContext system.
-           *
-           * Mobile and desktop behave the same here.
-           */
           openPopup(
             "centered",
             () => (
@@ -371,12 +367,6 @@ const AddEditNewEvent = forwardRef(
                 onNo={() => {
                   closeContextPopup("unsaved-changes-popup", true);
 
-                  /*
-                   * On mobile, dragging the sheet to 0 means the
-                   * library has already visually closed it.
-                   *
-                   * Reopen it after closing the centered popup.
-                   */
                   if (isMobile) {
                     requestAnimationFrame(() => {
                       reopenEventSheet();
@@ -409,7 +399,6 @@ const AddEditNewEvent = forwardRef(
       ],
     );
 
-    // REFACTOR: Fixed stale closure by using functional state updates entirely
     const updateGlobalState = (updates, overrideIsFullDay = null) => {
       setEventData((prevEventData) => {
         const newData = { ...prevEventData, ...updates };
@@ -506,8 +495,6 @@ const AddEditNewEvent = forwardRef(
         return;
       }
 
-      // REFACTOR: Extract exact matching parent without dangerous split("_")[0] logic
-      // This checks if the eventId starts with the parent ID prefix, safely handling native underscores.
       const parentEvent = loadedEvents.find(
         (ev) =>
           originalEventRef.current.id === ev.id ||
@@ -638,7 +625,6 @@ const AddEditNewEvent = forwardRef(
         handleError(e);
       }
     }
-
     function finishSuccess() {
       setLoadingStatus(EVENT_SAVE_STATUS.SUCCESS);
       successTimeoutRef.current = setTimeout(() => {
@@ -646,7 +632,6 @@ const AddEditNewEvent = forwardRef(
         else closeContextPopup();
       }, EVENT_SUCCESS_CLOSE_DELAY);
     }
-
     function handleError(e) {
       console.error(e);
       setLoadingStatus(EVENT_SAVE_STATUS.ERROR);
@@ -655,8 +640,6 @@ const AddEditNewEvent = forwardRef(
         EVENT_ERROR_RESET_DELAY,
       );
     }
-
-    // --- TIME HANDLERS ---
     const handleFullDayChange = () => {
       const newIsFullDay = !isFullDay;
       setIsFullDay(newIsFullDay);
@@ -731,7 +714,6 @@ const AddEditNewEvent = forwardRef(
         );
       }
     };
-
     const handleDayPick = (e) => {
       openEditorPopup({
         desktopType: "contextual",
@@ -786,13 +768,6 @@ const AddEditNewEvent = forwardRef(
                 newIsFullDay,
               );
 
-              /*
-               * PickDay apparently doesn't close itself in your
-               * current usage, so explicitly close mobile sheet.
-               *
-               * Remove this if you intentionally want PickDay
-               * to stay open after selection.
-               */
               if (isMobile) {
                 closeEventSubSheet();
               }
@@ -804,7 +779,6 @@ const AddEditNewEvent = forwardRef(
         position: "bottomLeft",
       });
     };
-
     const handleEndDayPick = (e) => {
       openPopup(
         "contextual",
@@ -864,7 +838,6 @@ const AddEditNewEvent = forwardRef(
         "bottomLeft",
       );
     };
-
     const handleStartTimeClick = (e) => {
       openPopup(
         "contextual",
@@ -915,7 +888,6 @@ const AddEditNewEvent = forwardRef(
         "bottomLeft",
       );
     };
-
     const handleEndTimeClick = (e) => {
       openPopup(
         "contextual",
@@ -975,7 +947,6 @@ const AddEditNewEvent = forwardRef(
       );
     };
 
-    // --- OTHER HANDLERS ---
     const handleTitleChange = (e) =>
       updateGlobalState({ title: e.target.value });
     const handleEmojiChange = (emoji) => updateGlobalState({ emoji });
@@ -998,7 +969,6 @@ const AddEditNewEvent = forwardRef(
     const handleDescriptionSave = (newDescription) => {
       updateGlobalState({ description: newDescription });
     };
-
     const handleVisibiltyClick = (e) => {
       openEditorPopup({
         desktopType: "contextual",
@@ -1020,7 +990,6 @@ const AddEditNewEvent = forwardRef(
         position: "bottomRight",
       });
     };
-
     const isRangeFullDay = (startIso, endIso) => {
       const startLocal = DateTime.fromISO(startIso, { zone: "utc" }).setZone(
         userZone,
@@ -1205,104 +1174,129 @@ const AddEditNewEvent = forwardRef(
       });
     };
 
-    const renderEventForm = () => (
-      <motion.div
-        key="Event"
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -20 }}
-        transition={{ duration: 0.2 }}
-        className={styles.bottom}
-      >
-        <div className={styles.timeContainter}>
-          <div className={styles.headder}>
-            <h1>Time & Date</h1>
-          </div>
-          {!shouldShowExpanded && (
-            <div className={styles.contContnet}>
-              <div className={styles.date}>
-                <CustomButton
-                  onClick={handleDayPick}
-                  ClickEffect={"scale"}
-                  className={`default`}
-                >
-                  <div className={styles.icon}>
-                    <CalendarCircleIcon />
-                  </div>
-                  <p>{dateDisplay}</p>
-                </CustomButton>
-              </div>
-              <div className={styles.right}>
-                <div className={styles.time}>
-                  <div className={styles.startTime}>
-                    <CustomButton
-                      onClick={handleStartTimeClick}
-                      ClickEffect={"scale"}
-                      className={`default`}
-                    >
-                      <p>{startTimeDisplay}</p>
-                    </CustomButton>
-                  </div>
-                  <div className={styles.line}></div>
-                  <div className={styles.endtTime}>
-                    <CustomButton
-                      onClick={handleEndTimeClick}
-                      ClickEffect={"scale"}
-                      className={`default`}
-                    >
-                      <p>{endTimeDisplay}</p>
-                    </CustomButton>
-                  </div>
-                </div>
-                <div className={styles.options}>
+    const handleEventTypeChange = (nextType) => {
+      if (nextType === eventType) return;
+
+      const currentIndex = EVENT_EDITOR_TYPES.indexOf(eventType);
+      const nextIndex = EVENT_EDITOR_TYPES.indexOf(nextType);
+
+      if (currentIndex === -1 || nextIndex === -1) return;
+
+      setTabDirection(nextIndex > currentIndex ? 1 : -1);
+      setEventType(nextType);
+    };
+
+    const tabVariants = {
+      enter: (direction) => ({
+        opacity: 0,
+        x: direction > 0 ? 35 : -35,
+      }),
+
+      center: {
+        opacity: 1,
+        x: 0,
+      },
+
+      exit: (direction) => ({
+        opacity: 0,
+        x: direction > 0 ? -35 : 35,
+      }),
+    };
+
+    const tabTransition = {
+      duration: 0.22,
+      ease: "easeInOut",
+    };
+
+    const tabPanelStyle = {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      width: "100%",
+    };
+    const TabPanelMotion = motion.div;
+
+    const setActiveTabPanelRef = useCallback(
+      (type) => (node) => {
+        if (type !== eventTypeRef.current) return;
+
+        activeTabPanelRef.current = node;
+        setActiveTabPanelNode(node);
+      },
+      [],
+    );
+
+    useLayoutEffect(() => {
+      const node = activeTabPanelNode;
+
+      if (!node) return undefined;
+
+      const measureHeight = () => {
+        const nextHeight = Math.ceil(node.getBoundingClientRect().height);
+
+        if (!initialTabHeightMeasuredRef.current) {
+          initialTabHeightMeasuredRef.current = true;
+          setMeasuredTabHeight(nextHeight);
+          return;
+        }
+
+        setMeasuredTabHeight((currentHeight) =>
+          currentHeight === nextHeight ? currentHeight : nextHeight,
+        );
+      };
+
+      measureHeight();
+
+      if (typeof ResizeObserver === "undefined") return undefined;
+
+      resizeObserverRef.current?.disconnect();
+
+      const observer = new ResizeObserver(() => {
+        measureHeight();
+      });
+
+      resizeObserverRef.current = observer;
+      observer.observe(node);
+
+      return () => {
+        observer.disconnect();
+
+        if (resizeObserverRef.current === observer) {
+          resizeObserverRef.current = null;
+        }
+      };
+    }, [activeTabPanelNode]);
+
+    const renderEventForm = (panelRef) => (
+      <TabPanelMotion key="Event" ref={panelRef} style={tabPanelStyle}>
+        <TabPanelMotion
+          custom={tabDirection}
+          variants={tabVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={tabTransition}
+          className={styles.bottom}
+        >
+          <div className={styles.timeContainter}>
+            <div className={styles.headder}>
+              <h1>Time & Date</h1>
+            </div>
+            {!shouldShowExpanded && (
+              <div className={styles.contContnet}>
+                <div className={styles.date}>
                   <CustomButton
+                    onClick={handleDayPick}
                     ClickEffect={"scale"}
                     className={`default`}
-                    onClick={() => setIsExpanded(true)}
                   >
                     <div className={styles.icon}>
-                      <MenuDotsHoriantalIcon />
+                      <CalendarCircleIcon />
                     </div>
+                    <p>{dateDisplay}</p>
                   </CustomButton>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {shouldShowExpanded && (
-            <div className={`${styles.contContnet} ${styles.expanded}`}>
-              <div className={styles.date}>
-                <CustomButton
-                  onClick={handleDayPick}
-                  ClickEffect={"scale"}
-                  className={`default`}
-                >
-                  <div className={styles.icon}>
-                    <CalendarCircleIcon />
-                  </div>
-                  <p>{dateDisplay}</p>
-                </CustomButton>
-                <CustomButton
-                  onClick={handleEndDayPick}
-                  ClickEffect={"scale"}
-                  className={`default`}
-                >
-                  <div className={styles.icon}>
-                    <CalendarCircleEndIcon />
-                  </div>
-                  <p>{endDateDisplay}</p>
-                </CustomButton>
-              </div>
-              <div className={styles.more}>
-                <div className={styles.fullDay}>
-                  <CheckBox
-                    state={isFullDay}
-                    onChange={handleFullDayChange}
-                    size={32}
-                  />
-                  <p>full-day</p>
-                </div>
-                {!isFullDay && (
+                <div className={styles.right}>
                   <div className={styles.time}>
                     <div className={styles.startTime}>
                       <CustomButton
@@ -1324,141 +1318,215 @@ const AddEditNewEvent = forwardRef(
                       </CustomButton>
                     </div>
                   </div>
-                )}
+                  <div className={styles.options}>
+                    <CustomButton
+                      ClickEffect={"scale"}
+                      className={`default`}
+                      onClick={() => setIsExpanded(true)}
+                    >
+                      <div className={styles.icon}>
+                        <MenuDotsHoriantalIcon />
+                      </div>
+                    </CustomButton>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {shouldShowExpanded && (
+              <div className={`${styles.contContnet} ${styles.expanded}`}>
+                <div className={styles.date}>
+                  <CustomButton
+                    onClick={handleDayPick}
+                    ClickEffect={"scale"}
+                    className={`default`}
+                  >
+                    <div className={styles.icon}>
+                      <CalendarCircleIcon />
+                    </div>
+                    <p>{dateDisplay}</p>
+                  </CustomButton>
+                  <CustomButton
+                    onClick={handleEndDayPick}
+                    ClickEffect={"scale"}
+                    className={`default`}
+                  >
+                    <div className={styles.icon}>
+                      <CalendarCircleEndIcon />
+                    </div>
+                    <p>{endDateDisplay}</p>
+                  </CustomButton>
+                </div>
+                <div className={styles.more}>
+                  <div className={styles.fullDay}>
+                    <CheckBox
+                      state={isFullDay}
+                      onChange={handleFullDayChange}
+                      size={32}
+                    />
+                    <p>full-day</p>
+                  </div>
+                  {!isFullDay && (
+                    <div className={styles.time}>
+                      <div className={styles.startTime}>
+                        <CustomButton
+                          onClick={handleStartTimeClick}
+                          ClickEffect={"scale"}
+                          className={`default`}
+                        >
+                          <p>{startTimeDisplay}</p>
+                        </CustomButton>
+                      </div>
+                      <div className={styles.line}></div>
+                      <div className={styles.endtTime}>
+                        <CustomButton
+                          onClick={handleEndTimeClick}
+                          ClickEffect={"scale"}
+                          className={`default`}
+                        >
+                          <p>{endTimeDisplay}</p>
+                        </CustomButton>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className={styles.detailsContainter}>
+            <div className={styles.headder}>
+              <h1>Event details</h1>
+            </div>
+            <div className={styles.contContnet}>
+              <div className={styles.color}>
+                <CustomButton
+                  onClick={handleColorClick}
+                  ClickEffect={"scale"}
+                  type="list"
+                  className={`default`}
+                >
+                  <div className={styles.icon}>
+                    <span style={{ backgroundColor: eventData.color }}></span>
+                  </div>
+                  <span>color</span>
+                </CustomButton>
+              </div>
+              <div className={styles.visibility}>
+                <CustomButton
+                  onClick={handleVisibiltyClick}
+                  ClickEffect={"scale"}
+                  type="list"
+                  className={`default`}
+                >
+                  <div className={styles.icon}>
+                    <EyeDashedIcon />
+                  </div>
+                  <span>
+                    {eventData.visibility === "visible"
+                      ? "Visible for friends"
+                      : eventData.visibility === "specific"
+                        ? "Specific friends"
+                        : "Private"}
+                  </span>
+                </CustomButton>
+              </div>
+              <div className={styles.availability}>
+                <CustomButton
+                  onClick={handleAvailabilityClick}
+                  ClickEffect={"scale"}
+                  type="list"
+                  className={`default`}
+                >
+                  <div className={styles.icon}>
+                    <AvailabilityIcon />
+                  </div>
+                  <span>{eventData.availability}</span>
+                </CustomButton>
+              </div>
+              <div className={styles.notification}>
+                <CustomButton
+                  onClick={handleNotificationClick}
+                  ClickEffect={"scale"}
+                  type="list"
+                  className={`default`}
+                >
+                  <div className={styles.icon}>
+                    <NotificationIcon />
+                  </div>
+                  <span>
+                    {eventData?.notification === 0
+                      ? "no notification"
+                      : formatDurationFromMinutes(eventData.notification)}
+                  </span>
+                </CustomButton>
+              </div>
+
+              <div className={styles.emoji}>
+                <CustomButton
+                  onClick={handleEmojiClick}
+                  ClickEffect={"scale"}
+                  type="list"
+                  className={`default`}
+                >
+                  <div className={styles.icon}>{eventData.emoji || "📅"}</div>
+                  <span>Emoji</span>
+                </CustomButton>
+              </div>
+              <div className={styles.repeat}>
+                <CustomButton
+                  ClickEffect={"scale"}
+                  type="list"
+                  className={`default disabled`}
+                >
+                  <div className={styles.icon}>
+                    <RepeatIcon />
+                  </div>
+                  <span>Coming soon</span>
+                </CustomButton>
               </div>
             </div>
-          )}
-        </div>
-
-        <div className={styles.detailsContainter}>
-          <div className={styles.headder}>
-            <h1>Event details</h1>
           </div>
-          <div className={styles.contContnet}>
-            <div className={styles.color}>
-              <CustomButton
-                onClick={handleColorClick}
-                ClickEffect={"scale"}
-                type="list"
-                className={`default`}
-              >
-                <div className={styles.icon}>
-                  <span style={{ backgroundColor: eventData.color }}></span>
-                </div>
-                <span>color</span>
-              </CustomButton>
-            </div>
-            <div className={styles.visibility}>
-              <CustomButton
-                onClick={handleVisibiltyClick}
-                ClickEffect={"scale"}
-                type="list"
-                className={`default`}
-              >
-                <div className={styles.icon}>
-                  <EyeDashedIcon />
-                </div>
-                <span>
-                  {eventData.visibility === "visible"
-                    ? "Visible for friends"
-                    : eventData.visibility === "specific"
-                      ? "Specific friends"
-                      : "Private"}
-                </span>
-              </CustomButton>
-            </div>
-            <div className={styles.availability}>
-              <CustomButton
-                onClick={handleAvailabilityClick}
-                ClickEffect={"scale"}
-                type="list"
-                className={`default`}
-              >
-                <div className={styles.icon}>
-                  <AvailabilityIcon />
-                </div>
-                <span>{eventData.availability}</span>
-              </CustomButton>
-            </div>
-            <div className={styles.notification}>
-              <CustomButton
-                onClick={handleNotificationClick}
-                ClickEffect={"scale"}
-                type="list"
-                className={`default`}
-              >
-                <div className={styles.icon}>
-                  <NotificationIcon />
-                </div>
-                <span>
-                  {eventData?.notification === 0
-                    ? "no notification"
-                    : formatDurationFromMinutes(eventData.notification)}
-                </span>
-              </CustomButton>
-            </div>
 
-            <div className={styles.emoji}>
-              <CustomButton
-                onClick={handleEmojiClick}
-                ClickEffect={"scale"}
-                type="list"
-                className={`default`}
-              >
-                <div className={styles.icon}>{eventData.emoji || "📅"}</div>
-                <span>Emoji</span>
-              </CustomButton>
-            </div>
-            <div className={styles.repeat}>
-              <CustomButton
-                ClickEffect={"scale"}
-                type="list"
-                className={`default disabled`}
-              >
-                <div className={styles.icon}>
-                  <RepeatIcon />
-                </div>
-                <span>Coming soon</span>
-              </CustomButton>
+          <div className={styles.description}>
+            <div className={styles.contContnet}>
+              <div>
+                <CustomButton
+                  className={`${styles.descriptionButton} ${!eventData.description ? styles.placeholder : ""}`}
+                  onClick={handleDescriptionClick}
+                  ClickEffect={"scale"}
+                >
+                  <div className={styles.icon}>
+                    <ThreeLinesDashedIcon />
+                  </div>
+                  <div className={styles.left}>
+                    <p className={styles.descriptionText}>
+                      {eventData.description || "Add a description or note..."}
+                    </p>
+                  </div>
+                </CustomButton>
+              </div>
             </div>
           </div>
-        </div>
-
-        <div className={styles.description}>
-          <div className={styles.contContnet}>
-            <div>
-              <CustomButton
-                className={`${styles.descriptionButton} ${!eventData.description ? styles.placeholder : ""}`}
-                onClick={handleDescriptionClick}
-                ClickEffect={"scale"}
-              >
-                <div className={styles.icon}>
-                  <ThreeLinesDashedIcon />
-                </div>
-                <div className={styles.left}>
-                  <p className={styles.descriptionText}>
-                    {eventData.description || "Add a description or note..."}
-                  </p>
-                </div>
-              </CustomButton>
-            </div>
-          </div>
-        </div>
-      </motion.div>
+        </TabPanelMotion>
+      </TabPanelMotion>
     );
 
-    const renderPlaceholderForm = (name) => (
-      <motion.div
-        key={name}
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -20 }}
-        transition={{ duration: 0.2 }}
-        className={styles.placeholderForm}
-      >
-        <h2>{name}</h2>
-        <p>Coming Soon</p>
-      </motion.div>
+    const renderPlaceholderForm = (name, panelRef) => (
+      <TabPanelMotion key={name} ref={panelRef} style={tabPanelStyle}>
+        <TabPanelMotion
+          custom={tabDirection}
+          variants={tabVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={tabTransition}
+          className={styles.placeholderForm}
+        >
+          <h2>{name}</h2>
+          <p>Coming Soon</p>
+        </TabPanelMotion>
+      </TabPanelMotion>
     );
 
     return (
@@ -1492,7 +1560,20 @@ const AddEditNewEvent = forwardRef(
             </motion.div>
           )}
         </AnimatePresence>
-
+        {isMobile && (
+          <div className={styles.eventType}>
+            {EVENT_EDITOR_TYPES.map((type) => (
+              <CustomButton
+                key={type}
+                className={`default ${styles.tabButton} ${eventType === type ? styles.activeTab : ""}`}
+                onClick={() => handleEventTypeChange(type)}
+                ClickEffect={"scale"}
+              >
+                <p className={styles.tabText}>{type}</p>
+              </CustomButton>
+            ))}
+          </div>
+        )}
         <div className={`${styles.content} default-scrollbar`}>
           <div className={styles.top}>
             <div className={styles.title}>
@@ -1505,52 +1586,75 @@ const AddEditNewEvent = forwardRef(
                 />
               </div>
             </div>
-            <div className={styles.eventType}>
-              {EVENT_EDITOR_TYPES.map((type) => (
-                <CustomButton
-                  key={type}
-                  className={`default ${styles.tabButton} ${eventType === type ? styles.activeTab : ""}`}
-                  onClick={() => setEventType(type)}
-                  ClickEffect={"scale"}
-                >
-                  <p className={styles.tabText}>{type}</p>
-                </CustomButton>
-              ))}
-            </div>
+            {!isMobile && (
+              <div className={styles.eventType}>
+                {EVENT_EDITOR_TYPES.map((type) => (
+                  <CustomButton
+                    key={type}
+                    className={`default ${styles.tabButton} ${eventType === type ? styles.activeTab : ""}`}
+                    onClick={() => handleEventTypeChange(type)}
+                    ClickEffect={"scale"}
+                  >
+                    <p className={styles.tabText}>{type}</p>
+                  </CustomButton>
+                ))}
+              </div>
+            )}
           </div>
-          <AnimatePresence mode="wait">
-            {eventType === EVENT_EDITOR_TYPE.EVENT
-              ? renderEventForm()
-              : renderPlaceholderForm(eventType)}
-          </AnimatePresence>
+          <motion.div
+            animate={{ height: measuredTabHeight }}
+            transition={{
+              height: {
+                duration: 0.3,
+                ease: "easeInOut",
+              },
+            }}
+            style={{ position: "relative", overflow: "hidden" }}
+          >
+            <AnimatePresence mode="sync" initial={false} custom={tabDirection}>
+              {eventType === EVENT_EDITOR_TYPE.EVENT
+                ? renderEventForm(setActiveTabPanelRef(EVENT_EDITOR_TYPE.EVENT))
+                : renderPlaceholderForm(
+                    eventType,
+                    setActiveTabPanelRef(eventType),
+                  )}
+            </AnimatePresence>
+          </motion.div>
         </div>
         <div className={styles.bottomSubmit}>
-          {isMobile && (
-            <div className={styles.mobileOnly}>
+          <div className={styles.submitContent}>
+            {isMobile && (
+              <>
+                <div className={styles.mobileOnly}>
+                  <CustomButton
+                    ClickEffect={"scale"}
+                    className="default"
+                    type="submit"
+                    onClick={() => {
+                      if (onClose) onClose();
+                    }}
+                  >
+                    {"Close"}
+                  </CustomButton>
+                </div>
+                <span></span>
+              </>
+            )}
+            <div className={styles.submit}>
               <CustomButton
+                ClickEffect={"scale"}
                 className="default"
                 type="submit"
-                onClick={() => {
-                  if (onClose) onClose();
+                onClick={handleSave}
+                style={{
+                  opacity: eventId && !hasChanges ? 0.5 : 1,
+                  cursor: eventId && !hasChanges ? "not-allowed" : "pointer",
+                  pointerEvents: eventId && !hasChanges ? "none" : "auto",
                 }}
               >
-                {"Close"}
+                {eventId ? "Save" : "Add"}
               </CustomButton>
             </div>
-          )}
-          <div className={styles.submit}>
-            <CustomButton
-              className="default"
-              type="submit"
-              onClick={handleSave}
-              style={{
-                opacity: eventId && !hasChanges ? 0.5 : 1,
-                cursor: eventId && !hasChanges ? "not-allowed" : "pointer",
-                pointerEvents: eventId && !hasChanges ? "none" : "auto",
-              }}
-            >
-              {eventId ? "Save Changes" : "Add Event"}
-            </CustomButton>
           </div>
         </div>
       </div>

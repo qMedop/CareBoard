@@ -161,8 +161,18 @@ function useCalendarEventHandlers(props = {}) {
 
       if (isMobile) {
         openEventSheet({
-          eventId: targetId,
+          id: targetId,
+
           attemptClose,
+
+          content: () => (
+            <AddEditNewEvent
+              ref={addEditRef}
+              eventId={targetId}
+              onClose={forceCloseEventSheet}
+              isBottomSheet
+            />
+          ),
         });
 
         return;
