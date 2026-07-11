@@ -98,8 +98,8 @@ const AddEditNewEvent = forwardRef(
     const {
       openEventSubSheet,
       closeEventSubSheet,
-      forceCloseEventSubSheet,
       reopenEventSheet,
+      requestCloseEventSheet,
     } = useEventSheet();
 
     const isDraft = newEvent && incomingEventId === newEvent.id;
@@ -207,16 +207,16 @@ const AddEditNewEvent = forwardRef(
     }, [eventId, loadedEvents, newEvent]);
 
     const [isFullDay, setIsFullDay] = useState(false);
-    const prevTimeRange = useRef(null);
     const [isExpanded, setIsExpanded] = useState(false);
+    const hasChangedTabRef = useRef(false);
     const [eventType, setEventType] = useState(EVENT_EDITOR_TYPES[0]);
     const [tabDirection, setTabDirection] = useState(0);
     const eventTypeRef = useRef(EVENT_EDITOR_TYPES[0]);
     const activeTabPanelRef = useRef(null);
     const resizeObserverRef = useRef(null);
-    const initialTabHeightMeasuredRef = useRef(false);
+    const prevTimeRange = useRef(null);
     const [activeTabPanelNode, setActiveTabPanelNode] = useState(null);
-    const [measuredTabHeight, setMeasuredTabHeight] = useState(0);
+    const [measuredTabHeight, setMeasuredTabHeight] = useState(null);
 
     eventTypeRef.current = eventType;
 
@@ -349,7 +349,7 @@ const AddEditNewEvent = forwardRef(
         hasUnsavedChanges: () =>
           loadingStatus === EVENT_SAVE_STATUS.IDLE && hasChanges,
 
-        requestClose: () => {
+        requestClose: ({ onCancel } = {}) => {
           openPopup(
             "centered",
             () => (
@@ -357,21 +357,14 @@ const AddEditNewEvent = forwardRef(
                 message="You have unsaved changes. Are you sure you want to discard them?"
                 onYes={() => {
                   handleRevert();
-
                   closeContextPopup("unsaved-changes-popup", true);
-
                   if (onClose) {
                     onClose();
                   }
                 }}
                 onNo={() => {
                   closeContextPopup("unsaved-changes-popup", true);
-
-                  if (isMobile) {
-                    requestAnimationFrame(() => {
-                      reopenEventSheet();
-                    });
-                  }
+                  onCancel?.();
                 }}
               />
             ),
@@ -474,16 +467,6 @@ const AddEditNewEvent = forwardRef(
 
       closeContextPopup();
     }, [isMobile, closeEventSubSheet, closeContextPopup]);
-
-    const forceCloseEditorPopup = useCallback(() => {
-      if (isMobile) {
-        forceCloseEventSubSheet();
-
-        return;
-      }
-
-      closeContextPopup();
-    }, [isMobile, forceCloseEventSubSheet, closeContextPopup]);
 
     async function handleSave() {
       if (eventId && !hasChanges) return;
@@ -1182,6 +1165,8 @@ const AddEditNewEvent = forwardRef(
 
       if (currentIndex === -1 || nextIndex === -1) return;
 
+      hasChangedTabRef.current = true;
+
       setTabDirection(nextIndex > currentIndex ? 1 : -1);
       setEventType(nextType);
     };
@@ -1233,12 +1218,6 @@ const AddEditNewEvent = forwardRef(
 
       const measureHeight = () => {
         const nextHeight = Math.ceil(node.getBoundingClientRect().height);
-
-        if (!initialTabHeightMeasuredRef.current) {
-          initialTabHeightMeasuredRef.current = true;
-          setMeasuredTabHeight(nextHeight);
-          return;
-        }
 
         setMeasuredTabHeight((currentHeight) =>
           currentHeight === nextHeight ? currentHeight : nextHeight,
@@ -1602,14 +1581,26 @@ const AddEditNewEvent = forwardRef(
             )}
           </div>
           <motion.div
-            animate={{ height: measuredTabHeight }}
-            transition={{
-              height: {
-                duration: 0.3,
-                ease: "easeInOut",
-              },
+            initial={false}
+            animate={{
+              height: measuredTabHeight ?? "auto",
             }}
-            style={{ position: "relative", overflow: "hidden" }}
+            transition={
+              hasChangedTabRef.current
+                ? {
+                    height: {
+                      duration: 0.3,
+                      ease: "easeInOut",
+                    },
+                  }
+                : {
+                    duration: 0,
+                  }
+            }
+            style={{
+              position: "relative",
+              overflow: "hidden",
+            }}
           >
             <AnimatePresence mode="sync" initial={false} custom={tabDirection}>
               {eventType === EVENT_EDITOR_TYPE.EVENT
@@ -1630,9 +1621,7 @@ const AddEditNewEvent = forwardRef(
                     ClickEffect={"scale"}
                     className="default"
                     type="submit"
-                    onClick={() => {
-                      if (onClose) onClose();
-                    }}
+                    onClick={() => requestCloseEventSheet()}
                   >
                     {"Close"}
                   </CustomButton>

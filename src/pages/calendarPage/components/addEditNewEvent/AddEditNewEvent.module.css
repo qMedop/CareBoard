@@ -1,19 +1,30 @@
 .addEditEvent {
   --cyan: rgba(50, 230, 226, 0.5);
   --left-gap: 36px;
+
   min-width: 300px;
-  height: 100%;
-  background-color: var(--popup-bg-color);
   width: 512px;
-  position: relative; /* Ensure overlay sits on top */
+
+  background-color: var(--popup-bg-color);
+  position: relative;
+
+  display: flex;
+  flex-direction: column;
+
+  max-height: inherit;
+  min-height: 0;
 }
-.addEditEvent p {
-  font-family: "Google Sans Flex", Arial, sans-serif;
-}
+
 .addEditEvent .content {
   overflow: hidden auto;
-  height: calc(100% - 54px);
   padding: 18px;
+  padding-bottom: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.addEditEvent p {
+  font-family: "Google Sans Flex", Arial, sans-serif;
 }
 .addEditEvent .content::-webkit-scrollbar,
 .addEditEvent .content::-webkit-scrollbar-track {
@@ -229,7 +240,7 @@
   justify-content: center;
 }
 .addEditEvent .bottom > div span {
-  font-family: "Google Sans Flex", Arial, sans-serif;
+  font-family: "Google Sans Flex", "Roboto", Arial, sans-serif;
   font-size: 14px;
   color: var(--text-light);
   text-wrap: nowrap;
@@ -268,20 +279,23 @@
   display: flex;
   justify-content: end;
   gap: 12px;
-  padding: 0 12px;
+  padding: 8px 18px;
+  padding-top: 0px;
 }
 .addEditEvent .submit button {
+  --bg-click-effect: rgba(6, 59, 59, 0.2);
   background-color: var(--main-cyan);
+  box-shadow: 0px 0px 2px 2px rgba(0, 0, 0, 0.5);
 }
 .addEditEvent > .bottomSubmit button {
   padding: 0px 18px 8px;
   line-height: 42px;
-  padding: 0 12px;
   color: var(--text-dark);
   font-size: 16px;
   border-radius: 22px;
   cursor: pointer;
   font-weight: 500;
+  padding: 0px 24px;
 }
 .colorPickerPopup,
 .emojiPopup {
@@ -612,7 +626,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(26, 30, 42, 0.85); /* Matches calendar dark theme */
+  background: rgba(20, 23, 37, 0.75);
   z-index: 100;
   display: flex;
   flex-direction: column;
@@ -891,6 +905,7 @@ body:global(.mobile) {
     border: 1px solid #181a2681;
     border-radius: 48px;
     width: fit-content;
+    box-shadow: 0px 0px 10px 0px rgb(0 0 0 / 10%);
   }
   .addEditEvent .bottomSubmit::after {
     content: "";
@@ -912,6 +927,7 @@ body:global(.mobile) {
     color: var(--text-light);
     background-color: transparent;
     cursor: none;
+    box-shadow: none;
   }
   .addEditEvent .bottomSubmit span {
     background-color: #78797ca9;

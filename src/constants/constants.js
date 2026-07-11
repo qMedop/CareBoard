@@ -21,7 +21,7 @@ export const MONTHS_OF_THE_YEAR = [
 
 export const COLOR_OPTIONS = [
   "#E879C3", // Default event color
-  "#F59E42",
+  "#ffcb93",
   "#B5CC45",
   "#7F8FFF",
   "#45CDE8",

@@ -3,10 +3,10 @@ import { useParams } from "react-router-dom";
 import { useData } from "../../contexts/AuthContext";
 
 function ConfirmPage() {
-  const { token } = useParams(); // token from /confirm/:token
-  const { loginAfterConfirm } = useData(); // 👈 Get the function from context
+  const { token } = useParams();
+  const { loginAfterConfirm } = useData();
 
-  const [status, setStatus] = useState("loading"); // loading | success | expired | invalid | error
+  const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -28,16 +28,14 @@ function ConfirmPage() {
         if (res.ok && data.success) {
           setStatus("success");
           setMessage("Email confirmed! Redirecting you now...");
-          // ✅ NEW: Log the user in with the data from the server
           setTimeout(() => {
             loginAfterConfirm(data);
-          }, 1500); // Small delay to show the message
+          }, 1500);
         } else {
-          // handle specific error codes from server
           if (data.error === "TOKEN_EXPIRED") {
             setStatus("expired");
             setMessage(
-              "Token expired. Please request a new confirmation email."
+              "Token expired. Please request a new confirmation email.",
             );
           } else if (data.error === "TOKEN_INVALID") {
             setStatus("invalid");

@@ -20,6 +20,7 @@ import {
 import CustomButton from "../../../../components/button/Button";
 import defaultAvatar from "../../../../assets/svg/user-avatar.svg";
 import { getUserZone } from "../../../../utils/getUserZone";
+import { DEFAULT_EVENT_COLOR } from "../../../../constants/constants";
 export default function EventInfoPopup({
   eventId,
   onClose,
@@ -171,7 +172,9 @@ export default function EventInfoPopup({
           <div className={styles.colorContainer}>
             <div
               className={styles.colorIndicator}
-              style={{ backgroundColor: currentEvent.color || "#FFD4A9" }}
+              style={{
+                backgroundColor: currentEvent.color || DEFAULT_EVENT_COLOR,
+              }}
             />
           </div>
           <div className={styles.titleContainer}>

@@ -1502,7 +1502,7 @@ export function AuthProvider({ children }) {
       const eventPlaintext = {
         title: eventData.title ?? "",
         description: eventData.description ?? "",
-        color: eventData.color ?? "#FFD4A9",
+        color: eventData.color ?? DEFAULT_EVENT_COLOR,
         emoji: eventData.emoji ?? "",
         visibility: eventData.visibility ?? "visible",
         availability: eventData.availability ?? "busy",

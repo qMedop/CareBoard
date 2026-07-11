@@ -13,6 +13,7 @@ import EventInfoPopup from "../components/EventInfoPopup/EventInfoPopup";
 import RecurrenceUpdatePopup from "../components/RecurrenceUpdatePopup/RecurrenceUpdatePopup";
 import { getUserZone } from "../../../utils/getUserZone";
 import { useEventSheet } from "../../../contexts/PopupContext";
+import { DEFAULT_EVENT_COLOR } from "../../../constants/constants";
 
 function useCalendarEventHandlers(props = {}) {
   const { notify } = useNotification();
@@ -58,7 +59,6 @@ function useCalendarEventHandlers(props = {}) {
   const mobileCellHeight = 64;
   const desktopCellHeight = 52;
   const defaultEventDurationMinutes = 60;
-  const defaultEventColor = "#ffd4a9ff";
   const intervalSnapMinutes = 15;
 
   const autoScrollState = useRef({
@@ -969,13 +969,15 @@ function useCalendarEventHandlers(props = {}) {
                 setEditingEventId(null);
                 closePopup("edit-popup", true);
               };
-              function attemptClose() {
+              function attemptClose({ onCancel } = {}) {
                 if (forceClose.current) return true;
                 if (isDragging.current || isResizing.current) return false;
+
                 if (addEditRef.current?.hasUnsavedChanges()) {
-                  addEditRef.current.requestClose();
+                  addEditRef.current.requestClose({ onCancel });
                   return false;
                 }
+
                 handleDiscard();
                 return true;
               }
@@ -1232,13 +1234,15 @@ function useCalendarEventHandlers(props = {}) {
           forceCloseEditor();
         };
 
-        function attemptClose() {
+        function attemptClose({ onCancel } = {}) {
           if (forceClose.current) return true;
           if (isDragging.current || isResizing.current) return false;
+
           if (addEditRef.current?.hasUnsavedChanges()) {
-            addEditRef.current.requestClose();
+            addEditRef.current.requestClose({ onCancel });
             return false;
           }
+
           handleDiscard();
           return true;
         }
@@ -1314,7 +1318,7 @@ function useCalendarEventHandlers(props = {}) {
         description: "",
         timeRange: { start: startTimeUTC, end: endTimeUTC },
         isFullDay: isFullDay,
-        color: "#ffd4a9ff",
+        color: DEFAULT_EVENT_COLOR,
       });
       setEditingEventId(draftId);
       if (window.innerWidth <= 768) return;
@@ -1327,13 +1331,15 @@ function useCalendarEventHandlers(props = {}) {
         closePopup("edit-popup", true);
       };
 
-      function attemptClose() {
+      function attemptClose({ onCancel } = {}) {
         if (forceClose.current) return true;
         if (isDragging.current || isResizing.current) return false;
+
         if (addEditRef.current?.hasUnsavedChanges()) {
-          addEditRef.current.requestClose();
+          addEditRef.current.requestClose({ onCancel });
           return false;
         }
+
         handleDiscard();
         return true;
       }
@@ -2147,13 +2153,15 @@ function useCalendarEventHandlers(props = {}) {
               forceCloseEditor();
             };
 
-            function attemptClose() {
+            function attemptClose({ onCancel } = {}) {
               if (forceClose.current) return true;
               if (isDragging.current || isResizing.current) return false;
+
               if (addEditRef.current?.hasUnsavedChanges()) {
-                addEditRef.current.requestClose();
+                addEditRef.current.requestClose({ onCancel });
                 return false;
               }
+
               handleDiscard();
               return true;
             }
@@ -2240,13 +2248,16 @@ function useCalendarEventHandlers(props = {}) {
                         forceCloseEditor();
                       }
                     };
-
-                    function attemptClose() {
+                    function attemptClose({ onCancel } = {}) {
                       if (forceClose.current) return true;
+                      if (isDragging.current || isResizing.current)
+                        return false;
+
                       if (addEditRef.current?.hasUnsavedChanges()) {
-                        addEditRef.current.requestClose();
+                        addEditRef.current.requestClose({ onCancel });
                         return false;
                       }
+
                       handleDiscard();
                       return true;
                     }
@@ -2664,7 +2675,7 @@ function useCalendarEventHandlers(props = {}) {
 
           isFullDay: false,
 
-          color: defaultEventColor,
+          color: DEFAULT_EVENT_COLOR,
 
           columnDate: columnDateStr,
         };
@@ -2864,7 +2875,6 @@ function useCalendarEventHandlers(props = {}) {
       desktopCellHeight,
 
       timeZoneOffset,
-      defaultEventColor,
 
       handleNewEventClick,
       handleResizeStart,

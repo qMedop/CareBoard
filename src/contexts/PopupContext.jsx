@@ -1,21 +1,16 @@
 import { AnimatePresence } from "framer-motion";
-
 import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-
 import Popup from "../components/popup/Popup";
 import BottomSheet from "../components/popup/BottomSheet";
 
 const PopupContext = createContext(null);
-
-const CHILD_SHEET_ANIMATION_MS = 300;
 
 function createPopupId() {
   if (
@@ -37,24 +32,21 @@ function safelyCall(callback) {
     return callback();
   } catch (error) {
     console.error("Popup callback failed:", error);
-
     return false;
   }
 }
 
 function PopupProvider({ children }) {
   /*
-   * ==================================================
-   * POPUP LOGIC
-   * ==================================================
+   * -------------------------------------------------------
+   * DESKTOP POPUPS
+   * -------------------------------------------------------
    */
 
   const [popups, setPopupsState] = useState([]);
 
   const popupsRef = useRef([]);
-
   const closingIdsRef = useRef(new Set());
-
   const popupTransitionLockRef = useRef(false);
 
   const setPopups = useCallback((updater) => {
@@ -139,38 +131,25 @@ function PopupProvider({ children }) {
             )
           : null;
 
-      const existing = existingById || existingByTrigger;
+      if (existingById) {
+        return existingById.id;
+      }
 
-      if (existing) {
-        const sameTrigger =
-          triggerElement !== null && existing.triggerElement === triggerElement;
-
-        const sameId = customId !== null && existing.id === customId;
-
-        if (sameTrigger || sameId) {
-          closePopupByObject(existing);
-
-          return existing.id;
-        }
+      if (existingByTrigger) {
+        closePopupByObject(existingByTrigger);
+        return existingByTrigger.id;
       }
 
       const id = customId ?? createPopupId();
 
       const nextPopup = {
         type,
-
         render: contentRenderer,
-
         triggerElement,
-
         direction,
-
         onClose: typeof onClose === "function" ? onClose : () => {},
-
         BR,
-
         id,
-
         isHidden: false,
       };
 
@@ -242,9 +221,7 @@ function PopupProvider({ children }) {
           popup.id === id
             ? {
                 ...popup,
-
                 isHidden: false,
-
                 triggerElement:
                   newTriggerElement !== undefined
                     ? newTriggerElement
@@ -269,7 +246,6 @@ function PopupProvider({ children }) {
 
       if (force === true) {
         closingIdsRef.current.clear();
-
         popupTransitionLockRef.current = false;
 
         setPopups([]);
@@ -325,9 +301,9 @@ function PopupProvider({ children }) {
   );
 
   /*
-   * ==================================================
+   * -------------------------------------------------------
    * MAIN EVENT SHEET
-   * ==================================================
+   * -------------------------------------------------------
    */
 
   const [sheetState, setSheetState] = useState({
@@ -337,97 +313,8 @@ function PopupProvider({ children }) {
   });
 
   const addEditRef = useRef(null);
-
   const attemptCloseRef = useRef(null);
-
   const pendingEventSheetOpenRef = useRef(null);
-
-  /*
-   * ==================================================
-   * CHILD SHEET LOGIC
-   * ==================================================
-   */
-
-  const [childSheetStack, setChildSheetStack] = useState([]);
-
-  const [renderedChildSheet, setRenderedChildSheet] = useState(null);
-
-  const [isChildSheetOpen, setIsChildSheetOpen] = useState(false);
-
-  const childSheetIdRef = useRef(0);
-
-  const childCloseTimerRef = useRef(null);
-
-  const childOpenFrameRef = useRef(null);
-
-  const childSecondOpenFrameRef = useRef(null);
-
-  const childIsClosingRef = useRef(false);
-
-  /*
-   * ==================================================
-   * CHILD SHEET INTERNAL HELPERS
-   * ==================================================
-   */
-
-  const clearChildCloseTimer = useCallback(() => {
-    if (childCloseTimerRef.current !== null) {
-      clearTimeout(childCloseTimerRef.current);
-
-      childCloseTimerRef.current = null;
-    }
-  }, []);
-
-  const clearChildOpenFrames = useCallback(() => {
-    if (childOpenFrameRef.current !== null) {
-      cancelAnimationFrame(childOpenFrameRef.current);
-
-      childOpenFrameRef.current = null;
-    }
-
-    if (childSecondOpenFrameRef.current !== null) {
-      cancelAnimationFrame(childSecondOpenFrameRef.current);
-
-      childSecondOpenFrameRef.current = null;
-    }
-  }, []);
-
-  const scheduleChildSheetOpen = useCallback(() => {
-    clearChildOpenFrames();
-
-    childOpenFrameRef.current = requestAnimationFrame(() => {
-      childOpenFrameRef.current = null;
-
-      childSecondOpenFrameRef.current = requestAnimationFrame(() => {
-        childSecondOpenFrameRef.current = null;
-
-        setIsChildSheetOpen(true);
-      });
-    });
-  }, [clearChildOpenFrames]);
-
-  const mountAndOpenChildSheet = useCallback(
-    (sheet) => {
-      clearChildCloseTimer();
-
-      clearChildOpenFrames();
-
-      childIsClosingRef.current = false;
-
-      setIsChildSheetOpen(false);
-
-      setRenderedChildSheet(sheet);
-
-      scheduleChildSheetOpen();
-    },
-    [clearChildCloseTimer, clearChildOpenFrames, scheduleChildSheetOpen],
-  );
-
-  /*
-   * ==================================================
-   * MAIN EVENT SHEET API
-   * ==================================================
-   */
 
   const openEventSheet = useCallback(
     ({ id, attemptClose, content }) => {
@@ -441,20 +328,9 @@ function PopupProvider({ children }) {
 
       const nextSheet = {
         id,
-
         render: content,
-
         attemptClose: typeof attemptClose === "function" ? attemptClose : null,
       };
-
-      clearChildCloseTimer();
-      clearChildOpenFrames();
-
-      childIsClosingRef.current = false;
-
-      setChildSheetStack([]);
-      setRenderedChildSheet(null);
-      setIsChildSheetOpen(false);
 
       if (sheetState.isOpen) {
         pendingEventSheetOpenRef.current = nextSheet;
@@ -477,7 +353,7 @@ function PopupProvider({ children }) {
 
       return true;
     },
-    [sheetState.isOpen, clearChildCloseTimer, clearChildOpenFrames],
+    [sheetState.isOpen],
   );
 
   const reopenEventSheet = useCallback(() => {
@@ -487,9 +363,7 @@ function PopupProvider({ children }) {
 
     pendingEventSheetOpenRef.current = {
       id: sheetState.id,
-
       render: sheetState.render,
-
       attemptClose: attemptCloseRef.current,
     };
 
@@ -528,22 +402,37 @@ function PopupProvider({ children }) {
   }, []);
 
   /*
-   * ==================================================
-   * CHILD SHEET API
-   * ==================================================
+   * -------------------------------------------------------
+   * CHILD EVENT SHEETS
+   * -------------------------------------------------------
    */
 
+  const [childSheetStack, setChildSheetStack] = useState([]);
+
+  const [isChildSheetOpen, setIsChildSheetOpen] = useState(false);
+
+  const childSheetIdRef = useRef(0);
+  const childCloseActionRef = useRef(null);
+  const childIsClosingRef = useRef(false);
+
+  const renderedChildSheet =
+    childSheetStack[childSheetStack.length - 1] ?? null;
+
+  const resetChildSheetsImmediately = useCallback(() => {
+    childCloseActionRef.current = null;
+    childIsClosingRef.current = false;
+
+    setIsChildSheetOpen(false);
+    setChildSheetStack([]);
+  }, []);
+
   const openEventSubSheet = useCallback(
-    ({
-      content,
-
-      snapPoints = [0, 1],
-
-      initialSnap = 1,
-
-      onBeforeClose = null,
-    }) => {
+    ({ content, onBeforeClose = null }) => {
       if (!content) {
+        return null;
+      }
+
+      if (childIsClosingRef.current) {
         return null;
       }
 
@@ -551,228 +440,140 @@ function PopupProvider({ children }) {
 
       const newSheet = {
         id,
-
         content,
-
-        snapPoints,
-
-        initialSnap,
-
         onBeforeClose:
           typeof onBeforeClose === "function" ? onBeforeClose : null,
       };
 
       if (!renderedChildSheet) {
         setChildSheetStack([newSheet]);
-
-        mountAndOpenChildSheet(newSheet);
+        setIsChildSheetOpen(true);
 
         return id;
       }
 
-      if (childIsClosingRef.current) {
-        return null;
+      childIsClosingRef.current = true;
+
+      childCloseActionRef.current = {
+        type: "PUSH",
+        sheet: newSheet,
+      };
+
+      setIsChildSheetOpen(false);
+
+      return id;
+    },
+    [renderedChildSheet],
+  );
+
+  const beginChildSheetPop = useCallback(
+    ({ skipBeforeClose = false } = {}) => {
+      if (!renderedChildSheet || childIsClosingRef.current) {
+        return false;
+      }
+
+      if (!skipBeforeClose && renderedChildSheet.onBeforeClose) {
+        const result = safelyCall(renderedChildSheet.onBeforeClose);
+
+        if (result === false) {
+          return false;
+        }
       }
 
       childIsClosingRef.current = true;
 
-      clearChildCloseTimer();
-
-      clearChildOpenFrames();
+      childCloseActionRef.current = {
+        type: "POP",
+      };
 
       setIsChildSheetOpen(false);
 
-      childCloseTimerRef.current = setTimeout(() => {
-        childCloseTimerRef.current = null;
-
-        setChildSheetStack((current) => [...current, newSheet]);
-
-        mountAndOpenChildSheet(newSheet);
-      }, CHILD_SHEET_ANIMATION_MS);
-
-      return id;
+      return true;
     },
-    [
-      renderedChildSheet,
-      mountAndOpenChildSheet,
-      clearChildCloseTimer,
-      clearChildOpenFrames,
-    ],
+    [renderedChildSheet],
   );
 
   const closeEventSubSheet = useCallback(() => {
-    if (!renderedChildSheet || childIsClosingRef.current) {
-      return false;
-    }
-
-    if (renderedChildSheet.onBeforeClose) {
-      const result = renderedChildSheet.onBeforeClose();
-
-      if (result === false) {
-        return false;
-      }
-    }
-
-    childIsClosingRef.current = true;
-
-    clearChildCloseTimer();
-
-    clearChildOpenFrames();
-
-    setIsChildSheetOpen(false);
-
-    childCloseTimerRef.current = setTimeout(() => {
-      childCloseTimerRef.current = null;
-
-      setChildSheetStack((current) => {
-        if (current.length === 0) {
-          setRenderedChildSheet(null);
-
-          childIsClosingRef.current = false;
-
-          return current;
-        }
-
-        const nextStack = current.slice(0, -1);
-
-        const previousSheet =
-          nextStack.length > 0 ? nextStack[nextStack.length - 1] : null;
-
-        if (!previousSheet) {
-          setRenderedChildSheet(null);
-
-          setIsChildSheetOpen(false);
-
-          childIsClosingRef.current = false;
-
-          return nextStack;
-        }
-
-        setRenderedChildSheet(previousSheet);
-
-        setIsChildSheetOpen(false);
-
-        childIsClosingRef.current = false;
-
-        scheduleChildSheetOpen();
-
-        return nextStack;
-      });
-    }, CHILD_SHEET_ANIMATION_MS);
-
-    return true;
-  }, [
-    renderedChildSheet,
-    clearChildCloseTimer,
-    clearChildOpenFrames,
-    scheduleChildSheetOpen,
-  ]);
+    return beginChildSheetPop();
+  }, [beginChildSheetPop]);
 
   const forceCloseEventSubSheet = useCallback(() => {
-    if (!renderedChildSheet || childIsClosingRef.current) {
+    return beginChildSheetPop({
+      skipBeforeClose: true,
+    });
+  }, [beginChildSheetPop]);
+
+  const closeAllEventSubSheets = useCallback(() => {
+    if (!renderedChildSheet) {
+      resetChildSheetsImmediately();
+      return true;
+    }
+
+    if (childIsClosingRef.current) {
       return false;
     }
 
     childIsClosingRef.current = true;
 
-    clearChildCloseTimer();
-
-    clearChildOpenFrames();
+    childCloseActionRef.current = {
+      type: "POP_ALL",
+    };
 
     setIsChildSheetOpen(false);
 
-    childCloseTimerRef.current = setTimeout(() => {
-      childCloseTimerRef.current = null;
-
-      setChildSheetStack((current) => {
-        const nextStack = current.slice(0, -1);
-
-        const previousSheet =
-          nextStack.length > 0 ? nextStack[nextStack.length - 1] : null;
-
-        if (!previousSheet) {
-          setRenderedChildSheet(null);
-
-          setIsChildSheetOpen(false);
-
-          childIsClosingRef.current = false;
-
-          return nextStack;
-        }
-
-        setRenderedChildSheet(previousSheet);
-
-        setIsChildSheetOpen(false);
-
-        childIsClosingRef.current = false;
-
-        scheduleChildSheetOpen();
-
-        return nextStack;
-      });
-    }, CHILD_SHEET_ANIMATION_MS);
-
     return true;
-  }, [
-    renderedChildSheet,
-    clearChildCloseTimer,
-    clearChildOpenFrames,
-    scheduleChildSheetOpen,
-  ]);
+  }, [renderedChildSheet, resetChildSheetsImmediately]);
 
-  const closeAllEventSubSheets = useCallback(() => {
-    clearChildCloseTimer();
+  const handleChildSheetCloseEnd = useCallback(() => {
+    const action = childCloseActionRef.current;
 
-    clearChildOpenFrames();
+    childCloseActionRef.current = null;
 
-    if (!renderedChildSheet) {
-      setChildSheetStack([]);
+    if (!action) {
+      childIsClosingRef.current = false;
+      return;
+    }
 
-      setIsChildSheetOpen(false);
+    if (action.type === "PUSH") {
+      setChildSheetStack((current) => [...current, action.sheet]);
 
       childIsClosingRef.current = false;
+      setIsChildSheetOpen(true);
 
       return;
     }
 
-    childIsClosingRef.current = true;
+    if (action.type === "POP") {
+      setChildSheetStack((current) => {
+        const nextStack = current.slice(0, -1);
 
-    setIsChildSheetOpen(false);
+        childIsClosingRef.current = false;
 
-    childCloseTimerRef.current = setTimeout(() => {
-      childCloseTimerRef.current = null;
+        setIsChildSheetOpen(nextStack.length > 0);
+
+        return nextStack;
+      });
+
+      return;
+    }
+
+    if (action.type === "POP_ALL") {
+      childIsClosingRef.current = false;
 
       setChildSheetStack([]);
-
-      setRenderedChildSheet(null);
-
       setIsChildSheetOpen(false);
-
-      childIsClosingRef.current = false;
-    }, CHILD_SHEET_ANIMATION_MS);
-  }, [renderedChildSheet, clearChildCloseTimer, clearChildOpenFrames]);
+    }
+  }, []);
 
   /*
-   * ==================================================
-   * MAIN SHEET CLOSE API
-   * ==================================================
+   * -------------------------------------------------------
+   * MAIN EVENT SHEET CLOSING
+   * -------------------------------------------------------
    */
 
-  /*
-   * DRAG-TO-CLOSE PATH.
-   *
-   * Keep the current behavior exactly as it is.
-   *
-   * The library has already dragged the sheet out.
-   * attemptClose() may open the confirmation popup.
-   *
-   * If it returns false, your existing logic restores /
-   * reopens the sheet.
-   */
   const requestCloseEventSheet = useCallback(() => {
     if (renderedChildSheet) {
       closeEventSubSheet();
-
       return false;
     }
 
@@ -788,117 +589,91 @@ function PopupProvider({ children }) {
 
     setSheetState((current) => ({
       ...current,
-
       isOpen: false,
     }));
 
     return true;
   }, [renderedChildSheet, closeEventSubSheet]);
 
-  /*
-   * BACKDROP PATH.
-   *
-   * The sheet has NOT moved.
-   *
-   * Only ask AddEditNewEvent whether it may close.
-   *
-   * If there are unsaved changes:
-   *   attemptClose() opens the confirmation popup.
-   *
-   * "No":
-   *   confirmation closes
-   *   sheet remains untouched
-   *
-   * "Yes":
-   *   your existing attemptClose / handleDiscard flow
-   *   closes the sheet through forceCloseEventSheet().
-   */
   const requestCloseEventSheetFromBackdrop = useCallback(() => {
-    /*
-     * Nested sheet exists:
-     * treat backdrop as a request to close the child.
-     */
     if (renderedChildSheet) {
       closeEventSubSheet();
-
-      return;
+      return false;
     }
 
-    /*
-     * IMPORTANT:
-     *
-     * We do NOT touch sheetState.
-     *
-     * We do NOT set isOpen false.
-     *
-     * We do NOT reopen the sheet.
-     *
-     * We only ask AddEdit whether closing is allowed.
-     *
-     * If dirty:
-     * attemptClose() opens Are You Sure.
-     *
-     * NO:
-     * confirmation disappears.
-     * Nothing else happens.
-     *
-     * YES:
-     * your existing confirmation callback eventually
-     * calls forceCloseEventSheet().
-     */
-    attemptCloseRef.current?.();
-  }, [renderedChildSheet, closeEventSubSheet]);
+    const attemptClose = attemptCloseRef.current;
 
-  const forceCloseEventSheet = useCallback(() => {
-    attemptCloseRef.current = null;
+    if (attemptClose) {
+      const canClose = attemptClose({
+        reopenOnCancel: false,
+      });
 
-    pendingEventSheetOpenRef.current = null;
-
-    clearChildCloseTimer();
-
-    clearChildOpenFrames();
-
-    childIsClosingRef.current = false;
-
-    setChildSheetStack([]);
-
-    setRenderedChildSheet(null);
-
-    setIsChildSheetOpen(false);
+      if (canClose === false) {
+        return false;
+      }
+    }
 
     setSheetState((current) => ({
       ...current,
-
       isOpen: false,
     }));
-  }, [clearChildCloseTimer, clearChildOpenFrames]);
+
+    return true;
+  }, [renderedChildSheet, closeEventSubSheet]);
+
+  const handleEventSheetDragClose = useCallback(() => {
+    if (renderedChildSheet) {
+      closeEventSubSheet();
+      return false;
+    }
+
+    const attemptClose = attemptCloseRef.current;
+
+    if (!attemptClose) {
+      setSheetState((current) => ({
+        ...current,
+        isOpen: false,
+      }));
+
+      return true;
+    }
+
+    const canClose = attemptClose({
+      onCancel: () => {
+        requestAnimationFrame(() => {
+          reopenEventSheet();
+        });
+      },
+    });
+
+    if (canClose === false) {
+      return false;
+    }
+
+    setSheetState((current) => ({
+      ...current,
+      isOpen: false,
+    }));
+
+    return true;
+  }, [renderedChildSheet, closeEventSubSheet, reopenEventSheet]);
+
+  const forceCloseEventSheet = useCallback(() => {
+    attemptCloseRef.current = null;
+    pendingEventSheetOpenRef.current = null;
+
+    resetChildSheetsImmediately();
+
+    setSheetState((current) => ({
+      ...current,
+      isOpen: false,
+    }));
+  }, [resetChildSheetsImmediately]);
 
   /*
-   * ==================================================
-   * CLEANUP
-   * ==================================================
-   */
-
-  useEffect(() => {
-    return () => {
-      if (childCloseTimerRef.current !== null) {
-        clearTimeout(childCloseTimerRef.current);
-      }
-
-      if (childOpenFrameRef.current !== null) {
-        cancelAnimationFrame(childOpenFrameRef.current);
-      }
-
-      if (childSecondOpenFrameRef.current !== null) {
-        cancelAnimationFrame(childSecondOpenFrameRef.current);
-      }
-    };
-  }, []);
-
-  /*
-   * ==================================================
-   * POPUP RENDER INFO
-   * ==================================================
+   * -------------------------------------------------------
+   * RENDERING
+   * -------------------------------------------------------
    */
 
   let topmostVisibleIndex = -1;
@@ -906,49 +681,31 @@ function PopupProvider({ children }) {
   for (let index = popups.length - 1; index >= 0; index -= 1) {
     if (!popups[index].isHidden) {
       topmostVisibleIndex = index;
-
       break;
     }
   }
 
-  /*
-   * ==================================================
-   * CONTEXT VALUE
-   * ==================================================
-   */
-
   const contextValue = useMemo(
     () => ({
       openPopup,
-
       closePopup,
-
       hidePopup,
-
       showPopup,
-
       closeAllPopups,
 
       openEventSheet,
-
       reopenEventSheet,
-
       requestCloseEventSheet,
-
       forceCloseEventSheet,
 
       isEventSheetOpen: sheetState.isOpen,
-
       eventSheetId: sheetState.id,
 
       addEditRef,
 
       openEventSubSheet,
-
       closeEventSubSheet,
-
       forceCloseEventSubSheet,
-
       closeAllEventSubSheets,
 
       hasEventSubSheet: childSheetStack.length > 0,
@@ -957,44 +714,27 @@ function PopupProvider({ children }) {
     }),
     [
       openPopup,
-
       closePopup,
-
       hidePopup,
-
       showPopup,
-
       closeAllPopups,
 
       openEventSheet,
-
       reopenEventSheet,
-
       requestCloseEventSheet,
-
       forceCloseEventSheet,
 
       sheetState.isOpen,
-
       sheetState.id,
 
       openEventSubSheet,
-
       closeEventSubSheet,
-
       forceCloseEventSubSheet,
-
       closeAllEventSubSheets,
 
       childSheetStack.length,
     ],
   );
-
-  /*
-   * ==================================================
-   * RENDER
-   * ==================================================
-   */
 
   return (
     <PopupContext.Provider value={contextValue}>
@@ -1034,11 +774,9 @@ function PopupProvider({ children }) {
         ))}
       </AnimatePresence>
 
-      {/* MAIN EVENT SHEET */}
-
       <BottomSheet
         isOpen={sheetState.isOpen}
-        onClose={requestCloseEventSheet}
+        onClose={handleEventSheetDragClose}
         onBackdropTap={requestCloseEventSheetFromBackdrop}
         onCloseEnd={handleEventSheetCloseEnd}
         detent="content-height"
@@ -1048,13 +786,11 @@ function PopupProvider({ children }) {
         {sheetState.render?.()}
       </BottomSheet>
 
-      {/* CHILD / NESTED SHEET */}
-
       <BottomSheet
         isOpen={isChildSheetOpen}
         onClose={closeEventSubSheet}
-        snapPoints={renderedChildSheet?.snapPoints || [0, 1]}
-        initialSnap={renderedChildSheet?.initialSnap ?? 1}
+        onCloseEnd={handleChildSheetCloseEnd}
+        detent="content-height"
       >
         {renderedChildSheet?.content}
       </BottomSheet>
