@@ -3,12 +3,14 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import Popup from "../components/popup/Popup";
+
 import BottomSheet from "../components/popup/BottomSheet";
+import Popup from "../components/popup/Popup";
 
 const PopupContext = createContext(null);
 
@@ -36,18 +38,52 @@ function safelyCall(callback) {
   }
 }
 
-function PopupProvider({ children }) {
-  /*
-   * -------------------------------------------------------
-   * DESKTOP POPUPS
-   * -------------------------------------------------------
-   */
+function getVisualViewport() {
+  if (typeof window === "undefined") {
+    return {
+      height: 0,
+      offsetTop: 0,
+    };
+  }
 
+  return {
+    height: window.visualViewport?.height ?? window.innerHeight,
+    offsetTop: window.visualViewport?.offsetTop ?? 0,
+  };
+}
+
+function PopupProvider({ children }) {
   const [popups, setPopupsState] = useState([]);
+  const [visualViewport, setVisualViewport] = useState(getVisualViewport);
 
   const popupsRef = useRef([]);
   const closingIdsRef = useRef(new Set());
   const popupTransitionLockRef = useRef(false);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+
+    if (!viewport) {
+      return undefined;
+    }
+
+    const updateVisualViewport = () => {
+      setVisualViewport({
+        height: viewport.height,
+        offsetTop: viewport.offsetTop,
+      });
+    };
+
+    updateVisualViewport();
+
+    viewport.addEventListener("resize", updateVisualViewport);
+    viewport.addEventListener("scroll", updateVisualViewport);
+
+    return () => {
+      viewport.removeEventListener("resize", updateVisualViewport);
+      viewport.removeEventListener("scroll", updateVisualViewport);
+    };
+  }, []);
 
   const setPopups = useCallback((updater) => {
     setPopupsState((current) => {
@@ -85,7 +121,6 @@ function PopupProvider({ children }) {
             typeof shouldClose.then === "function"
           ) {
             console.error("Popup onClose callbacks must be synchronous.");
-
             return false;
           }
         }
@@ -112,7 +147,6 @@ function PopupProvider({ children }) {
     ) => {
       if (typeof contentRenderer !== "function") {
         console.error("openPopup requires contentRenderer to be a function.");
-
         return null;
       }
 
@@ -166,9 +200,7 @@ function PopupProvider({ children }) {
         typeof idOrForce === "string" || typeof idOrForce === "number";
 
       const targetId = hasId ? idOrForce : null;
-
       const force = hasId ? forceParam === true : idOrForce === true;
-
       const current = popupsRef.current;
 
       if (current.length === 0) {
@@ -194,12 +226,7 @@ function PopupProvider({ children }) {
 
       setPopups((current) =>
         current.map((popup) =>
-          popup.id === id
-            ? {
-                ...popup,
-                isHidden: true,
-              }
-            : popup,
+          popup.id === id ? { ...popup, isHidden: true } : popup,
         ),
       );
 
@@ -244,12 +271,10 @@ function PopupProvider({ children }) {
         return true;
       }
 
-      if (force === true) {
+      if (force) {
         closingIdsRef.current.clear();
         popupTransitionLockRef.current = false;
-
         setPopups([]);
-
         return true;
       }
 
@@ -277,7 +302,6 @@ function PopupProvider({ children }) {
             typeof shouldClose.then === "function"
           ) {
             console.error("Popup onClose callbacks must be synchronous.");
-
             continue;
           }
 
@@ -300,12 +324,6 @@ function PopupProvider({ children }) {
     [setPopups],
   );
 
-  /*
-   * -------------------------------------------------------
-   * MAIN EVENT SHEET
-   * -------------------------------------------------------
-   */
-
   const [sheetState, setSheetState] = useState({
     isOpen: false,
     id: null,
@@ -322,7 +340,6 @@ function PopupProvider({ children }) {
         console.error(
           "openEventSheet requires content to be a render function.",
         );
-
         return false;
       }
 
@@ -380,7 +397,6 @@ function PopupProvider({ children }) {
 
     if (pending) {
       pendingEventSheetOpenRef.current = null;
-
       attemptCloseRef.current = pending.attemptClose;
 
       setSheetState({
@@ -401,14 +417,13 @@ function PopupProvider({ children }) {
     attemptCloseRef.current = null;
   }, []);
 
-  /*
-   * -------------------------------------------------------
-   * CHILD EVENT SHEETS
-   * -------------------------------------------------------
-   */
-
   const [childSheetStack, setChildSheetStackState] = useState([]);
+  const [isChildSheetOpen, setIsChildSheetOpen] = useState(false);
+
   const childSheetStackRef = useRef([]);
+  const childSheetIdRef = useRef(0);
+  const childCloseActionRef = useRef(null);
+  const childIsClosingRef = useRef(false);
 
   const setChildSheetStack = useCallback((updater) => {
     setChildSheetStackState((current) => {
@@ -419,11 +434,6 @@ function PopupProvider({ children }) {
       return next;
     });
   }, []);
-  const [isChildSheetOpen, setIsChildSheetOpen] = useState(false);
-
-  const childSheetIdRef = useRef(0);
-  const childCloseActionRef = useRef(null);
-  const childIsClosingRef = useRef(false);
 
   const renderedChildSheet =
     childSheetStack[childSheetStack.length - 1] ?? null;
@@ -432,19 +442,13 @@ function PopupProvider({ children }) {
     childCloseActionRef.current = null;
     childIsClosingRef.current = false;
 
-    childSheetStackRef.current = [];
-
     setIsChildSheetOpen(false);
     setChildSheetStack([]);
   }, [setChildSheetStack]);
 
   const openEventSubSheet = useCallback(
     ({ content, onBeforeClose = null }) => {
-      if (!content) {
-        return null;
-      }
-
-      if (childIsClosingRef.current) {
+      if (!content || childIsClosingRef.current) {
         return null;
       }
 
@@ -457,10 +461,9 @@ function PopupProvider({ children }) {
           typeof onBeforeClose === "function" ? onBeforeClose : null,
       };
 
-      if (!renderedChildSheet) {
+      if (childSheetStackRef.current.length === 0) {
         setChildSheetStack([newSheet]);
         setIsChildSheetOpen(true);
-
         return id;
       }
 
@@ -475,7 +478,7 @@ function PopupProvider({ children }) {
 
       return id;
     },
-    [renderedChildSheet],
+    [setChildSheetStack],
   );
 
   const beginChildSheetPop = useCallback(({ skipBeforeClose = false } = {}) => {
@@ -495,28 +498,25 @@ function PopupProvider({ children }) {
     }
 
     childIsClosingRef.current = true;
-
-    childCloseActionRef.current = {
-      type: "POP",
-    };
+    childCloseActionRef.current = { type: "POP" };
 
     setIsChildSheetOpen(false);
 
     return true;
   }, []);
 
-  const closeEventSubSheet = useCallback(() => {
-    return beginChildSheetPop();
-  }, [beginChildSheetPop]);
+  const closeEventSubSheet = useCallback(
+    () => beginChildSheetPop(),
+    [beginChildSheetPop],
+  );
 
-  const forceCloseEventSubSheet = useCallback(() => {
-    return beginChildSheetPop({
-      skipBeforeClose: true,
-    });
-  }, [beginChildSheetPop]);
+  const forceCloseEventSubSheet = useCallback(
+    () => beginChildSheetPop({ skipBeforeClose: true }),
+    [beginChildSheetPop],
+  );
 
   const closeAllEventSubSheets = useCallback(() => {
-    if (!renderedChildSheet) {
+    if (childSheetStackRef.current.length === 0) {
       resetChildSheetsImmediately();
       return true;
     }
@@ -526,15 +526,12 @@ function PopupProvider({ children }) {
     }
 
     childIsClosingRef.current = true;
-
-    childCloseActionRef.current = {
-      type: "POP_ALL",
-    };
+    childCloseActionRef.current = { type: "POP_ALL" };
 
     setIsChildSheetOpen(false);
 
     return true;
-  }, [renderedChildSheet, resetChildSheetsImmediately]);
+  }, [resetChildSheetsImmediately]);
 
   const handleChildSheetCloseEnd = useCallback(() => {
     const action = childCloseActionRef.current;
@@ -551,7 +548,6 @@ function PopupProvider({ children }) {
 
       childIsClosingRef.current = false;
       setIsChildSheetOpen(true);
-
       return;
     }
 
@@ -560,7 +556,6 @@ function PopupProvider({ children }) {
         const nextStack = current.slice(0, -1);
 
         childIsClosingRef.current = false;
-
         setIsChildSheetOpen(nextStack.length > 0);
 
         return nextStack;
@@ -571,32 +566,21 @@ function PopupProvider({ children }) {
 
     if (action.type === "POP_ALL") {
       childIsClosingRef.current = false;
-
       setChildSheetStack([]);
       setIsChildSheetOpen(false);
     }
-  }, []);
-
-  /*
-   * -------------------------------------------------------
-   * MAIN EVENT SHEET CLOSING
-   * -------------------------------------------------------
-   */
+  }, [setChildSheetStack]);
 
   const requestCloseEventSheet = useCallback(() => {
-    if (renderedChildSheet) {
+    if (childSheetStackRef.current.length > 0) {
       closeEventSubSheet();
       return false;
     }
 
     const attemptClose = attemptCloseRef.current;
 
-    if (attemptClose) {
-      const canClose = attemptClose();
-
-      if (canClose === false) {
-        return false;
-      }
+    if (attemptClose && attemptClose() === false) {
+      return false;
     }
 
     setSheetState((current) => ({
@@ -605,24 +589,23 @@ function PopupProvider({ children }) {
     }));
 
     return true;
-  }, [renderedChildSheet, closeEventSubSheet]);
+  }, [closeEventSubSheet]);
 
   const requestCloseEventSheetFromBackdrop = useCallback(() => {
-    if (renderedChildSheet) {
+    if (childSheetStackRef.current.length > 0) {
       closeEventSubSheet();
       return false;
     }
 
     const attemptClose = attemptCloseRef.current;
 
-    if (attemptClose) {
-      const canClose = attemptClose({
+    if (
+      attemptClose &&
+      attemptClose({
         reopenOnCancel: false,
-      });
-
-      if (canClose === false) {
-        return false;
-      }
+      }) === false
+    ) {
+      return false;
     }
 
     setSheetState((current) => ({
@@ -631,10 +614,10 @@ function PopupProvider({ children }) {
     }));
 
     return true;
-  }, [renderedChildSheet, closeEventSubSheet]);
+  }, [closeEventSubSheet]);
 
   const handleEventSheetDragClose = useCallback(() => {
-    if (renderedChildSheet) {
+    if (childSheetStackRef.current.length > 0) {
       closeEventSubSheet();
       return false;
     }
@@ -652,9 +635,7 @@ function PopupProvider({ children }) {
 
     const canClose = attemptClose({
       onCancel: () => {
-        requestAnimationFrame(() => {
-          reopenEventSheet();
-        });
+        requestAnimationFrame(reopenEventSheet);
       },
     });
 
@@ -668,7 +649,7 @@ function PopupProvider({ children }) {
     }));
 
     return true;
-  }, [renderedChildSheet, closeEventSubSheet, reopenEventSheet]);
+  }, [closeEventSubSheet, reopenEventSheet]);
 
   const forceCloseEventSheet = useCallback(() => {
     attemptCloseRef.current = null;
@@ -681,12 +662,6 @@ function PopupProvider({ children }) {
       isOpen: false,
     }));
   }, [resetChildSheetsImmediately]);
-
-  /*
-   * -------------------------------------------------------
-   * RENDERING
-   * -------------------------------------------------------
-   */
 
   let topmostVisibleIndex = -1;
 
@@ -704,24 +679,18 @@ function PopupProvider({ children }) {
       hidePopup,
       showPopup,
       closeAllPopups,
-
       openEventSheet,
       reopenEventSheet,
       requestCloseEventSheet,
       forceCloseEventSheet,
-
       isEventSheetOpen: sheetState.isOpen,
       eventSheetId: sheetState.id,
-
       addEditRef,
-
       openEventSubSheet,
       closeEventSubSheet,
       forceCloseEventSubSheet,
       closeAllEventSubSheets,
-
       hasEventSubSheet: childSheetStack.length > 0,
-
       eventSubSheetDepth: childSheetStack.length,
     }),
     [
@@ -730,20 +699,16 @@ function PopupProvider({ children }) {
       hidePopup,
       showPopup,
       closeAllPopups,
-
       openEventSheet,
       reopenEventSheet,
       requestCloseEventSheet,
       forceCloseEventSheet,
-
       sheetState.isOpen,
       sheetState.id,
-
       openEventSubSheet,
       closeEventSubSheet,
       forceCloseEventSubSheet,
       closeAllEventSubSheets,
-
       childSheetStack.length,
     ],
   );
@@ -780,6 +745,9 @@ function PopupProvider({ children }) {
             BR={popup.BR}
             isHidden={popup.isHidden}
             zIndex={1000 + index}
+            visualViewport={
+              popup.type === "centered" ? visualViewport : undefined
+            }
           >
             {popup.render()}
           </Popup>
@@ -803,8 +771,8 @@ function PopupProvider({ children }) {
         onClose={closeEventSubSheet}
         onCloseEnd={handleChildSheetCloseEnd}
         detent="content-height"
-        duration={0.3}
-        headderHeight={"16px"}
+        duration={0.2}
+        headderHeight="16px"
       >
         {renderedChildSheet?.content}
       </BottomSheet>
