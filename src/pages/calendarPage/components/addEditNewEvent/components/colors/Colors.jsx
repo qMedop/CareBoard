@@ -239,7 +239,12 @@ function Colors({ handleColorChange, selected }) {
               />
             ))}
 
-            {!isMobile && <CustomColorOption onClick={openCustomColorPicker} />}
+            {!isMobile && (
+              <CustomColorOption
+                isMobile={isMobile}
+                onClick={openCustomColorPicker}
+              />
+            )}
           </div>
         </>
       )}
@@ -265,7 +270,10 @@ function Colors({ handleColorChange, selected }) {
               );
             })}
 
-            <CustomColorOption onClick={openCustomColorPicker} />
+            <CustomColorOption
+              isMobile={isMobile}
+              onClick={openCustomColorPicker}
+            />
           </div>
         </>
       )}
@@ -274,7 +282,41 @@ function Colors({ handleColorChange, selected }) {
 }
 
 function CustomColorPicker({ initialColor, onPick }) {
-  const [color, setColor] = useState(initialColor || DEFAULT_EVENT_COLOR);
+  const initialValidColor = normalizeColor(initialColor || DEFAULT_EVENT_COLOR);
+
+  const [color, setColor] = useState(initialValidColor);
+  const [hexInput, setHexInput] = useState(initialValidColor);
+
+  const isValidHex = /^#[0-9A-Fa-f]{6}$/.test(hexInput);
+
+  const handlePickerChange = (nextColor) => {
+    const normalizedColor = normalizeColor(nextColor);
+
+    setColor(normalizedColor);
+    setHexInput(normalizedColor);
+  };
+
+  const handleHexChange = (event) => {
+    let value = event.target.value;
+
+    if (!value.startsWith("#")) {
+      value = `#${value}`;
+    }
+
+    value = value.slice(0, 7);
+
+    setHexInput(value);
+
+    if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+      setColor(normalizeColor(value));
+    }
+  };
+
+  const handleApply = () => {
+    if (!isValidHex) return;
+
+    onPick(normalizeColor(hexInput));
+  };
 
   return (
     <div className={styles.customPickerPopup}>
@@ -289,7 +331,7 @@ function CustomColorPicker({ initialColor, onPick }) {
 
       <HexColorPicker
         color={color}
-        onChange={setColor}
+        onChange={handlePickerChange}
         className={styles.customPicker}
       />
 
@@ -298,16 +340,23 @@ function CustomColorPicker({ initialColor, onPick }) {
 
         <input
           type="text"
-          value={color}
+          value={hexInput}
           maxLength={7}
-          onChange={(event) => setColor(event.target.value)}
+          spellCheck={false}
+          autoComplete="off"
+          aria-invalid={!isValidHex}
+          onChange={handleHexChange}
+          style={{ color: isValidHex ? "#f1f1f1" : "#e05252" }}
         />
 
         <CustomButton
           ClickEffect="scale"
-          className={`default ${styles.customPickerApplyButton}`}
+          className={`default ${styles.customPickerApplyButton} ${!isValidHex ? "disabled" : ""}`}
           type="button"
-          onClick={() => onPick(color)}
+          disabled={!isValidHex}
+          onClick={handleApply}
+          style={{ color: isValidHex ? "#f1f1f1" : "#666666" }}
+          disabled={!isValidHex}
         >
           Done
         </CustomButton>
@@ -346,9 +395,7 @@ function ColorOption({ color, handleColorChange, selected, isMobile }) {
   );
 }
 
-function CustomColorOption({ onClick }) {
-  const { isMobile } = useTime();
-
+function CustomColorOption({ onClick, isMobile }) {
   return (
     <CustomButton
       ClickEffect={false}

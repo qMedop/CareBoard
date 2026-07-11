@@ -5,6 +5,7 @@ import { DateTime } from "luxon";
 import { LockIcon, PlusIcon, RepeatIcon } from "../../../../assets/icons/Icon";
 import defaultAvatar from "../../../../assets/svg/user-avatar.svg";
 import { useUserSettings } from "../../../../contexts/UserSettingsContext";
+import { getContrastColor } from "../../../../utils/getContrastColor";
 
 function EventBlock({
   event,
@@ -111,7 +112,10 @@ function EventBlock({
         </div>
       ) : (
         <>
-          <div className={styles.title}>
+          <div
+            style={{ color: getContrastColor(event?.color) }}
+            className={styles.title}
+          >
             <p className={styles.eventText}>
               {event?.title?.length === 0 ? "(No title)" : event?.title}
             </p>
