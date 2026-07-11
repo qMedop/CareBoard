@@ -4,22 +4,16 @@
 
 .container {
   background-color: var(--popup-bg-color) !important;
-
   border-radius: 24px 24px 0 0 !important;
-
   max-height: calc(95dvh - 34px);
-
   overflow: hidden;
 }
 
 .content {
   min-height: 0;
-
   overflow-y: auto !important;
   overflow-x: hidden !important;
-
   overscroll-behavior-y: contain;
-
   -webkit-overflow-scrolling: touch;
 }
 .contentMeasurement {
@@ -30,10 +24,10 @@
   min-height: 0;
 }
 .header {
-  height: 32px;
+  height: var(--headderHeight) !important;
   width: 100%;
   cursor: grab;
-  background-color: var(--popup-bg-color);
+  background-color: transparent !important;
 }
 .header > div {
   height: 100% !important;

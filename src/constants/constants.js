@@ -20,15 +20,30 @@ export const MONTHS_OF_THE_YEAR = [
 // Event colors
 
 export const COLOR_OPTIONS = [
-  "#E879C3", // Default event color
-  "#ffcb93",
-  "#B5CC45",
-  "#7F8FFF",
-  "#45CDE8",
-  "#737B86",
-  "#45C996",
-  "#A8ADB5",
-  "#6DBCC5",
+  // Existing palette — softened
+  "#D98ABD", // Soft pink — default
+  "#E9BE91", // Soft peach
+  "#B8C86A", // Soft lime
+  "#929DE0", // Soft periwinkle
+  "#6DBFD1", // Soft cyan
+  "#858D98", // Slate gray
+  "#6DBB98", // Soft mint green
+  "#ADB1B8", // Light gray
+  "#7EB3BA", // Muted teal
+
+  // Added colors
+  "#D58D8D", // Dusty rose
+  "#D5A27A", // Warm apricot
+  "#D2B86E", // Muted gold
+  "#A9BD76", // Sage lime
+  "#78B89E", // Seafoam
+  "#72B1A9", // Soft turquoise
+  "#78A8C7", // Dusty sky blue
+  "#8299C5", // Muted cornflower
+  "#9B91C9", // Soft lavender
+  "#B28FC1", // Muted purple
+  "#C58FAA", // Dusty mauve
+  "#B99A91", // Warm taupe
 ];
 
 export const DEFAULT_EVENT_COLOR = COLOR_OPTIONS[0];

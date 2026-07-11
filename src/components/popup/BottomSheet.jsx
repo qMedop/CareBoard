@@ -13,6 +13,7 @@ function BottomSheet({
   detent = "default",
   duration = 0.3,
   ease = "easeInOut",
+  headderHeight = "32px",
 }) {
   const mountPoint = useMemo(() => document.getElementById("root"), []);
 
@@ -37,7 +38,10 @@ function BottomSheet({
       }}
     >
       <Sheet.Container className={styles.container}>
-        <Sheet.Header />
+        <Sheet.Header
+          style={{ "--headderHeight": headderHeight }}
+          className={styles.header}
+        />
 
         <Sheet.Content className={styles.content}>{children}</Sheet.Content>
       </Sheet.Container>

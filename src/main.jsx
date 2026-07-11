@@ -9,6 +9,10 @@ import { TimeProvider } from "./contexts/TimeContext";
 import { PopupProvider } from "./contexts/PopupContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
 import { UserSettingsProvider } from "./contexts/UserSettingsContext";
+import { initializeLocalStorage } from "./utils/initializeLocalStorage";
+
+// Initialize local storage
+initializeLocalStorage();
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

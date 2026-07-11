@@ -791,6 +791,8 @@ function PopupProvider({ children }) {
         onClose={closeEventSubSheet}
         onCloseEnd={handleChildSheetCloseEnd}
         detent="content-height"
+        duration={0.3}
+        headderHeight={"16px"}
       >
         {renderedChildSheet?.content}
       </BottomSheet>

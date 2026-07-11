@@ -81,6 +81,7 @@ import {
   EVENT_TIME_SLOTS_PER_DAY,
 } from "../../../../constants/constants";
 import { useUserSettings } from "../../../../contexts/UserSettingsContext";
+import Colors from "./components/colors/Colors";
 
 const AddEditNewEvent = forwardRef(
   ({ eventId: incomingEventId, onClose }, ref) => {
@@ -1063,32 +1064,14 @@ const AddEditNewEvent = forwardRef(
     const handleColorClick = (e) => {
       openEditorPopup({
         desktopType: "contextual",
-
         content: (
-          <div className={`${styles.colorPickerPopup} ${styles.addEventPopup}`}>
-            {COLOR_OPTIONS.map((color) => (
-              <div
-                key={color}
-                className={styles.colorOptionWrapper}
-                onClick={() => handleColorChange(color)}
-              >
-                <div
-                  className={styles.colorHover}
-                  style={{ backgroundColor: color }}
-                />
-
-                <span
-                  className={styles.colorDot}
-                  style={{ backgroundColor: color }}
-                />
-              </div>
-            ))}
-          </div>
+          <Colors
+            selected={eventData.color}
+            handleColorChange={handleColorChange}
+          />
         ),
-
         target: e.currentTarget,
         position: "bottomRight",
-
         snapPoints: [0, 1],
         initialSnap: 1,
       });
