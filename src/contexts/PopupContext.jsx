@@ -407,8 +407,18 @@ function PopupProvider({ children }) {
    * -------------------------------------------------------
    */
 
-  const [childSheetStack, setChildSheetStack] = useState([]);
+  const [childSheetStack, setChildSheetStackState] = useState([]);
+  const childSheetStackRef = useRef([]);
 
+  const setChildSheetStack = useCallback((updater) => {
+    setChildSheetStackState((current) => {
+      const next = typeof updater === "function" ? updater(current) : updater;
+
+      childSheetStackRef.current = next;
+
+      return next;
+    });
+  }, []);
   const [isChildSheetOpen, setIsChildSheetOpen] = useState(false);
 
   const childSheetIdRef = useRef(0);
@@ -422,9 +432,11 @@ function PopupProvider({ children }) {
     childCloseActionRef.current = null;
     childIsClosingRef.current = false;
 
+    childSheetStackRef.current = [];
+
     setIsChildSheetOpen(false);
     setChildSheetStack([]);
-  }, []);
+  }, [setChildSheetStack]);
 
   const openEventSubSheet = useCallback(
     ({ content, onBeforeClose = null }) => {
@@ -466,32 +478,32 @@ function PopupProvider({ children }) {
     [renderedChildSheet],
   );
 
-  const beginChildSheetPop = useCallback(
-    ({ skipBeforeClose = false } = {}) => {
-      if (!renderedChildSheet || childIsClosingRef.current) {
+  const beginChildSheetPop = useCallback(({ skipBeforeClose = false } = {}) => {
+    const currentStack = childSheetStackRef.current;
+    const currentSheet = currentStack[currentStack.length - 1];
+
+    if (!currentSheet || childIsClosingRef.current) {
+      return false;
+    }
+
+    if (!skipBeforeClose && currentSheet.onBeforeClose) {
+      const result = safelyCall(currentSheet.onBeforeClose);
+
+      if (result === false) {
         return false;
       }
+    }
 
-      if (!skipBeforeClose && renderedChildSheet.onBeforeClose) {
-        const result = safelyCall(renderedChildSheet.onBeforeClose);
+    childIsClosingRef.current = true;
 
-        if (result === false) {
-          return false;
-        }
-      }
+    childCloseActionRef.current = {
+      type: "POP",
+    };
 
-      childIsClosingRef.current = true;
+    setIsChildSheetOpen(false);
 
-      childCloseActionRef.current = {
-        type: "POP",
-      };
-
-      setIsChildSheetOpen(false);
-
-      return true;
-    },
-    [renderedChildSheet],
-  );
+    return true;
+  }, []);
 
   const closeEventSubSheet = useCallback(() => {
     return beginChildSheetPop();
