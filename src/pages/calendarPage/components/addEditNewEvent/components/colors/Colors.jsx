@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { HexColorPicker } from "react-colorful";
 
+import CustomButton from "../../../../../../components/button/Button";
 import {
   CheckMarkIcon,
   ColorPickerIcon,
@@ -9,17 +10,17 @@ import {
   COLOR_OPTIONS,
   DEFAULT_EVENT_COLOR,
 } from "../../../../../../constants/constants";
-import { useTime } from "../../../../../../contexts/TimeContext";
 import { usePopup } from "../../../../../../contexts/PopupContext";
+import { useTime } from "../../../../../../contexts/TimeContext";
 import { getContrastColor } from "../../../../../../utils/getContrastColor";
 
 import styles from "./Colors.module.css";
-import CustomButton from "../../../../../../components/button/Button";
 
 const CUSTOM_COLOR_POPUP_ID = "custom-color-picker";
-
 const COLOR_USAGE_STORAGE_KEY = "event-color-usage";
-const MAX_SUGGESTED_COLORS = 9;
+
+const DESKTOP_MAX_SUGGESTED_COLORS = 8;
+const MOBILE_MAX_SUGGESTED_COLORS = 9;
 
 function normalizeColor(color) {
   return color.trim().toUpperCase();
@@ -35,26 +36,26 @@ function getStoredColorUsage() {
   try {
     const stored = localStorage.getItem(COLOR_USAGE_STORAGE_KEY);
 
-    if (!stored) {
-      return [];
-    }
+    if (!stored) return [];
 
     const parsed = JSON.parse(stored);
 
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
+    if (!Array.isArray(parsed)) return [];
 
-    return parsed.filter(
-      (item) =>
-        item &&
-        typeof item.color === "string" &&
-        typeof item.count === "number" &&
-        typeof item.lastUsed === "number",
-    );
+    return parsed
+      .filter(
+        (item) =>
+          item &&
+          typeof item.color === "string" &&
+          typeof item.count === "number" &&
+          typeof item.lastUsed === "number",
+      )
+      .map((item) => ({
+        ...item,
+        color: normalizeColor(item.color),
+      }));
   } catch (error) {
     console.error("Failed to read event color usage:", error);
-
     return [];
   }
 }
@@ -72,32 +73,28 @@ function registerColorUsage(color) {
   const currentColors = getStoredColorUsage();
   const now = Date.now();
 
-  const existingColor = currentColors.find(
+  const colorExists = currentColors.some(
     (item) => item.color === normalizedColor,
   );
 
-  let nextColors;
-
-  if (existingColor) {
-    nextColors = currentColors.map((item) =>
-      item.color === normalizedColor
-        ? {
-            ...item,
-            count: item.count + 1,
-            lastUsed: now,
-          }
-        : item,
-    );
-  } else {
-    nextColors = [
-      ...currentColors,
-      {
-        color: normalizedColor,
-        count: 1,
-        lastUsed: now,
-      },
-    ];
-  }
+  const nextColors = colorExists
+    ? currentColors.map((item) =>
+        item.color === normalizedColor
+          ? {
+              ...item,
+              count: item.count + 1,
+              lastUsed: now,
+            }
+          : item,
+      )
+    : [
+        ...currentColors,
+        {
+          color: normalizedColor,
+          count: 1,
+          lastUsed: now,
+        },
+      ];
 
   saveColorUsage(nextColors);
 }
@@ -105,48 +102,41 @@ function registerColorUsage(color) {
 function registerCustomColor(color) {
   const normalizedColor = normalizeColor(color);
   const currentColors = getStoredColorUsage();
+  const sortedColors = sortColorUsage(currentColors);
+  const highestCount = sortedColors[0]?.count ?? 0;
   const now = Date.now();
 
-  const existingColor = currentColors.find(
+  const colorExists = currentColors.some(
     (item) => item.color === normalizedColor,
   );
 
-  let nextColors;
-
-  if (existingColor) {
-    nextColors = currentColors.map((item) =>
-      item.color === normalizedColor
-        ? {
-            ...item,
-            count: Math.max(
-              item.count + 1,
-              sortColorUsage(currentColors)[0]?.count + 1 || 1,
-            ),
-            lastUsed: now,
-          }
-        : item,
-    );
-  } else {
-    const highestCount = sortColorUsage(currentColors)[0]?.count ?? 0;
-
-    nextColors = [
-      ...currentColors,
-      {
-        color: normalizedColor,
-        count: highestCount + 1,
-        lastUsed: now,
-      },
-    ];
-  }
+  const nextColors = colorExists
+    ? currentColors.map((item) =>
+        item.color === normalizedColor
+          ? {
+              ...item,
+              count: Math.max(item.count + 1, highestCount + 1),
+              lastUsed: now,
+            }
+          : item,
+      )
+    : [
+        ...currentColors,
+        {
+          color: normalizedColor,
+          count: highestCount + 1,
+          lastUsed: now,
+        },
+      ];
 
   saveColorUsage(nextColors);
 
   return normalizedColor;
 }
 
-function getInitialSuggestedColors() {
+function getInitialSuggestedColors(limit) {
   return sortColorUsage(getStoredColorUsage())
-    .slice(0, MAX_SUGGESTED_COLORS)
+    .slice(0, limit)
     .map((item) => item.color);
 }
 
@@ -154,12 +144,16 @@ function Colors({ handleColorChange, selected }) {
   const { isMobile } = useTime();
   const { openPopup, closePopup } = usePopup();
 
-  const [selectedColor, setSelectedColor] = useState(
+  const maxSuggestedColors = isMobile
+    ? MOBILE_MAX_SUGGESTED_COLORS
+    : DESKTOP_MAX_SUGGESTED_COLORS;
+
+  const [selectedColor, setSelectedColor] = useState(() =>
     normalizeColor(selected || DEFAULT_EVENT_COLOR),
   );
 
-  const [suggestedColors, setSuggestedColors] = useState(
-    getInitialSuggestedColors,
+  const [suggestedColors, setSuggestedColors] = useState(() =>
+    getInitialSuggestedColors(maxSuggestedColors),
   );
 
   const selectColor = (color) => {
@@ -169,37 +163,13 @@ function Colors({ handleColorChange, selected }) {
     handleColorChange(normalizedColor);
   };
 
-  const handlePresetColorClick = (color) => {
-    const normalizedColor = normalizeColor(color);
-
-    selectColor(normalizedColor);
-
-    /*
-     * Update usage stats for the NEXT mount.
-     * Do not modify suggestedColors here.
-     */
-    registerColorUsage(normalizedColor);
-  };
-
-  const handleSuggestedColorClick = (color) => {
-    const normalizedColor = normalizeColor(color);
-
-    selectColor(normalizedColor);
-
-    /*
-     * Suggested colors still count as usage,
-     * but visible order remains frozen until next mount.
-     */
-    registerColorUsage(normalizedColor);
+  const handleColorClick = (color) => {
+    selectColor(color);
+    registerColorUsage(color);
   };
 
   const handleReset = () => {
     selectColor(DEFAULT_EVENT_COLOR);
-
-    /*
-     * Reset is an action, not a normal color choice.
-     * It does not affect frequency statistics.
-     */
   };
 
   const handleCustomColorPick = (color) => {
@@ -207,38 +177,26 @@ function Colors({ handleColorChange, selected }) {
 
     selectColor(normalizedColor);
 
-    /*
-     * Custom colors are the one exception:
-     * immediately put the picked custom color first.
-     *
-     * Remove it first if already present,
-     * then cap Suggested at 9.
-     */
     setSuggestedColors((currentColors) =>
       [
         normalizedColor,
         ...currentColors.filter((item) => item !== normalizedColor),
-      ].slice(0, MAX_SUGGESTED_COLORS),
+      ].slice(0, maxSuggestedColors),
     );
 
     closePopup(CUSTOM_COLOR_POPUP_ID);
   };
 
   const openCustomColorPicker = (event) => {
-    const triggerElement = event.currentTarget;
-
     openPopup(
       "centered",
       () => (
         <CustomColorPicker
           initialColor={selectedColor}
           onPick={handleCustomColorPick}
-          onCancel={() => {
-            closePopup(CUSTOM_COLOR_POPUP_ID);
-          }}
         />
       ),
-      triggerElement,
+      event.currentTarget,
       "center",
       null,
       () => true,
@@ -246,7 +204,7 @@ function Colors({ handleColorChange, selected }) {
     );
   };
 
-  const suggestedColorSet = new Set(suggestedColors.map(normalizeColor));
+  const suggestedColorSet = new Set(suggestedColors);
 
   const moreColors = COLOR_OPTIONS.filter(
     (color) => !suggestedColorSet.has(normalizeColor(color)),
@@ -256,58 +214,66 @@ function Colors({ handleColorChange, selected }) {
     <div className={styles.colorPickerPopup}>
       {suggestedColors.length > 0 && (
         <>
-          <div className={styles.title}>
-            <p>Suggested</p>
+          {isMobile && (
+            <div className={styles.title}>
+              <p>Suggested</p>
 
-            <CustomButton
-              ClickEffect={"scale"}
-              className={`default ${styles.resetButton}`}
-              onClick={handleReset}
-            >
-              Reset
-            </CustomButton>
-          </div>
+              <CustomButton
+                ClickEffect="scale"
+                className={`default ${styles.resetButton}`}
+                onClick={handleReset}
+              >
+                Reset
+              </CustomButton>
+            </div>
+          )}
 
           <div className={styles.colorsOptions}>
             {suggestedColors.map((color) => (
               <ColorOption
                 key={color}
                 color={color}
-                handleColorChange={handleSuggestedColorClick}
+                handleColorChange={handleColorClick}
                 selected={selectedColor === color}
                 isMobile={isMobile}
               />
             ))}
+
+            {!isMobile && <CustomColorOption onClick={openCustomColorPicker} />}
           </div>
         </>
       )}
 
-      <div className={styles.title}>
-        <p>More colors</p>
-      </div>
+      {isMobile && (
+        <>
+          <div className={styles.title}>
+            <p>More colors</p>
+          </div>
 
-      <div className={styles.colorsOptions}>
-        {moreColors.map((color) => {
-          const normalizedColor = normalizeColor(color);
+          <div className={styles.colorsOptions}>
+            {moreColors.map((color) => {
+              const normalizedColor = normalizeColor(color);
 
-          return (
-            <ColorOption
-              key={color}
-              color={color}
-              handleColorChange={handlePresetColorClick}
-              selected={selectedColor === normalizedColor}
-              isMobile={isMobile}
-            />
-          );
-        })}
+              return (
+                <ColorOption
+                  key={color}
+                  color={color}
+                  handleColorChange={handleColorClick}
+                  selected={selectedColor === normalizedColor}
+                  isMobile={isMobile}
+                />
+              );
+            })}
 
-        <CustomColorOption onClick={openCustomColorPicker} />
-      </div>
+            <CustomColorOption onClick={openCustomColorPicker} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function CustomColorPicker({ initialColor, onPick, onCancel }) {
+function CustomColorPicker({ initialColor, onPick }) {
   const [color, setColor] = useState(initialColor || DEFAULT_EVENT_COLOR);
 
   return (
@@ -317,9 +283,7 @@ function CustomColorPicker({ initialColor, onPick, onCancel }) {
 
         <div
           className={styles.customPickerPreview}
-          style={{
-            backgroundColor: color,
-          }}
+          style={{ backgroundColor: color }}
         />
       </div>
 
@@ -336,12 +300,11 @@ function CustomColorPicker({ initialColor, onPick, onCancel }) {
           type="text"
           value={color}
           maxLength={7}
-          onChange={(event) => {
-            setColor(event.target.value);
-          }}
+          onChange={(event) => setColor(event.target.value)}
         />
+
         <CustomButton
-          ClickEffect={"scale"}
+          ClickEffect="scale"
           className={`default ${styles.customPickerApplyButton}`}
           type="button"
           onClick={() => onPick(color)}
@@ -363,12 +326,7 @@ function ColorOption({ color, handleColorChange, selected, isMobile }) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div
-        className={styles.colorDot}
-        style={{
-          backgroundColor: color,
-        }}
-      />
+      <div className={styles.colorDot} style={{ backgroundColor: color }} />
 
       <span
         className={styles.colorHover}
@@ -389,6 +347,8 @@ function ColorOption({ color, handleColorChange, selected, isMobile }) {
 }
 
 function CustomColorOption({ onClick }) {
+  const { isMobile } = useTime();
+
   return (
     <CustomButton
       ClickEffect={false}
@@ -396,7 +356,8 @@ function CustomColorOption({ onClick }) {
       className={`default ${styles.colorOptionWrapper} ${styles.customColorOption}`}
       onClick={onClick}
     >
-      <ColorPickerIcon size={32} fill="#25262b" />
+      <span></span>
+      {isMobile && <ColorPickerIcon size={32} fill="#25262b" />}
     </CustomButton>
   );
 }

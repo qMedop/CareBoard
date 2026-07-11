@@ -50,73 +50,6 @@
   width: 60%;
   height: 60%;
 }
-
-body:global(.mobile) {
-  .colorPickerPopup {
-    padding: 8px 16px;
-    container-type: inline-size;
-    max-height: 50dvh;
-  }
-  .title {
-    font-family: "Roboto", sans-serif;
-    font-size: 20px;
-    font-weight: 500;
-    margin-bottom: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .colorsOptions {
-    --columns: 5;
-    --color-size: clamp(56px, 10cqw, 72px);
-    grid-template-columns: repeat(var(--columns), var(--color-size));
-    grid-template-rows: initial;
-    justify-content: space-between;
-    align-items: center;
-    column-gap: 0;
-    row-gap: 24px;
-    padding: 0;
-  }
-  .colorsOptions:not(:last-child) {
-    margin-bottom: 24px;
-  }
-  .colorsOptions:last-child {
-    padding-bottom: 24px;
-  }
-  .colorOptionWrapper {
-    width: var(--color-size);
-    height: var(--color-size);
-    cursor: none;
-  }
-  .colorOptionWrapper .colorDot {
-    width: 100%;
-    height: 100%;
-  }
-  .resetButton {
-    font-size: 14px;
-    padding: 4px 8px;
-    color: var(--text-gray);
-    border-radius: 24px;
-  }
-  .customPickerApplyButton {
-    font-size: 14px;
-    padding: 4px 8px;
-    color: var(--text-gray);
-    border-radius: 24px;
-  }
-  @container (max-width: 520px) {
-    .colorsOptions {
-      --columns: 4;
-      --color-size: clamp(72px, 11cqw, 96px);
-    }
-  }
-  @container (max-width: 360px) {
-    .colorsOptions {
-      --columns: 3;
-      --color-size: clamp(56px, 14cqw, 72px);
-    }
-  }
-}
 .customColorOption {
   padding: 0;
   border: none;
@@ -128,6 +61,11 @@ body:global(.mobile) {
   font-weight: 500;
   cursor: pointer;
   box-shadow: inset 0 0 0 2px var(--text-color);
+}
+.customColorOption span {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
   background:
     radial-gradient(
       circle at center,
@@ -148,9 +86,9 @@ body:global(.mobile) {
       #d991bd,
       #e99abb
     );
-  border-radius: 50%;
+  position: absolute;
+  z-index: 0;
 }
-
 .customColorInput {
   position: fixed;
   width: 1px;
@@ -175,6 +113,7 @@ body:global(.mobile) {
 .customColorOption :global(.svg) {
   width: 60%;
   height: 60%;
+  z-index: 1;
 }
 
 /*
@@ -295,4 +234,75 @@ body:global(.mobile) {
 .customPickerActions button:last-child {
   color: #fff;
   background-color: var(--primary-color);
+}
+.customPickerApplyButton {
+  font-size: 14px;
+  padding: 4px 8px;
+  color: var(--text-gray);
+  border-radius: 24px;
+}
+body:global(.mobile) {
+  .colorPickerPopup {
+    padding: 8px 16px;
+    container-type: inline-size;
+    max-height: 50dvh;
+  }
+  .title {
+    font-family: "Roboto", sans-serif;
+    font-size: 20px;
+    font-weight: 500;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .colorsOptions {
+    --columns: 5;
+    --color-size: clamp(56px, 10cqw, 72px);
+    grid-template-columns: repeat(var(--columns), var(--color-size));
+    grid-template-rows: initial;
+    justify-content: space-between;
+    align-items: center;
+    column-gap: 0;
+    row-gap: 24px;
+    padding: 0;
+  }
+  .colorsOptions:not(:last-child) {
+    margin-bottom: 24px;
+  }
+  .colorsOptions:last-child {
+    padding-bottom: 24px;
+  }
+  .colorOptionWrapper {
+    width: var(--color-size);
+    height: var(--color-size);
+    cursor: none;
+  }
+  .colorOptionWrapper .colorDot {
+    width: 100%;
+    height: 100%;
+  }
+  .resetButton {
+    font-size: 14px;
+    padding: 4px 8px;
+    color: var(--text-gray);
+    border-radius: 24px;
+  }
+
+  .customColorOption span {
+    width: 100%;
+    height: 100%;
+  }
+  @container (max-width: 520px) {
+    .colorsOptions {
+      --columns: 4;
+      --color-size: clamp(72px, 11cqw, 96px);
+    }
+  }
+  @container (max-width: 360px) {
+    .colorsOptions {
+      --columns: 3;
+      --color-size: clamp(56px, 14cqw, 72px);
+    }
+  }
 }
