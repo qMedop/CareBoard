@@ -15,7 +15,6 @@ function Availability({ eventData, updateGlobalState, closeParent }) {
   const [selectedAvailability, setSelectedAvailability] = useState(
     eventData.availability || EVENT_AVAILABILITY_OPTIONS[0],
   );
-
   const handleSelect = (availability) => {
     setSelectedAvailability(availability);
 
@@ -46,19 +45,39 @@ function Availability({ eventData, updateGlobalState, closeParent }) {
         setState={handleSelect}
         className={styles.listChooser}
       >
-        <ListItem className={styles.item} value="busy" label="Busy">
-          <div className={styles.itemLeft}>
-            <div className={`${styles.icon} ${styles.busyIcon}`} />
-            <p>Busy</p>
-          </div>
-        </ListItem>
-
-        <ListItem className={styles.item} value="free" label="Free">
-          <div className={styles.itemLeft}>
-            <div className={`${styles.icon} ${styles.freeIcon}`} />
-            <p>Free</p>
-          </div>
-        </ListItem>
+        {EVENT_AVAILABILITY_OPTIONS.map((availability) => (
+          <ListItem
+            key={availability}
+            className={styles.item}
+            value={availability}
+            label={
+              availability === "busy"
+                ? "Busy"
+                : availability === "free"
+                  ? "Free"
+                  : "Maybe Busy"
+            }
+          >
+            <div className={styles.itemLeft}>
+              <div
+                className={`${styles.icon} ${
+                  availability === "busy"
+                    ? styles.busyIcon
+                    : availability === "free"
+                      ? styles.freeIcon
+                      : styles.maybeBusyIcon
+                }`}
+              />
+              <p>
+                {availability === "busy"
+                  ? "Busy"
+                  : availability === "free"
+                    ? "Free"
+                    : "Maybe Busy"}
+              </p>
+            </div>
+          </ListItem>
+        ))}
       </ListChooser>
 
       {isMobile && (

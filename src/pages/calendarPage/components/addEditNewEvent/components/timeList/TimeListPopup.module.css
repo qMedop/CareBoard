@@ -1,0 +1,37 @@
+.timeListPopup {
+  background-color: var(--popup-bg-color);
+  max-height: calc(38px * 5);
+  width: 180px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  overflow-y: auto;
+}
+
+.timeListPopup::-webkit-scrollbar {
+  width: 6px;
+}
+.timeBtn {
+  font-family: "Google sans Flex", Arial, sans-serif;
+  background: none;
+  border: none;
+  color: var(--text-light);
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+}
+.highlightedTime {
+  background-color: #1c253b;
+}
+
+.selectedTime {
+  background-color: var(--main-cyan);
+  color: var(--text-dark);
+}

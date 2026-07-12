@@ -97,7 +97,9 @@
 .freeIcon::after {
   background-color: var(--main-cyan);
 }
-
+.maybeBusyIcon::after {
+  background-color: #f5a623;
+}
 .itemLeft p {
   margin: 0;
   font-family: "Google Sans Flex", sans-serif;

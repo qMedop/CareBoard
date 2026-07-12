@@ -63,12 +63,12 @@ export const DEFAULT_EVENT_VISIBILITY = EVENT_VISIBILITY.VISIBLE;
 export const EVENT_AVAILABILITY = Object.freeze({
   BUSY: "busy",
   FREE: "free",
+  MAYBE_BUSY: "maybeBusy",
 });
 
-export const EVENT_AVAILABILITY_OPTIONS = Object.freeze([
-  EVENT_AVAILABILITY.BUSY,
-  EVENT_AVAILABILITY.FREE,
-]);
+export const EVENT_AVAILABILITY_OPTIONS = Object.freeze(
+  Object.values(EVENT_AVAILABILITY),
+);
 
 export const DEFAULT_EVENT_AVAILABILITY = EVENT_AVAILABILITY.BUSY;
 

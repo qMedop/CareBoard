@@ -9,10 +9,10 @@ import {
   useCallback,
 } from "react";
 
-import styles from "./AddEditNewEvent.module.css";
-
 import { DateTime } from "luxon";
 import { AnimatePresence, motion } from "framer-motion";
+
+import styles from "./AddEditNewEvent.module.css";
 
 import {
   AvailabilityIcon,
@@ -25,7 +25,6 @@ import {
   ThreeLinesDashedIcon,
   SuccessIcon,
   ErrorIcon,
-  CloseIcon,
 } from "../../../../assets/icons/Icon";
 
 import {
@@ -36,11 +35,14 @@ import {
   doc,
   getDoc,
 } from "firebase/firestore";
+
 import { db } from "../../../../../firebase";
 
 import { usePopup } from "../../../../contexts/PopupContext";
 import { useData } from "../../../../contexts/AuthContext";
 import { useTime } from "../../../../contexts/TimeContext";
+import { useEventSheet } from "../../../../contexts/PopupContext";
+import { useUserSettings } from "../../../../contexts/UserSettingsContext";
 
 import CustomButton from "../../../../components/button/Button";
 import EmojiPopup from "../../../../components/emojiPopup/EmojiPopup";
@@ -48,44 +50,42 @@ import PickDay from "../../../../components/pickDay/pickDay";
 import CheckBox from "../../../../components/checkBox/checkBox";
 import ConfirmPopup from "../../../../components/confirmPopup/confirmPopup";
 import RecurrenceUpdatePopup from "../RecurrenceUpdatePopup/RecurrenceUpdatePopup";
-import CheckboxGroup from "../../../../components/checkboxGroup/CheckboxGroup";
 import Loading from "../../../../components/loading/Loading";
 
 import { formatDurationFromMinutes } from "../../../../utils/formatDurationFromMinutes";
 import { getUserZone } from "../../../../utils/getUserZone";
-import { useEventSheet } from "../../../../contexts/PopupContext";
+import { validateNewEvent } from "../../../../utils/validation/eventValidation";
 
 import {
-  COLOR_OPTIONS,
   DEFAULT_EVENT_COLOR,
   DEFAULT_EVENT_VISIBILITY,
   DEFAULT_EVENT_AVAILABILITY,
   DEFAULT_EVENT_RECURRENCE,
-  EVENT_VISIBILITY,
-  EVENT_AVAILABILITY,
   RECURRENCE_TYPE,
-  RECURRENCE_END_TYPE,
   RECURRENCE_UPDATE_MODE,
-  DEFAULT_RECURRENCE_INTERVAL,
-  DEFAULT_RECURRENCE_COUNT,
-  WEEKDAY_RECURRENCE_DAYS,
   EVENT_EDITOR_TYPE,
   EVENT_EDITOR_TYPES,
   EVENT_SAVE_STATUS,
   EVENT_SUCCESS_CLOSE_DELAY,
   EVENT_ERROR_RESET_DELAY,
-  EVENT_TIME_SLOT_MINUTES,
-  EVENT_TIME_SLOTS_PER_DAY,
 } from "../../../../constants/constants";
-import { useUserSettings } from "../../../../contexts/UserSettingsContext";
+
 import Colors from "./components/colors/Colors";
 import VisibilityPopup from "./components/visibility/Visibility";
 import Availability from "./components/availability/Availability";
 import Notifications from "./components/notifications/Notifications";
+import TimeListPopup from "./components/timeList/TimeListPopup";
+import DescriptionPopup from "./components/description/DescriptionPopup";
+import RecurrenceOptionsPopup from "./components/recurrence/RecurrenceOptionsPopup";
+
+const DEFAULT_NOTIFICATION_SETTINGS = Object.freeze({
+  shareTitle: false,
+  notifyFriends: true,
+});
 
 function normalizeNotificationSelection(notification) {
   if (Array.isArray(notification)) {
-    return notification.filter((value) => Number.isFinite(Number(value)));
+    return notification.map(Number).filter((value) => Number.isFinite(value));
   }
 
   if (notification === 0 || notification === "0" || notification == null) {
@@ -93,20 +93,24 @@ function normalizeNotificationSelection(notification) {
   }
 
   const parsed = Number(notification);
+
   return Number.isFinite(parsed) ? [parsed] : [];
 }
 
 function formatNotificationSelection(notification) {
   const normalized = normalizeNotificationSelection(notification);
 
-  if (normalized.length === 0) return "No notification";
+  if (normalized.length === 0) {
+    return "No notification";
+  }
 
   return normalized.map((value) => formatDurationFromMinutes(value)).join(", ");
 }
 
 const AddEditNewEvent = forwardRef(
   ({ eventId: incomingEventId, onClose }, ref) => {
-    const { currentUser } = useData();
+    const { currentUser, addEvent, updateEvent } = useData();
+
     const {
       newEvent,
       setNewEvent,
@@ -117,160 +121,210 @@ const AddEditNewEvent = forwardRef(
       isMobile,
     } = useTime();
 
-    const {
-      openEventSubSheet,
-      closeEventSubSheet,
-      reopenEventSheet,
-      requestCloseEventSheet,
-    } = useEventSheet();
+    const { openEventSubSheet, closeEventSubSheet, requestCloseEventSheet } =
+      useEventSheet();
+
+    const { openPopup, closePopup: closeContextPopup } = usePopup();
+
+    const { timeFormat } = useUserSettings();
 
     const isDraft = newEvent && incomingEventId === newEvent.id;
+
     const eventId = isDraft ? null : incomingEventId;
-
-    const { addEvent, updateEvent } = useData();
-    const { openPopup, closePopup: closeContextPopup } = usePopup();
-    const { timeFormat } = useUserSettings();
     const is24Format = timeFormat === "24h";
-
     const userZone = getUserZone(timeZoneOffset);
 
     const successTimeoutRef = useRef(null);
     const errorTimeoutRef = useRef(null);
+    const eventDataRef = useRef(null);
+    const isFullDayRef = useRef(false);
+    const originalEventRef = useRef(null);
+    const shadowIdRef = useRef(`shadow_${Date.now()}`);
+    const prevTimeRange = useRef(null);
 
-    const [friends, setFriends] = useState([]);
-
-    useEffect(() => {
-      let isMounted = true;
-      async function loadFriends() {
-        if (!currentUser?.id) return;
-        try {
-          const q = query(
-            collection(db, "friendships"),
-            where("users", "array-contains", currentUser.id),
-            where("status", "==", "accepted"),
-          );
-          const snap = await getDocs(q);
-          const friendIds = snap.docs.map((d) =>
-            d.data().users.find((id) => id !== currentUser.id),
-          );
-
-          if (friendIds.length === 0) {
-            if (isMounted) setFriends([]);
-            return;
-          }
-
-          const friendPromises = friendIds.map((fid) =>
-            getDoc(doc(db, "users", fid)),
-          );
-          const friendSnaps = await Promise.all(friendPromises);
-
-          const friendsData = friendSnaps
-            .filter((fSnap) => fSnap.exists())
-            .map((fSnap) => ({ id: fSnap.id, ...fSnap.data() }));
-
-          if (isMounted) setFriends(friendsData);
-        } catch (err) {
-          console.error("Failed to load friends", err);
-        }
-      }
-      loadFriends();
-
-      return () => {
-        isMounted = false;
-      };
-    }, [currentUser]);
-
-    useEffect(() => {
-      return () => {
-        if (successTimeoutRef.current) clearTimeout(successTimeoutRef.current);
-        if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
-      };
-    }, []);
-
-    const sourceEvent = useMemo(() => {
-      if (!eventId) return newEvent;
-      const exactMatch = loadedEvents.find((ev) => ev.id === eventId);
-      if (exactMatch) return exactMatch;
-
-      if (typeof eventId === "string" && eventId.includes("_")) {
-        const lastUnderscoreIndex = eventId.lastIndexOf("_");
-        const realId = eventId.substring(0, lastUnderscoreIndex);
-        const timestamp = eventId.substring(lastUnderscoreIndex + 1);
-
-        const parent = loadedEvents.find((ev) => ev.id === realId);
-        if (parent) {
-          const instanceStartMs = parseInt(timestamp, 10);
-          if (!isNaN(instanceStartMs)) {
-            const parentStart = DateTime.fromISO(
-              parent.timeRange?.start || parent.start,
-              { zone: "utc" },
-            );
-            const parentEnd = DateTime.fromISO(
-              parent.timeRange?.end || parent.end,
-              { zone: "utc" },
-            );
-            const duration = parentEnd.diff(parentStart);
-
-            const instanceStart = DateTime.fromMillis(instanceStartMs).toUTC();
-            const instanceEnd = instanceStart.plus(duration);
-
-            return {
-              ...parent,
-              id: eventId,
-              timeRange: {
-                start: instanceStart.toISO(),
-                end: instanceEnd.toISO(),
-              },
-            };
-          }
-        }
-      }
-      return newEvent;
-    }, [eventId, loadedEvents, newEvent]);
-
-    const [isFullDay, setIsFullDay] = useState(false);
-    const [isExpanded, setIsExpanded] = useState(false);
     const hasChangedTabRef = useRef(false);
-    const [eventType, setEventType] = useState(EVENT_EDITOR_TYPES[0]);
-    const [tabDirection, setTabDirection] = useState(0);
     const eventTypeRef = useRef(EVENT_EDITOR_TYPES[0]);
     const activeTabPanelRef = useRef(null);
     const resizeObserverRef = useRef(null);
-    const prevTimeRange = useRef(null);
+
+    const [friends, setFriends] = useState([]);
+    const [isFullDay, setIsFullDay] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [eventType, setEventType] = useState(EVENT_EDITOR_TYPES[0]);
+    const [tabDirection, setTabDirection] = useState(0);
     const [activeTabPanelNode, setActiveTabPanelNode] = useState(null);
     const [measuredTabHeight, setMeasuredTabHeight] = useState(null);
-
-    eventTypeRef.current = eventType;
-
+    const [validationErrors, setValidationErrors] = useState([]);
     const [loadingStatus, setLoadingStatus] = useState(EVENT_SAVE_STATUS.IDLE);
 
     const [eventData, setEventData] = useState({
       title: "",
       description: "",
-      timeRange: { start: "", end: "" },
+      timeRange: {
+        start: "",
+        end: "",
+      },
       color: DEFAULT_EVENT_COLOR,
       visibility: DEFAULT_EVENT_VISIBILITY,
       availability: DEFAULT_EVENT_AVAILABILITY,
       notification: [],
+      notificationSettings: {
+        ...DEFAULT_NOTIFICATION_SETTINGS,
+      },
       emoji: "",
-      recurrence: { ...DEFAULT_EVENT_RECURRENCE },
+      recurrence: {
+        ...DEFAULT_EVENT_RECURRENCE,
+      },
       group_id: null,
       invitedIds: [],
       invitedFriendsFull: [],
     });
 
-    const eventDataRef = useRef(eventData);
-    const isFullDayRef = useRef(isFullDay);
-    const originalEventRef = useRef(null);
-    const shadowIdRef = useRef(`shadow_${Date.now()}`);
+    eventTypeRef.current = eventType;
 
+    // Load friends
+    useEffect(() => {
+      let isMounted = true;
+
+      async function loadFriends() {
+        if (!currentUser?.id) {
+          return;
+        }
+
+        try {
+          const friendshipsQuery = query(
+            collection(db, "friendships"),
+            where("users", "array-contains", currentUser.id),
+            where("status", "==", "accepted"),
+          );
+
+          const friendshipsSnapshot = await getDocs(friendshipsQuery);
+
+          const friendIds = friendshipsSnapshot.docs
+            .map((friendshipDoc) =>
+              friendshipDoc.data().users.find((id) => id !== currentUser.id),
+            )
+            .filter(Boolean);
+
+          if (friendIds.length === 0) {
+            if (isMounted) {
+              setFriends([]);
+            }
+
+            return;
+          }
+
+          const friendSnapshots = await Promise.all(
+            friendIds.map((friendId) => getDoc(doc(db, "users", friendId))),
+          );
+
+          const friendsData = friendSnapshots
+            .filter((friendSnapshot) => friendSnapshot.exists())
+            .map((friendSnapshot) => ({
+              id: friendSnapshot.id,
+              ...friendSnapshot.data(),
+            }));
+
+          if (isMounted) {
+            setFriends(friendsData);
+          }
+        } catch (error) {
+          console.error("Failed to load friends", error);
+        }
+      }
+
+      loadFriends();
+
+      return () => {
+        isMounted = false;
+      };
+    }, [currentUser?.id]);
+
+    // Clear timers
+    useEffect(() => {
+      return () => {
+        if (successTimeoutRef.current) {
+          clearTimeout(successTimeoutRef.current);
+        }
+
+        if (errorTimeoutRef.current) {
+          clearTimeout(errorTimeoutRef.current);
+        }
+      };
+    }, []);
+
+    // Find current event
+    const sourceEvent = useMemo(() => {
+      if (!eventId) {
+        return newEvent;
+      }
+
+      const exactMatch = loadedEvents.find((event) => event.id === eventId);
+
+      if (exactMatch) {
+        return exactMatch;
+      }
+
+      if (typeof eventId !== "string" || !eventId.includes("_")) {
+        return newEvent;
+      }
+
+      const lastUnderscoreIndex = eventId.lastIndexOf("_");
+
+      const realId = eventId.substring(0, lastUnderscoreIndex);
+
+      const timestamp = eventId.substring(lastUnderscoreIndex + 1);
+
+      const parent = loadedEvents.find((event) => event.id === realId);
+
+      if (!parent) {
+        return newEvent;
+      }
+
+      const instanceStartMs = Number(timestamp);
+
+      if (!Number.isFinite(instanceStartMs)) {
+        return newEvent;
+      }
+
+      const parentStart = DateTime.fromISO(
+        parent.timeRange?.start || parent.start,
+        {
+          zone: "utc",
+        },
+      );
+
+      const parentEnd = DateTime.fromISO(parent.timeRange?.end || parent.end, {
+        zone: "utc",
+      });
+
+      const duration = parentEnd.diff(parentStart);
+
+      const instanceStart = DateTime.fromMillis(instanceStartMs).toUTC();
+
+      const instanceEnd = instanceStart.plus(duration);
+
+      return {
+        ...parent,
+        id: eventId,
+        timeRange: {
+          start: instanceStart.toISO(),
+          end: instanceEnd.toISO(),
+        },
+      };
+    }, [eventId, loadedEvents, newEvent]);
+
+    // Keep latest event data
     useEffect(() => {
       eventDataRef.current = eventData;
     }, [eventData]);
+
+    // Keep latest full-day state
     useEffect(() => {
       isFullDayRef.current = isFullDay;
     }, [isFullDay]);
 
+    // Load event into editor
     useEffect(() => {
       if (sourceEvent) {
         if (
@@ -282,11 +336,16 @@ const AddEditNewEvent = forwardRef(
             notification: normalizeNotificationSelection(
               sourceEvent.notification,
             ),
+            notificationSettings: {
+              ...DEFAULT_NOTIFICATION_SETTINGS,
+              ...(sourceEvent.notificationSettings || {}),
+            },
           };
         }
 
         const safeStart =
           sourceEvent.timeRange?.start || sourceEvent.start || "";
+
         const safeEnd = sourceEvent.timeRange?.end || sourceEvent.end || "";
 
         setEventData({
@@ -302,29 +361,47 @@ const AddEditNewEvent = forwardRef(
           notification: normalizeNotificationSelection(
             sourceEvent.notification,
           ),
+          notificationSettings: {
+            ...DEFAULT_NOTIFICATION_SETTINGS,
+            ...(sourceEvent.notificationSettings || {}),
+          },
           emoji: sourceEvent.emoji || "",
-          recurrence: sourceEvent.recurrence || { ...DEFAULT_EVENT_RECURRENCE },
-          group_id: sourceEvent.group_id,
+          recurrence: sourceEvent.recurrence || {
+            ...DEFAULT_EVENT_RECURRENCE,
+          },
+          group_id: sourceEvent.group_id ?? null,
           invitedIds: sourceEvent.invitedIds || [],
           invitedFriendsFull: sourceEvent.invitedFriendsFull || [],
         });
-        setIsFullDay(sourceEvent.isFullDay || false);
+
+        setIsFullDay(Boolean(sourceEvent.isFullDay));
+        setValidationErrors([]);
       }
 
       return () => {
         if (eventId) {
-          setLoadedEvents((prev) =>
-            prev.filter((ev) => ev.id !== shadowIdRef.current),
+          setLoadedEvents((previousEvents) =>
+            previousEvents.filter((event) => event.id !== shadowIdRef.current),
           );
         }
       };
     }, [sourceEvent, eventId, setLoadedEvents]);
 
+    // Check for unsaved changes
     const hasChanges = useMemo(() => {
-      if (!eventId) return true;
-      if (!originalEventRef.current) return false;
+      if (!eventId) {
+        return true;
+      }
 
-      const current = { ...eventData, isFullDay };
+      if (!originalEventRef.current) {
+        return false;
+      }
+
+      const current = {
+        ...eventData,
+        isFullDay,
+      };
+
       const original = originalEventRef.current;
 
       return (
@@ -340,40 +417,92 @@ const AddEditNewEvent = forwardRef(
           JSON.stringify(
             normalizeNotificationSelection(original.notification),
           ) ||
+        JSON.stringify(current.notificationSettings) !==
+          JSON.stringify({
+            ...DEFAULT_NOTIFICATION_SETTINGS,
+            ...(original.notificationSettings || {}),
+          }) ||
         current.timeRange.start !==
           (original.timeRange?.start || original.start) ||
         current.timeRange.end !== (original.timeRange?.end || original.end) ||
-        current.isFullDay !== (original.isFullDay || false) ||
+        current.isFullDay !== Boolean(original.isFullDay) ||
         JSON.stringify(current.invitedIds) !==
           JSON.stringify(original.invitedIds || []) ||
+        JSON.stringify(current.invitedFriendsFull) !==
+          JSON.stringify(original.invitedFriendsFull || []) ||
         JSON.stringify(current.recurrence) !==
-          JSON.stringify(original.recurrence || { ...DEFAULT_EVENT_RECURRENCE })
+          JSON.stringify(
+            original.recurrence || {
+              ...DEFAULT_EVENT_RECURRENCE,
+            },
+          )
       );
     }, [eventData, isFullDay, eventId]);
 
+    // Revert event changes
     const handleRevert = useCallback(() => {
-      if (originalEventRef.current) {
-        setEventData({ ...originalEventRef.current });
-        setIsFullDay(originalEventRef.current.isFullDay || false);
+      if (!originalEventRef.current) {
+        return;
       }
+
+      const original = originalEventRef.current;
+
+      setEventData({
+        title: original.title || "",
+        description: original.description || "",
+        timeRange: {
+          start: original.timeRange?.start || original.start || "",
+          end: original.timeRange?.end || original.end || "",
+        },
+        color: original.color || DEFAULT_EVENT_COLOR,
+        visibility: original.visibility || DEFAULT_EVENT_VISIBILITY,
+        availability: original.availability || DEFAULT_EVENT_AVAILABILITY,
+        notification: normalizeNotificationSelection(original.notification),
+        notificationSettings: {
+          ...DEFAULT_NOTIFICATION_SETTINGS,
+          ...(original.notificationSettings || {}),
+        },
+        emoji: original.emoji || "",
+        recurrence: original.recurrence || {
+          ...DEFAULT_EVENT_RECURRENCE,
+        },
+        group_id: original.group_id ?? null,
+        invitedIds: original.invitedIds || [],
+        invitedFriendsFull: original.invitedFriendsFull || [],
+      });
+
+      setIsFullDay(Boolean(original.isFullDay));
+      setValidationErrors([]);
+
       if (eventId) {
-        setLoadedEvents((prev) =>
-          prev.filter((ev) => ev.id !== shadowIdRef.current),
+        setLoadedEvents((previousEvents) =>
+          previousEvents.filter((event) => event.id !== shadowIdRef.current),
         );
-        const isRecurring =
-          originalEventRef.current.recurrence?.type !== RECURRENCE_TYPE.NONE;
+
+        const isRecurring = original.recurrence?.type !== RECURRENCE_TYPE.NONE;
+
         if (!isRecurring) {
-          setLoadedEvents((prev) =>
-            prev.map((ev) =>
-              ev.id === eventId ? { ...ev, ...originalEventRef.current } : ev,
+          setLoadedEvents((previousEvents) =>
+            previousEvents.map((event) =>
+              event.id === eventId
+                ? {
+                    ...event,
+                    ...original,
+                  }
+                : event,
             ),
           );
         }
-      } else {
-        setNewEvent({ ...originalEventRef.current });
-      }
-    }, [eventId, setEventData, setIsFullDay, setLoadedEvents, setNewEvent]);
 
+        return;
+      }
+
+      setNewEvent({
+        ...original,
+      });
+    }, [eventId, setLoadedEvents, setNewEvent]);
+
+    // Expose editor controls
     useImperativeHandle(
       ref,
       () => ({
@@ -388,13 +517,14 @@ const AddEditNewEvent = forwardRef(
                 message="You have unsaved changes. Are you sure you want to discard them?"
                 onYes={() => {
                   handleRevert();
+
                   closeContextPopup("unsaved-changes-popup", true);
-                  if (onClose) {
-                    onClose();
-                  }
+
+                  onClose?.();
                 }}
                 onNo={() => {
                   closeContextPopup("unsaved-changes-popup", true);
+
                   onCancel?.();
                 }}
               />
@@ -407,9 +537,7 @@ const AddEditNewEvent = forwardRef(
           );
         },
 
-        discardChanges: () => {
-          handleRevert();
-        },
+        discardChanges: handleRevert,
       }),
       [
         loadingStatus,
@@ -418,67 +546,101 @@ const AddEditNewEvent = forwardRef(
         closeContextPopup,
         handleRevert,
         onClose,
-        isMobile,
-        reopenEventSheet,
       ],
     );
 
-    const updateGlobalState = (updates, overrideIsFullDay = null) => {
-      setEventData((prevEventData) => {
-        const newData = { ...prevEventData, ...updates };
-        const activeIsFullDay =
-          overrideIsFullDay !== null ? overrideIsFullDay : isFullDayRef.current;
+    // Update editor and optimistic event state
+    const updateGlobalState = useCallback(
+      (updates, overrideIsFullDay = null) => {
+        const updatedFields = new Set(Object.keys(updates));
 
-        if (!eventId) {
-          setNewEvent((prev) =>
-            prev ? { ...prev, ...newData, isFullDay: activeIsFullDay } : prev,
-          );
-        } else {
+        setValidationErrors((previousErrors) =>
+          previousErrors.filter((error) => {
+            const rootField = error.field?.split(".")[0];
+
+            return !updatedFields.has(rootField);
+          }),
+        );
+
+        setEventData((previousEventData) => {
+          const nextEventData = {
+            ...previousEventData,
+            ...updates,
+          };
+
+          const activeIsFullDay =
+            overrideIsFullDay !== null
+              ? overrideIsFullDay
+              : isFullDayRef.current;
+
+          if (!eventId) {
+            setNewEvent((previousEvent) =>
+              previousEvent
+                ? {
+                    ...previousEvent,
+                    ...nextEventData,
+                    isFullDay: activeIsFullDay,
+                  }
+                : previousEvent,
+            );
+
+            return nextEventData;
+          }
+
           const isRecurring =
             originalEventRef.current?.recurrence?.type !== RECURRENCE_TYPE.NONE;
+
           if (!isRecurring) {
-            setLoadedEvents((prev) =>
-              prev.map((ev) =>
-                ev.id === eventId
-                  ? { ...ev, ...newData, isFullDay: activeIsFullDay }
-                  : ev,
+            setLoadedEvents((previousEvents) =>
+              previousEvents.map((event) =>
+                event.id === eventId
+                  ? {
+                      ...event,
+                      ...nextEventData,
+                      isFullDay: activeIsFullDay,
+                    }
+                  : event,
               ),
             );
-          } else {
-            setLoadedEvents((prev) => {
-              const filtered = prev.filter(
-                (ev) => ev.id !== shadowIdRef.current,
-              );
-              const shadowEvent = {
-                ...originalEventRef.current,
-                ...newData,
-                id: shadowIdRef.current,
-                isFullDay: activeIsFullDay,
-                recurrence: { type: RECURRENCE_TYPE.NONE },
-              };
-              return [...filtered, shadowEvent];
-            });
-          }
-        }
-        return newData;
-      });
-    };
 
+            return nextEventData;
+          }
+
+          setLoadedEvents((previousEvents) => {
+            const filteredEvents = previousEvents.filter(
+              (event) => event.id !== shadowIdRef.current,
+            );
+
+            const shadowEvent = {
+              ...originalEventRef.current,
+              ...nextEventData,
+              id: shadowIdRef.current,
+              isFullDay: activeIsFullDay,
+              recurrence: {
+                type: RECURRENCE_TYPE.NONE,
+              },
+            };
+
+            return [...filteredEvents, shadowEvent];
+          });
+
+          return nextEventData;
+        });
+      },
+      [eventId, setLoadedEvents, setNewEvent],
+    );
+
+    // Open editor popup
     const openEditorPopup = useCallback(
       ({
         desktopType = "contextual",
         content,
         target = null,
         position = "bottomRight",
-
-        snapPoints = [0, 1],
-        initialSnap = 1,
       }) => {
         if (isMobile) {
           openEventSubSheet({
             content,
-            snapPoints,
-            initialSnap,
           });
 
           return;
@@ -489,99 +651,215 @@ const AddEditNewEvent = forwardRef(
       [isMobile, openEventSubSheet, openPopup],
     );
 
+    // Close editor popup
     const closeEditorPopup = useCallback(() => {
       if (isMobile) {
         closeEventSubSheet();
-
         return;
       }
 
       closeContextPopup();
     }, [isMobile, closeEventSubSheet, closeContextPopup]);
 
+    // Build event payload
+    const createEventPayload = useCallback(() => {
+      const currentEvent = eventDataRef.current;
+
+      const payload = {
+        title: currentEvent.title,
+        description: currentEvent.description,
+        timeRange: currentEvent.timeRange,
+        color: currentEvent.color,
+        visibility: currentEvent.visibility,
+        availability: currentEvent.availability,
+        notification: currentEvent.notification,
+        notificationSettings: currentEvent.notificationSettings,
+        emoji: currentEvent.emoji,
+        recurrence: currentEvent.recurrence,
+        invitedIds: currentEvent.invitedIds,
+        invitedFriendsFull: currentEvent.invitedFriendsFull,
+        isFullDay: isFullDayRef.current,
+      };
+
+      if (currentEvent.group_id) {
+        payload.group_id = currentEvent.group_id;
+      }
+
+      return payload;
+    }, []);
+
+    // Validate event before saving
+    const validateEventForSave = useCallback(() => {
+      const validation = validateNewEvent(createEventPayload());
+
+      if (!validation.success) {
+        setValidationErrors(validation.errors || []);
+
+        console.error("EVENT_VALIDATION_FAILED", validation.errors);
+
+        return null;
+      }
+
+      setValidationErrors([]);
+
+      return validation.value;
+    }, [createEventPayload]);
+
+    // Save event
     async function handleSave() {
-      if (eventId && !hasChanges) return;
+      if (eventId && !hasChanges) {
+        return;
+      }
+
       if (loadingStatus !== EVENT_SAVE_STATUS.IDLE) {
         return;
       }
+
+      const validatedEvent = validateEventForSave();
+
+      if (!validatedEvent) {
+        return;
+      }
+
       if (!eventId) {
-        await executeAdd();
+        await executeAdd(validatedEvent);
         return;
       }
 
       const parentEvent = loadedEvents.find(
-        (ev) =>
-          originalEventRef.current.id === ev.id ||
-          originalEventRef.current.id.startsWith(`${ev.id}_`),
+        (event) =>
+          originalEventRef.current.id === event.id ||
+          originalEventRef.current.id.startsWith(`${event.id}_`),
       );
 
-      if (!parentEvent) return;
-
-      const isRecurring =
-        parentEvent.recurrence && parentEvent.recurrence.type !== "NONE";
-
-      if (!isRecurring) {
-        setLoadingStatus(EVENT_SAVE_STATUS.ENCRYPTING);
-        const onProgress = (s) => setLoadingStatus(s);
-
-        try {
-          setLoadedEvents((prev) =>
-            prev.map((ev) =>
-              ev.id === parentEvent.id
-                ? { ...ev, ...eventData, isFullDay }
-                : ev,
-            ),
-          );
-
-          const updatePayload = {
-            id: parentEvent.id,
-            ...eventData,
-            isFullDay,
-            timeRange: eventData.timeRange,
-          };
-
-          const result = await updateEvent(updatePayload, onProgress);
-          if (result.success) finishSuccess();
-          else throw new Error("Update failed");
-        } catch (e) {
-          handleError(e);
-          handleRevert();
-        }
+      if (!parentEvent) {
         return;
       }
 
+      const isRecurring = parentEvent.recurrence?.type !== RECURRENCE_TYPE.NONE;
+
+      if (!isRecurring) {
+        await executeUpdate(parentEvent, validatedEvent);
+
+        return;
+      }
+
+      openRecurringUpdatePopup(parentEvent, validatedEvent);
+    }
+
+    // Add event
+    async function executeAdd(validatedEvent) {
+      setLoadingStatus(EVENT_SAVE_STATUS.ENCRYPTING);
+
+      const onProgress = (status) => {
+        setLoadingStatus(status);
+      };
+
+      try {
+        const result = await addEvent(validatedEvent, onProgress);
+
+        if (!result.success) {
+          throw new Error(result.error || "Failed to create event");
+        }
+
+        const createdEvent = {
+          ...result.event,
+          ...validatedEvent,
+          timeRange: validatedEvent.timeRange,
+        };
+
+        setNewEvent(null);
+
+        safeSetLoadedEvents((previousEvents) => [
+          ...previousEvents,
+          createdEvent,
+        ]);
+
+        finishSuccess();
+      } catch (error) {
+        handleError(error);
+      }
+    }
+
+    // Update event
+    async function executeUpdate(parentEvent, validatedEvent) {
+      setLoadingStatus(EVENT_SAVE_STATUS.ENCRYPTING);
+
+      const onProgress = (status) => {
+        setLoadingStatus(status);
+      };
+
+      try {
+        setLoadedEvents((previousEvents) =>
+          previousEvents.map((event) =>
+            event.id === parentEvent.id
+              ? {
+                  ...event,
+                  ...validatedEvent,
+                }
+              : event,
+          ),
+        );
+
+        const updatePayload = {
+          id: parentEvent.id,
+          ...validatedEvent,
+        };
+
+        const result = await updateEvent(updatePayload, onProgress);
+
+        if (!result.success) {
+          throw new Error(result.error || "Failed to update event");
+        }
+
+        finishSuccess();
+      } catch (error) {
+        handleError(error);
+        handleRevert();
+      }
+    }
+
+    // Open recurring update options
+    function openRecurringUpdatePopup(parentEvent, validatedEvent) {
       const oldStart = DateTime.fromISO(
         originalEventRef.current.timeRange?.start ||
           originalEventRef.current.start,
       ).toMillis();
-      const newStart = DateTime.fromISO(eventData.timeRange.start).toMillis();
+
+      const newStart = DateTime.fromISO(
+        validatedEvent.timeRange.start,
+      ).toMillis();
+
       const oldEnd = DateTime.fromISO(
         originalEventRef.current.timeRange?.end || originalEventRef.current.end,
       ).toMillis();
-      const newEnd = DateTime.fromISO(eventData.timeRange.end).toMillis();
+
+      const newEnd = DateTime.fromISO(validatedEvent.timeRange.end).toMillis();
 
       const deltaMs = newStart - oldStart;
+
       const durationDeltaMs = newEnd - newStart - (oldEnd - oldStart);
 
-      const oldDateStr = DateTime.fromMillis(oldStart)
-        .setZone(userZone)
-        .toISODate();
-      const newDateStr = DateTime.fromMillis(newStart)
+      const oldDate = DateTime.fromMillis(oldStart)
         .setZone(userZone)
         .toISODate();
 
-      let allowedModes = [
+      const newDate = DateTime.fromMillis(newStart)
+        .setZone(userZone)
+        .toISODate();
+
+      const allowedModes = [
         RECURRENCE_UPDATE_MODE.THIS_EVENT,
         RECURRENCE_UPDATE_MODE.THIS_AND_FOLLOWING,
       ];
 
-      if (oldDateStr === newDateStr) {
+      if (oldDate === newDate) {
         allowedModes.push(RECURRENCE_UPDATE_MODE.ALL_EVENTS);
       }
 
-      const contextCurrentEvent = {
+      const currentEvent = {
         ...originalEventRef.current,
-        originalTimeRange: eventData.timeRange,
+        originalTimeRange: validatedEvent.timeRange,
       };
 
       openPopup(
@@ -591,15 +869,13 @@ const AddEditNewEvent = forwardRef(
             allowedModes={allowedModes}
             onClose={() => {
               closeContextPopup();
-              if (onClose) onClose();
+              onClose?.();
             }}
             context={{
-              parentEvent: parentEvent,
-              currentEvent: contextCurrentEvent,
+              parentEvent,
+              currentEvent,
               finalData: {
-                ...eventData,
-                isFullDay,
-                timeRange: eventData.timeRange,
+                ...validatedEvent,
                 position: null,
                 size: null,
                 columnDate: null,
@@ -614,124 +890,155 @@ const AddEditNewEvent = forwardRef(
       );
     }
 
-    async function executeAdd() {
-      setLoadingStatus(EVENT_SAVE_STATUS.ENCRYPTING);
-      const onProgress = (s) => setLoadingStatus(s);
-
-      try {
-        const payload = { ...eventData, isFullDay };
-
-        const result = await addEvent(payload, onProgress);
-
-        if (result.success) {
-          const created = {
-            ...result.event,
-            ...payload,
-            timeRange: payload.timeRange,
-          };
-          setNewEvent(null);
-          safeSetLoadedEvents((prev) => [...prev, created]);
-          finishSuccess();
-        } else {
-          throw new Error(result.error);
-        }
-      } catch (e) {
-        handleError(e);
-      }
-    }
+    // Finish successful save
     function finishSuccess() {
       setLoadingStatus(EVENT_SAVE_STATUS.SUCCESS);
+
       successTimeoutRef.current = setTimeout(() => {
-        if (onClose) onClose();
-        else closeContextPopup();
+        if (onClose) {
+          onClose();
+          return;
+        }
+
+        closeContextPopup();
       }, EVENT_SUCCESS_CLOSE_DELAY);
     }
-    function handleError(e) {
-      console.error(e);
+
+    // Handle failed save
+    function handleError(error) {
+      console.error(error);
+
       setLoadingStatus(EVENT_SAVE_STATUS.ERROR);
-      errorTimeoutRef.current = setTimeout(
-        () => setLoadingStatus(EVENT_SAVE_STATUS.IDLE),
-        EVENT_ERROR_RESET_DELAY,
-      );
+
+      errorTimeoutRef.current = setTimeout(() => {
+        setLoadingStatus(EVENT_SAVE_STATUS.IDLE);
+      }, EVENT_ERROR_RESET_DELAY);
     }
+
+    // Toggle full-day event
     const handleFullDayChange = () => {
       const newIsFullDay = !isFullDay;
+
       setIsFullDay(newIsFullDay);
 
       const currentStartLocal = DateTime.fromISO(eventData.timeRange.start, {
         zone: "utc",
       }).setZone(userZone);
+
       const currentEndLocal = DateTime.fromISO(eventData.timeRange.end, {
         zone: "utc",
       }).setZone(userZone);
 
       if (newIsFullDay) {
-        prevTimeRange.current = { ...eventData.timeRange };
+        prevTimeRange.current = {
+          ...eventData.timeRange,
+        };
 
-        let newStart = currentStartLocal.startOf("day");
+        const newStart = currentStartLocal.startOf("day");
+
         let newEnd = currentEndLocal.startOf("day");
 
         if (newEnd <= newStart) {
-          newEnd = newEnd.plus({ days: 1 });
+          newEnd = newEnd.plus({
+            days: 1,
+          });
         }
 
         updateGlobalState(
           {
             timeRange: {
-              start: newStart.toUTC().toISO({ suppressMilliseconds: true }),
-              end: newEnd.toUTC().toISO({ suppressMilliseconds: true }),
+              start: newStart.toUTC().toISO({
+                suppressMilliseconds: true,
+              }),
+              end: newEnd.toUTC().toISO({
+                suppressMilliseconds: true,
+              }),
             },
           },
           newIsFullDay,
         );
-      } else {
-        let newStart, newEnd;
 
-        if (prevTimeRange.current) {
-          const prevS = DateTime.fromISO(prevTimeRange.current.start, {
-            zone: "utc",
-          }).setZone(userZone);
-          const prevE = DateTime.fromISO(prevTimeRange.current.end, {
-            zone: "utc",
-          }).setZone(userZone);
-
-          newStart = currentStartLocal.set({
-            hour: prevS.hour,
-            minute: prevS.minute,
-            second: 0,
-            millisecond: 0,
-          });
-
-          const duration = prevE.diff(prevS);
-          newEnd = newStart.plus(duration);
-        } else {
-          const now = DateTime.now().setZone(userZone);
-
-          newStart = currentStartLocal.set({
-            hour: now.hour,
-            minute: now.minute,
-            second: 0,
-            millisecond: 0,
-          });
-
-          newEnd = newStart.plus({ hours: 1 });
-        }
-
-        updateGlobalState(
-          {
-            timeRange: {
-              start: newStart.toUTC().toISO({ suppressMilliseconds: true }),
-              end: newEnd.toUTC().toISO({ suppressMilliseconds: true }),
-            },
-          },
-          newIsFullDay,
-        );
+        return;
       }
+
+      let newStart;
+      let newEnd;
+
+      if (prevTimeRange.current) {
+        const previousStart = DateTime.fromISO(prevTimeRange.current.start, {
+          zone: "utc",
+        }).setZone(userZone);
+
+        const previousEnd = DateTime.fromISO(prevTimeRange.current.end, {
+          zone: "utc",
+        }).setZone(userZone);
+
+        newStart = currentStartLocal.set({
+          hour: previousStart.hour,
+          minute: previousStart.minute,
+          second: 0,
+          millisecond: 0,
+        });
+
+        const duration = previousEnd.diff(previousStart);
+
+        newEnd = newStart.plus(duration);
+      } else {
+        const now = DateTime.now().setZone(userZone);
+
+        newStart = currentStartLocal.set({
+          hour: now.hour,
+          minute: now.minute,
+          second: 0,
+          millisecond: 0,
+        });
+
+        newEnd = newStart.plus({
+          hours: 1,
+        });
+      }
+
+      updateGlobalState(
+        {
+          timeRange: {
+            start: newStart.toUTC().toISO({
+              suppressMilliseconds: true,
+            }),
+            end: newEnd.toUTC().toISO({
+              suppressMilliseconds: true,
+            }),
+          },
+        },
+        newIsFullDay,
+      );
     };
-    const handleDayPick = (e) => {
+
+    // Check if range is full-day
+    const isRangeFullDay = useCallback(
+      (startIso, endIso) => {
+        const startLocal = DateTime.fromISO(startIso, {
+          zone: "utc",
+        }).setZone(userZone);
+
+        const endLocal = DateTime.fromISO(endIso, {
+          zone: "utc",
+        }).setZone(userZone);
+
+        return (
+          startLocal.hour === 0 &&
+          startLocal.minute === 0 &&
+          endLocal.hour === 0 &&
+          endLocal.minute === 0 &&
+          endLocal.diff(startLocal, "hours").hours >= 24
+        );
+      },
+      [userZone],
+    );
+
+    // Pick start day
+    const handleDayPick = (event) => {
       openEditorPopup({
         desktopType: "contextual",
-
         content: (
           <PickDay
             today={eventDataRef.current.timeRange.start}
@@ -741,12 +1048,16 @@ const AddEditNewEvent = forwardRef(
 
               const currentStartLocal = DateTime.fromISO(
                 eventDataRef.current.timeRange.start,
-                { zone: "utc" },
+                {
+                  zone: "utc",
+                },
               ).setZone(userZone);
 
               const currentEndLocal = DateTime.fromISO(
                 eventDataRef.current.timeRange.end,
-                { zone: "utc" },
+                {
+                  zone: "utc",
+                },
               ).setZone(userZone);
 
               const duration = currentEndLocal.diff(currentStartLocal);
@@ -788,28 +1099,35 @@ const AddEditNewEvent = forwardRef(
             }}
           />
         ),
-
-        target: e.currentTarget,
+        target: event.currentTarget,
         position: "bottomLeft",
       });
     };
-    const handleEndDayPick = (e) => {
-      openPopup(
-        "contextual",
-        () => (
+
+    // Pick end day
+    const handleEndDayPick = (event) => {
+      openEditorPopup({
+        desktopType: "contextual",
+        content: (
           <PickDay
             today={eventDataRef.current.timeRange.end}
             minDate={eventDataRef.current.timeRange.start}
             onPick={(selectedDate) => {
               const newEndDayLocal =
                 DateTime.fromISO(selectedDate).setZone(userZone);
+
               const currentStartLocal = DateTime.fromISO(
                 eventDataRef.current.timeRange.start,
-                { zone: "utc" },
+                {
+                  zone: "utc",
+                },
               ).setZone(userZone);
+
               const currentEndLocal = DateTime.fromISO(
                 eventDataRef.current.timeRange.end,
-                { zone: "utc" },
+                {
+                  zone: "utc",
+                },
               ).setZone(userZone);
 
               let newEnd = newEndDayLocal.set({
@@ -823,17 +1141,21 @@ const AddEditNewEvent = forwardRef(
                 isFullDayRef.current &&
                 newEnd.hasSame(currentStartLocal, "day")
               ) {
-                newEnd = newEnd.plus({ days: 1 });
+                newEnd = newEnd.plus({
+                  days: 1,
+                });
               }
 
-              const newStartIso = currentStartLocal
-                .toUTC()
-                .toISO({ suppressMilliseconds: true });
-              const newEndIso = newEnd
-                .toUTC()
-                .toISO({ suppressMilliseconds: true });
+              const newStartIso = currentStartLocal.toUTC().toISO({
+                suppressMilliseconds: true,
+              });
+
+              const newEndIso = newEnd.toUTC().toISO({
+                suppressMilliseconds: true,
+              });
 
               const newIsFullDay = isRangeFullDay(newStartIso, newEndIso);
+
               setIsFullDay(newIsFullDay);
 
               updateGlobalState(
@@ -845,30 +1167,40 @@ const AddEditNewEvent = forwardRef(
                 },
                 newIsFullDay,
               );
+
+              closeEditorPopup();
             }}
           />
         ),
-        e.currentTarget,
-        "bottomLeft",
-      );
+        target: event.currentTarget,
+        position: "bottomLeft",
+      });
     };
-    const handleStartTimeClick = (e) => {
-      openPopup(
-        "contextual",
-        () => (
+
+    // Pick start time
+    const handleStartTimeClick = (event) => {
+      openEditorPopup({
+        desktopType: "contextual",
+        content: (
           <TimeListPopup
             baseDate={new Date(eventDataRef.current.timeRange.start)}
-            closePopup={closeContextPopup}
+            closePopup={closeEditorPopup}
             is12Format={!is24Format}
             onPick={(date) => {
               const currentStartLocal = DateTime.fromISO(
                 eventDataRef.current.timeRange.start,
-                { zone: "utc" },
+                {
+                  zone: "utc",
+                },
               ).setZone(userZone);
+
               const currentEndLocal = DateTime.fromISO(
                 eventDataRef.current.timeRange.end,
-                { zone: "utc" },
+                {
+                  zone: "utc",
+                },
               ).setZone(userZone);
+
               const duration = currentEndLocal.diff(currentStartLocal);
 
               const newStart = currentStartLocal.set({
@@ -877,44 +1209,55 @@ const AddEditNewEvent = forwardRef(
                 second: 0,
                 millisecond: 0,
               });
+
               const newEnd = newStart.plus(duration);
 
-              const newStartIso = newStart
-                .toUTC()
-                .toISO({ suppressMilliseconds: true });
-              const newEndIso = newEnd
-                .toUTC()
-                .toISO({ suppressMilliseconds: true });
+              const newStartIso = newStart.toUTC().toISO({
+                suppressMilliseconds: true,
+              });
+
+              const newEndIso = newEnd.toUTC().toISO({
+                suppressMilliseconds: true,
+              });
 
               const newIsFullDay = isRangeFullDay(newStartIso, newEndIso);
+
               setIsFullDay(newIsFullDay);
 
               updateGlobalState(
                 {
-                  timeRange: { start: newStartIso, end: newEndIso },
+                  timeRange: {
+                    start: newStartIso,
+                    end: newEndIso,
+                  },
                 },
                 newIsFullDay,
               );
             }}
           />
         ),
-        e.currentTarget,
-        "bottomLeft",
-      );
+        target: event.currentTarget,
+        position: "bottomLeft",
+      });
     };
-    const handleEndTimeClick = (e) => {
-      openPopup(
-        "contextual",
-        () => (
+
+    // Pick end time
+    const handleEndTimeClick = (event) => {
+      openEditorPopup({
+        desktopType: "contextual",
+        content: (
           <TimeListPopup
             baseDate={new Date(eventDataRef.current.timeRange.end)}
-            closePopup={closeContextPopup}
+            closePopup={closeEditorPopup}
             is12Format={!is24Format}
             onPick={(date) => {
               const currentStartLocal = DateTime.fromISO(
                 eventDataRef.current.timeRange.start,
-                { zone: "utc" },
+                {
+                  zone: "utc",
+                },
               ).setZone(userZone);
+
               let newEnd = DateTime.fromISO(
                 eventDataRef.current.timeRange.end,
                 {
@@ -934,51 +1277,83 @@ const AddEditNewEvent = forwardRef(
               });
 
               if (newEnd <= currentStartLocal) {
-                newEnd = newEnd.plus({ days: 1 });
+                newEnd = newEnd.plus({
+                  days: 1,
+                });
               }
 
-              const newStartIso = currentStartLocal
-                .toUTC()
-                .toISO({ suppressMilliseconds: true });
-              const newEndIso = newEnd
-                .toUTC()
-                .toISO({ suppressMilliseconds: true });
+              const newStartIso = currentStartLocal.toUTC().toISO({
+                suppressMilliseconds: true,
+              });
+
+              const newEndIso = newEnd.toUTC().toISO({
+                suppressMilliseconds: true,
+              });
 
               const newIsFullDay = isRangeFullDay(newStartIso, newEndIso);
+
               setIsFullDay(newIsFullDay);
 
               updateGlobalState(
                 {
-                  timeRange: { start: newStartIso, end: newEndIso },
+                  timeRange: {
+                    start: newStartIso,
+                    end: newEndIso,
+                  },
                 },
                 newIsFullDay,
               );
             }}
           />
         ),
-        e.currentTarget,
-        "bottomLeft",
-      );
+        target: event.currentTarget,
+        position: "bottomLeft",
+      });
     };
 
-    const handleTitleChange = (e) =>
-      updateGlobalState({ title: e.target.value });
-    const handleEmojiChange = (emoji) => updateGlobalState({ emoji });
+    // Update title
+    const handleTitleChange = (event) => {
+      updateGlobalState({
+        title: event.target.value,
+      });
+    };
+
+    // Update emoji
+    const handleEmojiChange = (emoji) => {
+      updateGlobalState({
+        emoji,
+      });
+    };
+
+    // Update color
     const handleColorChange = (color) => {
-      updateGlobalState({ color });
+      updateGlobalState({
+        color,
+      });
+
       closeEditorPopup();
     };
-    const handleRecurrenceChange = (recurrenceRule) => {
-      updateGlobalState({ recurrence: recurrenceRule });
+
+    // Update recurrence
+    const handleRecurrenceChange = (recurrence) => {
+      updateGlobalState({
+        recurrence,
+      });
+
       closeEditorPopup();
     };
-    const handleDescriptionSave = (newDescription) => {
-      updateGlobalState({ description: newDescription });
+
+    // Update description
+    const handleDescriptionSave = (description) => {
+      updateGlobalState({
+        description,
+      });
     };
-    const handleVisibilityClick = (e) => {
+
+    // Open visibility
+    const handleVisibilityClick = (event) => {
       openEditorPopup({
         desktopType: "contextual",
-
         content: (
           <VisibilityPopup
             eventData={eventData}
@@ -987,71 +1362,66 @@ const AddEditNewEvent = forwardRef(
             closeParent={closeEditorPopup}
           />
         ),
-
-        target: e.currentTarget,
+        target: event.currentTarget,
         position: "bottomRight",
       });
     };
-    const isRangeFullDay = (startIso, endIso) => {
-      const startLocal = DateTime.fromISO(startIso, { zone: "utc" }).setZone(
-        userZone,
-      );
-      const endLocal = DateTime.fromISO(endIso, { zone: "utc" }).setZone(
-        userZone,
-      );
 
-      return (
-        startLocal.hour === 0 &&
-        startLocal.minute === 0 &&
-        endLocal.hour === 0 &&
-        endLocal.minute === 0 &&
-        endLocal.diff(startLocal, "hours").hours >= 24
-      );
-    };
-
+    // Check multi-day event
     const isMultiDay = useMemo(() => {
-      if (!eventData.timeRange.start || !eventData.timeRange.end) return false;
-      const startDT = DateTime.fromISO(eventData.timeRange.start, {
+      if (!eventData.timeRange.start || !eventData.timeRange.end) {
+        return false;
+      }
+
+      const startDate = DateTime.fromISO(eventData.timeRange.start, {
         zone: "utc",
       })
         .setZone(userZone)
         .startOf("day");
-      const endDT = DateTime.fromISO(eventData.timeRange.end, { zone: "utc" })
+
+      const endDate = DateTime.fromISO(eventData.timeRange.end, {
+        zone: "utc",
+      })
         .setZone(userZone)
         .startOf("day");
-      return endDT.toMillis() > startDT.toMillis();
+
+      return endDate.toMillis() > startDate.toMillis();
     }, [eventData.timeRange, userZone]);
 
-    const startDT = DateTime.fromISO(eventData.timeRange.start, {
-      zone: "utc",
-    }).setZone(userZone);
-    const endDT = DateTime.fromISO(eventData.timeRange.end, {
+    const startDate = DateTime.fromISO(eventData.timeRange.start, {
       zone: "utc",
     }).setZone(userZone);
 
-    const dateDisplay = startDT.isValid
-      ? startDT.toFormat("cccc, MMMM d")
+    const endDate = DateTime.fromISO(eventData.timeRange.end, {
+      zone: "utc",
+    }).setZone(userZone);
+
+    const dateDisplay = startDate.isValid
+      ? startDate.toFormat("cccc, MMMM d")
       : "Pick Date";
-    const endDateDisplay = endDT.isValid
-      ? endDT.toFormat("cccc, MMMM d")
+
+    const endDateDisplay = endDate.isValid
+      ? endDate.toFormat("cccc, MMMM d")
       : "Pick Date";
-    const startTimeDisplay = startDT.isValid
+
+    const startTimeDisplay = startDate.isValid
       ? is24Format
-        ? startDT.toFormat("HH:mm")
-        : startDT.toFormat("h:mm a")
+        ? startDate.toFormat("HH:mm")
+        : startDate.toFormat("h:mm a")
       : "--:--";
-    const endTimeDisplay = endDT.isValid
+
+    const endTimeDisplay = endDate.isValid
       ? is24Format
-        ? endDT.toFormat("HH:mm")
-        : endDT.toFormat("h:mm a")
+        ? endDate.toFormat("HH:mm")
+        : endDate.toFormat("h:mm a")
       : "--:--";
 
     const shouldShowExpanded = isFullDay || isMultiDay || isExpanded;
 
-    const handleDescriptionClick = (e) => {
+    // Open description
+    const handleDescriptionClick = (event) => {
       openEditorPopup({
         desktopType: "centered",
-
         content: (
           <DescriptionPopup
             initialDescription={eventData.description}
@@ -1059,15 +1429,16 @@ const AddEditNewEvent = forwardRef(
             closePopup={closeEditorPopup}
           />
         ),
-
-        target: e.currentTarget,
+        target: event.currentTarget,
         position: "bottomLeft",
       });
     };
-    const handleRepeatClick = (e) => {
-      openPopup(
-        "contextual",
-        () => (
+
+    // Open recurrence
+    const handleRepeatClick = (event) => {
+      openEditorPopup({
+        desktopType: "contextual",
+        content: (
           <RecurrenceOptionsPopup
             startDate={eventData.timeRange.start}
             currentRecurrence={eventData.recurrence}
@@ -1075,11 +1446,13 @@ const AddEditNewEvent = forwardRef(
             openSubPopup={openPopup}
           />
         ),
-        e.currentTarget,
-        "bottomRight",
-      );
+        target: event.currentTarget,
+        position: "bottomRight",
+      });
     };
-    const handleColorClick = (e) => {
+
+    // Open color picker
+    const handleColorClick = (event) => {
       openEditorPopup({
         desktopType: "contextual",
         content: (
@@ -1088,25 +1461,25 @@ const AddEditNewEvent = forwardRef(
             handleColorChange={handleColorChange}
           />
         ),
-        target: e.currentTarget,
+        target: event.currentTarget,
         position: "bottomRight",
-        snapPoints: [0, 1],
-        initialSnap: 1,
       });
     };
-    const handleEmojiClick = (e) => {
+
+    // Open emoji picker
+    const handleEmojiClick = (event) => {
       openEditorPopup({
         desktopType: "contextual",
         content: <EmojiPopup handleEmojiChange={handleEmojiChange} />,
-        target: e.currentTarget,
+        target: event.currentTarget,
         position: "bottomRight",
       });
     };
 
-    const handleAvailabilityClick = (e) => {
+    // Open availability
+    const handleAvailabilityClick = (event) => {
       openEditorPopup({
         desktopType: "contextual",
-
         content: (
           <Availability
             eventData={eventData}
@@ -1114,15 +1487,13 @@ const AddEditNewEvent = forwardRef(
             closeParent={closeEditorPopup}
           />
         ),
-
-        target: e.currentTarget,
+        target: event.currentTarget,
         position: "bottomRight",
-
-        snapPoints: [0, 1],
-        initialSnap: 1,
       });
     };
-    const handleNotificationClick = (e) => {
+
+    // Open notifications
+    const handleNotificationClick = (event) => {
       openEditorPopup({
         desktopType: "contextual",
         content: (
@@ -1132,25 +1503,29 @@ const AddEditNewEvent = forwardRef(
             closeParent={closeEditorPopup}
           />
         ),
-        target: e.currentTarget,
+        target: event.currentTarget,
         position: "bottomRight",
-
-        snapPoints: [0, 1],
-        initialSnap: 1,
       });
     };
 
+    // Change editor tab
     const handleEventTypeChange = (nextType) => {
-      if (nextType === eventType) return;
+      if (nextType === eventType) {
+        return;
+      }
 
       const currentIndex = EVENT_EDITOR_TYPES.indexOf(eventType);
+
       const nextIndex = EVENT_EDITOR_TYPES.indexOf(nextType);
 
-      if (currentIndex === -1 || nextIndex === -1) return;
+      if (currentIndex === -1 || nextIndex === -1) {
+        return;
+      }
 
       hasChangedTabRef.current = true;
 
       setTabDirection(nextIndex > currentIndex ? 1 : -1);
+
       setEventType(nextType);
     };
 
@@ -1159,12 +1534,10 @@ const AddEditNewEvent = forwardRef(
         opacity: 0,
         x: direction > 0 ? 35 : -35,
       }),
-
       center: {
         opacity: 1,
         x: 0,
       },
-
       exit: (direction) => ({
         opacity: 0,
         x: direction > 0 ? -35 : 35,
@@ -1182,11 +1555,15 @@ const AddEditNewEvent = forwardRef(
       left: 0,
       width: "100%",
     };
+
     const TabPanelMotion = motion.div;
 
+    // Set active tab panel
     const setActiveTabPanelRef = useCallback(
       (type) => (node) => {
-        if (type !== eventTypeRef.current) return;
+        if (type !== eventTypeRef.current) {
+          return;
+        }
 
         activeTabPanelRef.current = node;
         setActiveTabPanelNode(node);
@@ -1194,10 +1571,13 @@ const AddEditNewEvent = forwardRef(
       [],
     );
 
+    // Measure active tab
     useLayoutEffect(() => {
       const node = activeTabPanelNode;
 
-      if (!node) return undefined;
+      if (!node) {
+        return undefined;
+      }
 
       const measureHeight = () => {
         const nextHeight = Math.ceil(node.getBoundingClientRect().height);
@@ -1209,7 +1589,9 @@ const AddEditNewEvent = forwardRef(
 
       measureHeight();
 
-      if (typeof ResizeObserver === "undefined") return undefined;
+      if (typeof ResizeObserver === "undefined") {
+        return undefined;
+      }
 
       resizeObserverRef.current?.disconnect();
 
@@ -1218,6 +1600,7 @@ const AddEditNewEvent = forwardRef(
       });
 
       resizeObserverRef.current = observer;
+
       observer.observe(node);
 
       return () => {
@@ -1229,6 +1612,7 @@ const AddEditNewEvent = forwardRef(
       };
     }, [activeTabPanelNode]);
 
+    // Render event form
     const renderEventForm = (panelRef) => (
       <TabPanelMotion key="Event" ref={panelRef} style={tabPanelStyle}>
         <TabPanelMotion
@@ -1244,46 +1628,52 @@ const AddEditNewEvent = forwardRef(
             <div className={styles.headder}>
               <h1>Time & Date</h1>
             </div>
+
             {!shouldShowExpanded && (
               <div className={styles.contContnet}>
                 <div className={styles.date}>
                   <CustomButton
                     onClick={handleDayPick}
-                    ClickEffect={"scale"}
-                    className={`default`}
+                    ClickEffect="scale"
+                    className="default"
                   >
                     <div className={styles.icon}>
                       <CalendarCircleIcon />
                     </div>
+
                     <p>{dateDisplay}</p>
                   </CustomButton>
                 </div>
+
                 <div className={styles.right}>
                   <div className={styles.time}>
                     <div className={styles.startTime}>
                       <CustomButton
                         onClick={handleStartTimeClick}
-                        ClickEffect={"scale"}
-                        className={`default`}
+                        ClickEffect="scale"
+                        className="default"
                       >
                         <p>{startTimeDisplay}</p>
                       </CustomButton>
                     </div>
-                    <div className={styles.line}></div>
+
+                    <div className={styles.line} />
+
                     <div className={styles.endtTime}>
                       <CustomButton
                         onClick={handleEndTimeClick}
-                        ClickEffect={"scale"}
-                        className={`default`}
+                        ClickEffect="scale"
+                        className="default"
                       >
                         <p>{endTimeDisplay}</p>
                       </CustomButton>
                     </div>
                   </div>
+
                   <div className={styles.options}>
                     <CustomButton
-                      ClickEffect={"scale"}
-                      className={`default`}
+                      ClickEffect="scale"
+                      className="default"
                       onClick={() => setIsExpanded(true)}
                     >
                       <div className={styles.icon}>
@@ -1300,25 +1690,29 @@ const AddEditNewEvent = forwardRef(
                 <div className={styles.date}>
                   <CustomButton
                     onClick={handleDayPick}
-                    ClickEffect={"scale"}
-                    className={`default`}
+                    ClickEffect="scale"
+                    className="default"
                   >
                     <div className={styles.icon}>
                       <CalendarCircleIcon />
                     </div>
+
                     <p>{dateDisplay}</p>
                   </CustomButton>
+
                   <CustomButton
                     onClick={handleEndDayPick}
-                    ClickEffect={"scale"}
-                    className={`default`}
+                    ClickEffect="scale"
+                    className="default"
                   >
                     <div className={styles.icon}>
                       <CalendarCircleEndIcon />
                     </div>
+
                     <p>{endDateDisplay}</p>
                   </CustomButton>
                 </div>
+
                 <div className={styles.more}>
                   <div className={styles.fullDay}>
                     <CheckBox
@@ -1326,25 +1720,29 @@ const AddEditNewEvent = forwardRef(
                       onChange={handleFullDayChange}
                       size={32}
                     />
+
                     <p>full-day</p>
                   </div>
+
                   {!isFullDay && (
                     <div className={styles.time}>
                       <div className={styles.startTime}>
                         <CustomButton
                           onClick={handleStartTimeClick}
-                          ClickEffect={"scale"}
-                          className={`default`}
+                          ClickEffect="scale"
+                          className="default"
                         >
                           <p>{startTimeDisplay}</p>
                         </CustomButton>
                       </div>
-                      <div className={styles.line}></div>
+
+                      <div className={styles.line} />
+
                       <div className={styles.endtTime}>
                         <CustomButton
                           onClick={handleEndTimeClick}
-                          ClickEffect={"scale"}
-                          className={`default`}
+                          ClickEffect="scale"
+                          className="default"
                         >
                           <p>{endTimeDisplay}</p>
                         </CustomButton>
@@ -1360,30 +1758,38 @@ const AddEditNewEvent = forwardRef(
             <div className={styles.headder}>
               <h1>Event details</h1>
             </div>
+
             <div className={styles.contContnet}>
               <div className={styles.color}>
                 <CustomButton
                   onClick={handleColorClick}
-                  ClickEffect={"scale"}
+                  ClickEffect="scale"
                   type="list"
-                  className={`default`}
+                  className="default"
                 >
                   <div className={styles.icon}>
-                    <span style={{ backgroundColor: eventData.color }}></span>
+                    <span
+                      style={{
+                        backgroundColor: eventData.color,
+                      }}
+                    />
                   </div>
+
                   <span>color</span>
                 </CustomButton>
               </div>
+
               <div className={styles.visibility}>
                 <CustomButton
                   onClick={handleVisibilityClick}
-                  ClickEffect={"scale"}
+                  ClickEffect="scale"
                   type="list"
-                  className={`default`}
+                  className="default"
                 >
                   <div className={styles.icon}>
                     <EyeDashedIcon />
                   </div>
+
                   <span>
                     {eventData.visibility === "visible"
                       ? "Visible for friends"
@@ -1393,33 +1799,41 @@ const AddEditNewEvent = forwardRef(
                   </span>
                 </CustomButton>
               </div>
+
               <div className={styles.availability}>
                 <CustomButton
                   onClick={handleAvailabilityClick}
-                  ClickEffect={"scale"}
+                  ClickEffect="scale"
                   type="list"
-                  className={`default`}
+                  className="default"
                 >
                   <div className={styles.icon}>
                     <AvailabilityIcon />
                   </div>
+
                   <span>
-                    {eventData.availability === "busy" ? "Busy" : "Free"}
+                    {eventData.availability === "busy"
+                      ? "Busy"
+                      : eventData.availability === "maybeBusy"
+                        ? "Maybe busy"
+                        : "Free"}
                   </span>
                 </CustomButton>
               </div>
+
               <div className={styles.notification}>
                 <CustomButton
                   onClick={handleNotificationClick}
-                  ClickEffect={"scale"}
+                  ClickEffect="scale"
                   type="list"
-                  className={`default`}
+                  className="default"
                 >
                   <div className={styles.icon}>
                     <NotificationIcon />
                   </div>
+
                   <span>
-                    {formatNotificationSelection(eventData?.notification)}
+                    {formatNotificationSelection(eventData.notification)}
                   </span>
                 </CustomButton>
               </div>
@@ -1427,24 +1841,28 @@ const AddEditNewEvent = forwardRef(
               <div className={styles.emoji}>
                 <CustomButton
                   onClick={handleEmojiClick}
-                  ClickEffect={"scale"}
+                  ClickEffect="scale"
                   type="list"
-                  className={`default`}
+                  className="default"
                 >
                   <div className={styles.icon}>{eventData.emoji || "📅"}</div>
+
                   <span>Emoji</span>
                 </CustomButton>
               </div>
+
               <div className={styles.repeat}>
                 <CustomButton
-                  ClickEffect={"scale"}
+                  ClickEffect="scale"
                   type="list"
-                  className={`default disabled`}
+                  className="default disabled"
+                  onClick={handleRepeatClick}
                 >
                   <div className={styles.icon}>
                     <RepeatIcon />
                   </div>
-                  <span>Coming soon</span>
+
+                  <span>Repeat</span>
                 </CustomButton>
               </div>
             </div>
@@ -1452,28 +1870,30 @@ const AddEditNewEvent = forwardRef(
 
           <div className={styles.description}>
             <div className={styles.contContnet}>
-              <div>
-                <CustomButton
-                  className={`${styles.descriptionButton} ${!eventData.description ? styles.placeholder : ""}`}
-                  onClick={handleDescriptionClick}
-                  ClickEffect={"scale"}
-                >
-                  <div className={styles.icon}>
-                    <ThreeLinesDashedIcon />
-                  </div>
-                  <div className={styles.left}>
-                    <p className={styles.descriptionText}>
-                      {eventData.description || "Add a description or note..."}
-                    </p>
-                  </div>
-                </CustomButton>
-              </div>
+              <CustomButton
+                className={`${styles.descriptionButton} ${
+                  !eventData.description ? styles.placeholder : ""
+                }`}
+                onClick={handleDescriptionClick}
+                ClickEffect="scale"
+              >
+                <div className={styles.icon}>
+                  <ThreeLinesDashedIcon />
+                </div>
+
+                <div className={styles.left}>
+                  <p className={styles.descriptionText}>
+                    {eventData.description || "Add a description or note..."}
+                  </p>
+                </div>
+              </CustomButton>
             </div>
           </div>
         </TabPanelMotion>
       </TabPanelMotion>
     );
 
+    // Render placeholder tab
     const renderPlaceholderForm = (name, panelRef) => (
       <TabPanelMotion key={name} ref={panelRef} style={tabPanelStyle}>
         <TabPanelMotion
@@ -1494,27 +1914,34 @@ const AddEditNewEvent = forwardRef(
     return (
       <div className={styles.addEditEvent}>
         <AnimatePresence>
-          {loadingStatus !== "idle" && (
+          {loadingStatus !== EVENT_SAVE_STATUS.IDLE && (
             <motion.div
               className={styles.overlay}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{
+                opacity: 0,
+              }}
+              animate={{
+                opacity: 1,
+              }}
+              exit={{
+                opacity: 0,
+              }}
             >
               <div className={styles.spinnerContainer}>
-                {loadingStatus === "success" ? (
+                {loadingStatus === EVENT_SAVE_STATUS.SUCCESS ? (
                   <SuccessIcon size={64} />
-                ) : loadingStatus === "error" ? (
+                ) : loadingStatus === EVENT_SAVE_STATUS.ERROR ? (
                   <ErrorIcon size={64} />
                 ) : (
-                  <Loading size={48} transparent={true} onlyIcon={true} />
+                  <Loading size={48} transparent onlyIcon />
                 )}
+
                 <p className={styles.statusText}>
-                  {loadingStatus === "encrypting"
+                  {loadingStatus === EVENT_SAVE_STATUS.ENCRYPTING
                     ? "Encrypting..."
-                    : loadingStatus === "uploading"
+                    : loadingStatus === EVENT_SAVE_STATUS.UPLOADING
                       ? "Uploading..."
-                      : loadingStatus === "success"
+                      : loadingStatus === EVENT_SAVE_STATUS.SUCCESS
                         ? "Done!"
                         : "Error!"}
                 </p>
@@ -1522,20 +1949,24 @@ const AddEditNewEvent = forwardRef(
             </motion.div>
           )}
         </AnimatePresence>
+
         {isMobile && (
           <div className={styles.eventType}>
             {EVENT_EDITOR_TYPES.map((type) => (
               <CustomButton
                 key={type}
-                className={`default ${styles.tabButton} ${eventType === type ? styles.activeTab : ""}`}
+                className={`default ${styles.tabButton} ${
+                  eventType === type ? styles.activeTab : ""
+                }`}
                 onClick={() => handleEventTypeChange(type)}
-                ClickEffect={"scale"}
+                ClickEffect="scale"
               >
                 <p className={styles.tabText}>{type}</p>
               </CustomButton>
             ))}
           </div>
         )}
+
         <div className={`${styles.content} default-scrollbar`}>
           <div className={styles.top}>
             <div className={styles.title}>
@@ -1548,14 +1979,17 @@ const AddEditNewEvent = forwardRef(
                 />
               </div>
             </div>
+
             {!isMobile && (
               <div className={styles.eventType}>
                 {EVENT_EDITOR_TYPES.map((type) => (
                   <CustomButton
                     key={type}
-                    className={`default ${styles.tabButton} ${eventType === type ? styles.activeTab : ""}`}
+                    className={`default ${styles.tabButton} ${
+                      eventType === type ? styles.activeTab : ""
+                    }`}
                     onClick={() => handleEventTypeChange(type)}
-                    ClickEffect={"scale"}
+                    ClickEffect="scale"
                   >
                     <p className={styles.tabText}>{type}</p>
                   </CustomButton>
@@ -1563,6 +1997,7 @@ const AddEditNewEvent = forwardRef(
               </div>
             )}
           </div>
+
           <motion.div
             initial={false}
             animate={{
@@ -1595,26 +2030,29 @@ const AddEditNewEvent = forwardRef(
             </AnimatePresence>
           </motion.div>
         </div>
+
         <div className={styles.bottomSubmit}>
           <div className={styles.submitContent}>
             {isMobile && (
               <>
                 <div className={styles.mobileOnly}>
                   <CustomButton
-                    ClickEffect={"scale"}
+                    ClickEffect="scale"
                     className="default"
                     type="submit"
                     onClick={() => requestCloseEventSheet()}
                   >
-                    {"Close"}
+                    Close
                   </CustomButton>
                 </div>
-                <span></span>
+
+                <span />
               </>
             )}
+
             <div className={styles.submit}>
               <CustomButton
-                ClickEffect={"scale"}
+                ClickEffect="scale"
                 className="default"
                 type="submit"
                 onClick={handleSave}
@@ -1634,383 +2072,4 @@ const AddEditNewEvent = forwardRef(
   },
 );
 
-function TimeListPopup({ baseDate, onPick, is12Format, closePopup }) {
-  const listRef = useRef(null);
-  const itemRefs = useRef([]);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
-
-  const timeSlots = useMemo(() => {
-    const slots = [];
-    const startOfDay = new Date(baseDate);
-    startOfDay.setHours(0, 0, 0, 0);
-
-    for (let i = 0; i < EVENT_TIME_SLOTS_PER_DAY; i++) {
-      const d = new Date(startOfDay);
-
-      d.setMinutes(i * EVENT_TIME_SLOT_MINUTES);
-
-      slots.push(d);
-    }
-    return slots;
-  }, [baseDate]);
-
-  useEffect(() => {
-    if (!listRef.current) return;
-
-    const currentMinutes = baseDate.getHours() * 60 + baseDate.getMinutes();
-    let closestIndex = Math.round(currentMinutes / EVENT_TIME_SLOT_MINUTES);
-
-    if (closestIndex >= EVENT_TIME_SLOTS_PER_DAY) {
-      closestIndex = 0;
-    }
-
-    setHighlightedIndex(closestIndex);
-    if (itemRefs.current[closestIndex])
-      itemRefs.current[closestIndex].scrollIntoView({
-        block: "center",
-        behavior: "auto",
-      });
-
-    listRef.current.focus();
-  }, []);
-
-  const scrollToItem = (index) => {
-    if (itemRefs.current[index])
-      itemRefs.current[index].scrollIntoView({
-        block: "center",
-        behavior: "auto",
-      });
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      const next = (highlightedIndex + 1) % timeSlots.length;
-      setHighlightedIndex(next);
-      scrollToItem(next);
-      onPick(timeSlots[next]);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      const next = (highlightedIndex - 1 + timeSlots.length) % timeSlots.length;
-      setHighlightedIndex(next);
-      scrollToItem(next);
-      onPick(timeSlots[next]);
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (highlightedIndex !== -1) {
-        onPick(timeSlots[highlightedIndex]);
-        if (closePopup) closePopup();
-      }
-    }
-  };
-
-  const handleItemClick = (date) => {
-    onPick(date);
-    if (closePopup) closePopup();
-  };
-
-  const formatTime = (date) =>
-    is12Format
-      ? date
-          .toLocaleTimeString([], {
-            hour: "numeric",
-            minute: "2-digit",
-            hour12: true,
-          })
-          .toLowerCase()
-      : date.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        });
-
-  return (
-    <div
-      className={`${styles.timeListPopup} default-scrollbar`}
-      ref={listRef}
-      tabIndex={-1}
-      onKeyDown={handleKeyDown}
-    >
-      {timeSlots.map((date, i) => (
-        <button
-          key={i}
-          ref={(el) => (itemRefs.current[i] = el)}
-          className={`${styles.timeBtn} ${
-            date.getHours() === baseDate.getHours() &&
-            date.getMinutes() === baseDate.getMinutes()
-              ? styles.selectedTime
-              : ""
-          } ${highlightedIndex === i ? styles.highlightedTime : ""}`}
-          onClick={() => handleItemClick(date)}
-          onMouseEnter={() => setHighlightedIndex(i)}
-        >
-          {formatTime(date)}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function DescriptionPopup({ initialDescription, onSave, closePopup }) {
-  const [text, setText] = useState(initialDescription || "");
-
-  const handleSave = () => {
-    onSave(text);
-    closePopup();
-  };
-
-  return (
-    <div className={styles.descriptionPopup}>
-      <textarea
-        autoFocus
-        className={styles.descriptionTextarea}
-        placeholder="Add a description or note..."
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
-
-      <div className={styles.descriptionActions}>
-        <CustomButton onClick={handleSave} className="default">
-          Save
-        </CustomButton>
-      </div>
-    </div>
-  );
-}
-
-function RecurrenceOptionsPopup({
-  startDate,
-  currentRecurrence,
-  onSave,
-  openSubPopup,
-}) {
-  const { closePopup } = usePopup();
-  const startDT = DateTime.fromISO(startDate);
-
-  const options = [
-    { type: "NONE", label: "Does not repeat" },
-    { type: "DAILY", label: "Daily", interval: 1 },
-    {
-      type: "WEEKLY",
-      label: `Weekly on ${startDT.toFormat("cccc")}`,
-      interval: 1,
-    },
-    {
-      type: "MONTHLY",
-      label: `Monthly on the ${startDT.toFormat("d")}${getOrdinal(
-        startDT.day,
-      )}`,
-      interval: 1,
-    },
-    {
-      type: "YEARLY",
-      label: `Yearly on ${startDT.toFormat("MMMM d")}`,
-      interval: 1,
-    },
-    { type: "WEEKDAY", label: "Every weekday (Mon-Fri)" },
-  ];
-
-  const handleSelect = (opt) => {
-    if (opt.type === "WEEKDAY")
-      onSave({ type: "WEEKLY", interval: 1, daysOfWeek: [1, 2, 3, 4, 5] });
-    else onSave({ type: opt.type, interval: opt.interval || 1 });
-  };
-
-  const handleCustomClick = (e) => {
-    openSubPopup(
-      "centered",
-      () => (
-        <CustomRecurrencePopup
-          startDate={startDate}
-          onSave={onSave}
-          closeParent={closePopup}
-        />
-      ),
-      e.currentTarget,
-      "bottomRight",
-    );
-  };
-
-  return (
-    <div className={`${styles.optionsPopup} ${styles.addEventPopup}`}>
-      {options.map((opt) => (
-        <CustomButton
-          key={opt.label}
-          ClickEffect={"scale"}
-          className="default"
-          onClick={() => handleSelect(opt)}
-        >
-          <p>{opt.label}</p>
-        </CustomButton>
-      ))}
-      <div
-        style={{
-          borderTop: "1px solid var(--calender-borders)",
-          margin: "4px 0",
-        }}
-      ></div>
-      <CustomButton
-        ClickEffect={"scale"}
-        className="default"
-        onClick={handleCustomClick}
-      >
-        <p>Custom...</p>
-      </CustomButton>
-    </div>
-  );
-}
-
-function CustomRecurrencePopup({ startDate, onSave, closeParent }) {
-  const { closePopup } = usePopup();
-  const [frequency, setFrequency] = useState("WEEKLY");
-  const [interval, setInterval] = useState(1);
-
-  const startDT = DateTime.fromISO(startDate);
-  const defaultDay = startDT.weekday === 7 ? 0 : startDT.weekday;
-
-  const [daysOfWeek, setDaysOfWeek] = useState([defaultDay]);
-  const [endType, setEndType] = useState("NEVER");
-  const [endDate, setEndDate] = useState(null);
-  const [count, setCount] = useState(13);
-
-  const weekDays = ["S", "M", "T", "W", "T", "F", "S"];
-
-  const toggleDay = (idx) => {
-    if (daysOfWeek.includes(idx)) {
-      if (daysOfWeek.length > 1)
-        setDaysOfWeek((prev) => prev.filter((d) => d !== idx));
-    } else setDaysOfWeek((prev) => [...prev, idx]);
-  };
-
-  const handleSave = () => {
-    const rule = {
-      type: frequency,
-      interval: parseInt(interval),
-      endOption: endType,
-    };
-    if (frequency === "WEEKLY") rule.daysOfWeek = daysOfWeek;
-    if (endType === "DATE" && endDate) rule.endDate = endDate;
-    else if (endType === "COUNT") rule.occurrenceCount = parseInt(count);
-
-    onSave(rule);
-    closePopup();
-    if (closeParent) closeParent();
-  };
-
-  return (
-    <div className={styles.customRecurrencePopup}>
-      <div className={styles.crHeader}>
-        <h2>Custom recurrence</h2>
-      </div>
-
-      <div className={styles.crRow}>
-        <label>Repeat every</label>
-        <div className={styles.crIntervalInputs}>
-          <input
-            type="number"
-            min="1"
-            value={interval}
-            onChange={(e) => setInterval(e.target.value)}
-            className={styles.crNumberInput}
-          />
-          <select
-            value={frequency}
-            onChange={(e) => setFrequency(e.target.value)}
-            className={styles.crSelect}
-          >
-            <option value="DAILY">day</option>
-            <option value="WEEKLY">week</option>
-            <option value="MONTHLY">month</option>
-            <option value="YEARLY">year</option>
-          </select>
-        </div>
-      </div>
-
-      {frequency === "WEEKLY" && (
-        <div className={styles.crRowVertical}>
-          <label>Repeat on</label>
-          <div className={styles.crWeekDays}>
-            {weekDays.map((d, i) => (
-              <button
-                key={i}
-                className={`${styles.crDayBtn} ${
-                  daysOfWeek.includes(i) ? styles.active : ""
-                }`}
-                onClick={() => toggleDay(i)}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className={styles.crRowVertical}>
-        <label>Ends</label>
-        <div className={styles.crRadioGroup}>
-          <div className={styles.crRadioRow}>
-            <input
-              type="radio"
-              checked={endType === "NEVER"}
-              onChange={() => setEndType("NEVER")}
-            />
-            <span>Never</span>
-          </div>
-
-          <div className={styles.crRadioRow}>
-            <input
-              type="radio"
-              checked={endType === "DATE"}
-              onChange={() => setEndType("DATE")}
-            />
-            <span>On</span>
-            <input
-              type="date"
-              disabled={endType !== "DATE"}
-              className={styles.crDateInput}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
-          </div>
-
-          <div className={styles.crRadioRow}>
-            <input
-              type="radio"
-              checked={endType === "COUNT"}
-              onChange={() => setEndType("COUNT")}
-            />
-            <span>After</span>
-            <input
-              type="number"
-              min="1"
-              value={count}
-              disabled={endType !== "COUNT"}
-              onChange={(e) => setCount(e.target.value)}
-              className={styles.crNumberInputSmall}
-            />
-            <span>occurrences</span>
-          </div>
-        </div>
-      </div>
-
-      <div className={styles.crActions}>
-        <CustomButton onClick={closePopup} className="default">
-          Cancel
-        </CustomButton>
-        <CustomButton
-          onClick={handleSave}
-          className="default"
-          style={{ color: "var(--main-cyan)" }}
-        >
-          Done
-        </CustomButton>
-      </div>
-    </div>
-  );
-}
-
-function getOrdinal(n) {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return s[(v - 20) % 10] || s[v] || s[0];
-}
 export default AddEditNewEvent;

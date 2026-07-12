@@ -33,6 +33,7 @@ import {
   DEFAULT_EVENT_COLOR,
   EVENT_VISIBILITY,
 } from "../constants/constants";
+import { validateNewEvent } from "../utils/validation/eventValidation";
 
 export const AuthErrorCode = Object.freeze({
   INVALID_CREDENTIALS: "AUTH_INVALID_CREDENTIALS",
@@ -1244,167 +1245,317 @@ export function AuthProvider({ children }) {
 
   async function addEvent(eventData, onProgress) {
     if (!currentUser?.id || !currentUser.userDek) {
-      return { success: false, error: "Not authenticated." };
+      return {
+        success: false,
+        error: "Not authenticated.",
+      };
     }
 
     try {
-      if (onProgress) onProgress("encrypting");
+      // validate event again
+      const validation = validateNewEvent(eventData);
 
-      if (!eventData?.timeRange?.start || !eventData?.timeRange?.end) {
+      if (!validation.success) {
+        devLog("ADD_EVENT_VALIDATION", validation.errors);
+
         return {
           success: false,
-          error: "Invalid event time range",
+          error: "Invalid event data.",
+          errors: validation.errors,
         };
       }
+
+      const validatedEvent = validation.value;
+
+      if (onProgress) {
+        onProgress("encrypting");
+      }
+
+      // create event encryption key
       const eventKey = await crypto.subtle.generateKey(
-        { name: "AES-GCM", length: 256 },
+        {
+          name: "AES-GCM",
+          length: 256,
+        },
         true,
         ["encrypt", "decrypt"],
       );
 
+      // create encrypted event data
       const eventPlaintext = {
-        title: eventData.title ?? "",
-        description: eventData.description ?? "",
-        color: eventData.color ?? DEFAULT_EVENT_COLOR,
-        emoji: eventData.emoji ?? "",
-        visibility: eventData.visibility ?? EVENT_VISIBILITY,
-        availability: eventData.availability ?? EVENT_AVAILABILITY,
-        recurrence: eventData.recurrence ?? { type: "NONE" },
-        exdate: eventData.exdate ?? [],
+        title: validatedEvent.title,
+        description: validatedEvent.description,
+        color: validatedEvent.color,
+        emoji: validatedEvent.emoji,
+
+        visibility: validatedEvent.visibility,
+        availability: validatedEvent.availability,
+
+        recurrence: validatedEvent.recurrence,
+        exdate: validatedEvent.exdate,
+
         timeRange: {
-          start: eventData.timeRange.start,
-          end: eventData.timeRange.end,
+          start: validatedEvent.timeRange.start,
+          end: validatedEvent.timeRange.end,
         },
       };
+
       const { ciphertext: encryptedEventData, iv: eventDataIv } =
         await encryptWithDEK(eventKey, eventPlaintext);
 
+      // export raw event key
       const rawEventKey = await crypto.subtle.exportKey("raw", eventKey);
 
+      // encrypt event key for owner
       const { ciphertext: encryptedEventKeyOwner, iv: eventKeyIvOwner } =
         await encryptWithDEK(currentUser.userDek, rawEventKey);
 
-      let participants = [currentUser.id];
-
-      let keys = {
+      const keys = {
         [currentUser.id]: {
           encrypted_event_key: encryptedEventKeyOwner,
           event_key_iv: eventKeyIvOwner,
         },
       };
 
+      const participants = [currentUser.id];
+
+      // determine friends who receive event access
       let targetFriends = [];
-      if (eventData.visibility === "visible") {
-        targetFriends = currentUser.userData?.sharedFriends || [];
-      } else if (
-        eventData.visibility === "specific" &&
-        eventData.invitedFriendsFull?.length > 0
-      ) {
-        targetFriends = eventData.invitedFriendsFull;
+
+      if (validatedEvent.visibility === "visible") {
+        targetFriends = currentUser.userData?.sharedFriends ?? [];
       }
 
-      for (const friend of targetFriends) {
-        try {
-          if (!friend?.id || !friend?.publicKey) continue;
+      if (validatedEvent.visibility === "specific") {
+        targetFriends = validatedEvent.invitedFriendsFull ?? [];
+      }
 
-          const friendPubKey = await crypto.subtle.importKey(
+      // remove duplicate friends and owner
+      const uniqueTargetFriends = [
+        ...new Map(
+          targetFriends
+            .filter(
+              (friend) =>
+                friend?.id && friend?.publicKey && friend.id !== currentUser.id,
+            )
+            .map((friend) => [friend.id, friend]),
+        ).values(),
+      ];
+
+      // encrypt event key for friends
+      for (const friend of uniqueTargetFriends) {
+        try {
+          const friendPublicKey = await crypto.subtle.importKey(
             "spki",
             base64ToArrayBuffer(friend.publicKey),
-            { name: "X25519" },
+            {
+              name: "X25519",
+            },
             false,
             [],
           );
 
           const ephemeralKeyPair = await crypto.subtle.generateKey(
-            { name: "X25519" },
+            {
+              name: "X25519",
+            },
             true,
             ["deriveBits"],
           );
 
           const sharedSecret = await crypto.subtle.deriveBits(
-            { name: "X25519", public: friendPubKey },
+            {
+              name: "X25519",
+              public: friendPublicKey,
+            },
             ephemeralKeyPair.privateKey,
             256,
           );
 
           const hkdfSalt = crypto.getRandomValues(new Uint8Array(16));
+
           const sharedAesKey = await deriveHKDFAesKey(sharedSecret, hkdfSalt);
 
           const sharedIv = crypto.getRandomValues(new Uint8Array(12));
-          const encryptedForFriend = await crypto.subtle.encrypt(
-            { name: "AES-GCM", iv: sharedIv },
+
+          const encryptedEventKey = await crypto.subtle.encrypt(
+            {
+              name: "AES-GCM",
+              iv: sharedIv,
+            },
             sharedAesKey,
             rawEventKey,
           );
 
-          const ephemeralPubRaw = await crypto.subtle.exportKey(
+          const ephemeralPublicKey = await crypto.subtle.exportKey(
             "spki",
             ephemeralKeyPair.publicKey,
           );
 
           keys[friend.id] = {
-            ephemeral_public_key: arrayBufferToBase64(ephemeralPubRaw),
-            encrypted_event_key: arrayBufferToBase64(encryptedForFriend),
+            ephemeral_public_key: arrayBufferToBase64(ephemeralPublicKey),
+
+            encrypted_event_key: arrayBufferToBase64(encryptedEventKey),
+
             shared_iv: arrayBufferToBase64(sharedIv),
+
             hkdf_salt: arrayBufferToBase64(hkdfSalt),
           };
 
           participants.push(friend.id);
-        } catch (err) {
+        } catch (error) {
           devLog(
-            "ADD_EVENT",
-            `Failed to share event with friend ${friend.id}`,
-            err,
+            "ADD_EVENT_FRIEND_KEY",
+            `Failed to create event key for ${friend.id}`,
+            error,
           );
+
+          return {
+            success: false,
+            error:
+              "Could not securely share the event with all selected friends.",
+          };
         }
       }
 
-      if (onProgress) onProgress("uploading");
+      // create reminder timestamps
+      const reminders = validatedEvent.reminders ?? [];
 
-      const newGroupId = eventData.group_id ?? crypto.randomUUID();
-      const createdAt = new Date().toISOString();
+      const reminderTimestamps = reminders
+        .map((reminder) => {
+          if (typeof reminder === "string") {
+            return reminder;
+          }
 
-      const eventPayload = {
-        ownerId: currentUser.id,
-        participants,
-        group_id: newGroupId,
-        created_at: createdAt,
-        visibility: eventData.visibility || "visible",
-        reminderMinutes: Array.isArray(eventData.notification)
-          ? eventData.notification
-              .map((value) => Number(value))
-              .filter((value) => Number.isFinite(value))
-          : [parseInt(eventData.notification, 10) || 0],
-        encrypted_event_data: encryptedEventData,
-        event_data_iv: eventDataIv,
-        keys,
+          if (
+            reminder &&
+            typeof reminder === "object" &&
+            typeof reminder.remindAt === "string"
+          ) {
+            return reminder.remindAt;
+          }
+
+          return null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+      const now = Date.now();
+
+      const nextReminderAt =
+        reminderTimestamps.find(
+          (timestamp) => new Date(timestamp).getTime() > now,
+        ) ?? null;
+
+      // create notification settings
+      const notificationSettings = {
+        shareTitle: validatedEvent.notificationSettings?.shareTitle === true,
+
+        notifyFriends:
+          validatedEvent.notificationSettings?.notifyFriends === true,
       };
 
-      const docRef = await addDoc(collection(db, "events"), eventPayload);
+      // create event envelope
+      const eventPayload = {
+        group_id: validatedEvent.group_id ?? crypto.randomUUID(),
+
+        visibility: validatedEvent.visibility,
+
+        participants,
+
+        keys,
+
+        encrypted_event_data: encryptedEventData,
+
+        event_data_iv: eventDataIv,
+
+        reminders: reminderTimestamps,
+
+        nextReminderAt,
+
+        notificationSettings,
+      };
+
+      // send title only when notification title sharing is enabled
+      if (notificationSettings.shareTitle) {
+        eventPayload.notificationTitle = validatedEvent.title;
+      }
+
+      // get firebase authentication token
+      const firebaseUser = auth.currentUser;
+
+      if (!firebaseUser) {
+        return {
+          success: false,
+          error: "Authentication session unavailable.",
+        };
+      }
+
+      const idToken = await firebaseUser.getIdToken();
+
+      if (onProgress) {
+        onProgress("uploading");
+      }
+      console.log(eventPayload);
+      // send encrypted event envelope to api
+      const response = await fetch("/api/events/create", {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+
+        body: JSON.stringify(eventPayload),
+      });
+
+      let responseData = null;
+
+      try {
+        responseData = await response.json();
+      } catch {
+        responseData = null;
+      }
+
+      if (!response.ok) {
+        devLog("ADD_EVENT_API", response.status, responseData);
+
+        return {
+          success: false,
+          error: responseData?.error ?? "Could not create the event.",
+        };
+      }
+
+      if (!responseData?.success || !isNonEmptyString(responseData.eventId)) {
+        return {
+          success: false,
+          error: "The server returned an invalid response.",
+        };
+      }
 
       return {
         success: true,
+
         event: {
-          ...eventData,
-          id: docRef.id,
-          group_id: newGroupId,
-          timeRange: {
-            start: eventData.timeRange.start,
-            end: eventData.timeRange.end,
-          },
-          created_at: createdAt,
+          ...validatedEvent,
+
+          id: responseData.eventId,
+
+          group_id: responseData.group_id ?? eventPayload.group_id,
+
+          created_at: responseData.created_at ?? new Date().toISOString(),
         },
       };
-    } catch (err) {
-      devLog("ADD_EVENT", err);
-      const msg =
-        err instanceof AppError
-          ? err.message
-          : "Could not create the event. Please try again.";
+    } catch (error) {
+      devLog("ADD_EVENT", error);
 
       return {
         success: false,
-        error: msg,
+
+        error:
+          error instanceof AppError
+            ? error.message
+            : "Could not create the event. Please try again.",
       };
     }
   }
