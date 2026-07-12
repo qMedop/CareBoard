@@ -245,7 +245,7 @@ body:global(.mobile) {
   .colorPickerPopup {
     padding: 8px 16px;
     container-type: inline-size;
-    max-height: 50dvh;
+    max-height: 70dvh;
   }
   .title {
     font-family: "Roboto", sans-serif;
