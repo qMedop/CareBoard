@@ -1,0 +1,116 @@
+.availabilityPopup {
+}
+
+.addEventPopup {
+}
+
+.optionsPopup {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--popup-bg-color);
+}
+
+.popupHeader {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px 16px;
+}
+
+.popupHeader .header {
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--text-light);
+  margin: 0;
+}
+
+.popupHeader .info {
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-gray);
+  margin: 0;
+}
+
+.optionsPopup button {
+  padding: 12px 12px;
+  display: flex;
+  justify-content: space-between;
+  min-width: 200px;
+  color: var(--text-light);
+}
+
+.optionsPopup button p::first-letter {
+  text-transform: uppercase;
+}
+
+.listChooser {
+  justify-content: start;
+}
+
+.item {
+  min-width: 250px;
+}
+
+.item > button {
+  width: 100% !important;
+}
+
+.item > button > div:first-child {
+  order: 1;
+}
+
+.itemLeft {
+  display: flex;
+  align-items: center;
+  justify-content: start;
+  gap: 12px;
+  flex: 1;
+}
+
+.itemLeft .icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.itemLeft .icon::after {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.busyIcon::after {
+  background-color: var(--text-gray);
+}
+
+.freeIcon::after {
+  background-color: var(--main-cyan);
+}
+
+.itemLeft p {
+  margin: 0;
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-light);
+}
+
+.confirm {
+  color: var(--text-dark) !important;
+  margin: 16px 16px;
+  width: calc(100% - 32px);
+  background-color: var(--main-cyan);
+  border-radius: 8px;
+  justify-content: center !important;
+}

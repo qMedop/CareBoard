@@ -1370,7 +1370,11 @@ export function AuthProvider({ children }) {
         group_id: newGroupId,
         created_at: createdAt,
         visibility: eventData.visibility || "visible",
-        reminderMinutes: parseInt(eventData.notification, 10) || 0,
+        reminderMinutes: Array.isArray(eventData.notification)
+          ? eventData.notification
+              .map((value) => Number(value))
+              .filter((value) => Number.isFinite(value))
+          : [parseInt(eventData.notification, 10) || 0],
         encrypted_event_data: encryptedEventData,
         event_data_iv: eventDataIv,
         keys,
@@ -1517,7 +1521,11 @@ export function AuthProvider({ children }) {
       const { ciphertext, iv } = await encryptWithDEK(eventKey, eventPlaintext);
 
       const updatePayload = {
-        reminderMinutes: parseInt(eventData.notification, 10) || 0,
+        reminderMinutes: Array.isArray(eventData.notification)
+          ? eventData.notification
+              .map((value) => Number(value))
+              .filter((value) => Number.isFinite(value))
+          : [parseInt(eventData.notification, 10) || 0],
         visibility: eventData.visibility || "visible",
         encrypted_event_data: ciphertext,
         event_data_iv: iv,

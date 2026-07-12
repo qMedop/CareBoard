@@ -235,6 +235,7 @@
   background-color: #1c253b;
   padding: 2px 8px 2px 2px;
   border-radius: 24px;
+  z-index: 1;
 }
 .addEditEvent .bottom .timeContainter .contContnet.expanded .time {
   justify-content: center;
@@ -303,21 +304,6 @@
   grid-template-rows: repeat(3, 1fr);
   gap: 8px;
   padding: 0px 8px;
-}
-
-.optionsPopup {
-  display: flex;
-  flex-direction: column;
-}
-.optionsPopup button {
-  padding: 12px 12px;
-  display: flex;
-  justify-content: space-between;
-  min-width: 200px;
-  color: var(--text-light);
-}
-.optionsPopup button p::first-letter {
-  text-transform: uppercase;
 }
 
 .timeRangePopup {
@@ -674,26 +660,6 @@
   color: var(--main-cyan);
 }
 
-.onlyShareWith {
-  padding: 10px 12px;
-  cursor: pointer;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  transition: background-color 0.2s;
-}
-
-.onlyShareWith p {
-  font-size: 14px;
-  color: var(--text-light);
-  margin: 0;
-}
-
-.onlyShareWith:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
 .avatarsRow {
   display: flex;
   align-items: center;
@@ -725,71 +691,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* Specific Friends Centered Filter Popup */
-.filterPopup {
-  background-color: var(--popup-bg-color);
-  border-radius: 20px;
-  padding: 20px;
-  width: 340px;
-  max-width: 90vw;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-}
-
-.filterHeader {
-  margin-bottom: 16px;
-}
-
-.filterHeader h3 {
-  font-family: "Google Sans Flex", sans-serif;
-  font-size: 18px;
-  font-weight: 500;
-  color: var(--text-light);
-  margin: 0;
-}
-
-.filterBody {
-  max-height: 300px;
-  overflow-y: auto;
-  margin-bottom: 20px;
-}
-
-.filterBody::-webkit-scrollbar {
-  width: 6px;
-}
-.filterBody::-webkit-scrollbar-track {
-  background: transparent;
-}
-.filterBody::-webkit-scrollbar-thumb {
-  background-color: var(--text-gray);
-  border-radius: 10px;
-}
-
-.filterFooter {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  border-top: 1px solid var(--calender-borders);
-  padding-top: 16px;
-}
-
-.filterFooter button {
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-weight: 500;
-  color: var(--text-light);
-}
-
-.filterFooter button:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.filterFooter button.primary {
-  background-color: var(--main-cyan);
-  color: var(--text-dark);
 }
 
 /* Mobile View */

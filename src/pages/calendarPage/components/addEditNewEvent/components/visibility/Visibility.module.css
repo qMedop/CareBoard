@@ -1,0 +1,189 @@
+.optionsPopup {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--popup-bg-color);
+}
+.popupHeader {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px 16px;
+}
+
+.popupHeader .header {
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--text-light);
+  margin: 0;
+}
+.popupHeader .info {
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-gray);
+  margin: 0;
+}
+.optionsPopup button {
+  padding: 12px 12px;
+  display: flex;
+  justify-content: space-between;
+  min-width: 200px;
+  color: var(--text-light);
+}
+.optionsPopup button p::first-letter {
+  text-transform: uppercase;
+}
+.listChooser {
+  justify-content: start;
+}
+.item {
+  min-width: 250px;
+}
+.item > button {
+  width: 100% !important;
+}
+.item > button > div:first-child {
+  order: 1;
+}
+.itemLeft {
+  display: flex;
+  align-items: center;
+  justify-content: start;
+  gap: 12px;
+  flex: 1;
+}
+.itemLeft .icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.itemLeft .icon :global(.svg) {
+  width: 100%;
+  height: 100%;
+}
+.itemLeft p {
+  margin: 0;
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-light);
+}
+.selectedFriends {
+  display: flex;
+  flex-direction: column;
+  justify-content: start;
+  align-items: start;
+  gap: 4px;
+  flex: 1;
+}
+.selectedFriends .info {
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-gray);
+}
+.onlyShareWith {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+  gap: 4px;
+}
+.onlyShareWith svg path {
+  stroke: var(--text-gray);
+}
+.onlyShareWith .avatarsRow {
+  height: 16px;
+  display: flex;
+}
+.onlyShareWith .avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--popup-bg-color);
+  overflow: hidden;
+}
+.onlyShareWith img {
+  width: 100%;
+  height: 100%;
+}
+.confirm {
+  color: var(--text-dark) !important;
+  margin: 16px 16px;
+  width: calc(100% - 32px);
+  background-color: var(--main-cyan);
+  color: var(--text-dark);
+  border-radius: 8px;
+  justify-content: center !important;
+}
+/* Specific Friends Centered Filter Popup */
+.filterPopup {
+  background-color: var(--popup-bg-color);
+  border-radius: 20px;
+  padding: 20px;
+  width: 340px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.filterHeader {
+  margin-bottom: 16px;
+}
+
+.filterHeader h3 {
+  font-family: "Google Sans Flex", sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-light);
+  margin: 0;
+}
+
+.filterBody {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+
+.filterBody::-webkit-scrollbar {
+  width: 6px;
+}
+.filterBody::-webkit-scrollbar-track {
+  background: transparent;
+}
+.filterBody::-webkit-scrollbar-thumb {
+  background-color: var(--text-gray);
+  border-radius: 10px;
+}
+
+.filterFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid var(--calender-borders);
+  padding-top: 16px;
+}
+
+.filterFooter button {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 500;
+  color: var(--text-light);
+}
+
+.filterFooter button:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.filterFooter button.primary {
+  background-color: var(--main-cyan);
+  color: var(--text-dark);
+}

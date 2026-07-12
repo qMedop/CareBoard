@@ -60,12 +60,9 @@ import {
   DEFAULT_EVENT_COLOR,
   DEFAULT_EVENT_VISIBILITY,
   DEFAULT_EVENT_AVAILABILITY,
-  DEFAULT_EVENT_NOTIFICATION,
   DEFAULT_EVENT_RECURRENCE,
   EVENT_VISIBILITY,
   EVENT_AVAILABILITY,
-  EVENT_AVAILABILITY_OPTIONS,
-  EVENT_NOTIFICATION_OPTIONS,
   RECURRENCE_TYPE,
   RECURRENCE_END_TYPE,
   RECURRENCE_UPDATE_MODE,
@@ -82,6 +79,30 @@ import {
 } from "../../../../constants/constants";
 import { useUserSettings } from "../../../../contexts/UserSettingsContext";
 import Colors from "./components/colors/Colors";
+import VisibilityPopup from "./components/visibility/Visibility";
+import Availability from "./components/availability/Availability";
+import Notifications from "./components/notifications/Notifications";
+
+function normalizeNotificationSelection(notification) {
+  if (Array.isArray(notification)) {
+    return notification.filter((value) => Number.isFinite(Number(value)));
+  }
+
+  if (notification === 0 || notification === "0" || notification == null) {
+    return [];
+  }
+
+  const parsed = Number(notification);
+  return Number.isFinite(parsed) ? [parsed] : [];
+}
+
+function formatNotificationSelection(notification) {
+  const normalized = normalizeNotificationSelection(notification);
+
+  if (normalized.length === 0) return "No notification";
+
+  return normalized.map((value) => formatDurationFromMinutes(value)).join(", ");
+}
 
 const AddEditNewEvent = forwardRef(
   ({ eventId: incomingEventId, onClose }, ref) => {
@@ -230,7 +251,7 @@ const AddEditNewEvent = forwardRef(
       color: DEFAULT_EVENT_COLOR,
       visibility: DEFAULT_EVENT_VISIBILITY,
       availability: DEFAULT_EVENT_AVAILABILITY,
-      notification: DEFAULT_EVENT_NOTIFICATION,
+      notification: [],
       emoji: "",
       recurrence: { ...DEFAULT_EVENT_RECURRENCE },
       group_id: null,
@@ -256,7 +277,12 @@ const AddEditNewEvent = forwardRef(
           !originalEventRef.current ||
           originalEventRef.current.id !== sourceEvent.id
         ) {
-          originalEventRef.current = structuredClone(sourceEvent);
+          originalEventRef.current = {
+            ...structuredClone(sourceEvent),
+            notification: normalizeNotificationSelection(
+              sourceEvent.notification,
+            ),
+          };
         }
 
         const safeStart =
@@ -273,7 +299,9 @@ const AddEditNewEvent = forwardRef(
           color: sourceEvent.color || DEFAULT_EVENT_COLOR,
           visibility: sourceEvent.visibility || DEFAULT_EVENT_VISIBILITY,
           availability: sourceEvent.availability || DEFAULT_EVENT_AVAILABILITY,
-          notification: sourceEvent.notification || DEFAULT_EVENT_NOTIFICATION,
+          notification: normalizeNotificationSelection(
+            sourceEvent.notification,
+          ),
           emoji: sourceEvent.emoji || "",
           recurrence: sourceEvent.recurrence || { ...DEFAULT_EVENT_RECURRENCE },
           group_id: sourceEvent.group_id,
@@ -308,8 +336,10 @@ const AddEditNewEvent = forwardRef(
           (original.visibility || DEFAULT_EVENT_VISIBILITY) ||
         current.availability !==
           (original.availability || DEFAULT_EVENT_AVAILABILITY) ||
-        current.notification !==
-          (original.notification || DEFAULT_EVENT_NOTIFICATION) ||
+        JSON.stringify(normalizeNotificationSelection(current.notification)) !==
+          JSON.stringify(
+            normalizeNotificationSelection(original.notification),
+          ) ||
         current.timeRange.start !==
           (original.timeRange?.start || original.start) ||
         current.timeRange.end !== (original.timeRange?.end || original.end) ||
@@ -938,14 +968,6 @@ const AddEditNewEvent = forwardRef(
       updateGlobalState({ color });
       closeEditorPopup();
     };
-    const handleAvailabilityChange = (availability) => {
-      updateGlobalState({ availability });
-      closeEditorPopup();
-    };
-    const handleNotificationChange = (minutes) => {
-      updateGlobalState({ notification: minutes });
-      closeEditorPopup();
-    };
     const handleRecurrenceChange = (recurrenceRule) => {
       updateGlobalState({ recurrence: recurrenceRule });
       closeEditorPopup();
@@ -953,7 +975,7 @@ const AddEditNewEvent = forwardRef(
     const handleDescriptionSave = (newDescription) => {
       updateGlobalState({ description: newDescription });
     };
-    const handleVisibiltyClick = (e) => {
+    const handleVisibilityClick = (e) => {
       openEditorPopup({
         desktopType: "contextual",
 
@@ -962,10 +984,6 @@ const AddEditNewEvent = forwardRef(
             eventData={eventData}
             updateGlobalState={updateGlobalState}
             friends={friends}
-            openCenteredPopup={openPopup}
-            closeCenteredPopup={() =>
-              closeContextPopup("specific-friends-popup", true)
-            }
             closeParent={closeEditorPopup}
           />
         ),
@@ -1090,20 +1108,11 @@ const AddEditNewEvent = forwardRef(
         desktopType: "contextual",
 
         content: (
-          <div
-            className={`${styles.availabilityPopup} ${styles.optionsPopup} ${styles.addEventPopup}`}
-          >
-            {EVENT_AVAILABILITY_OPTIONS.map((av) => (
-              <CustomButton
-                key={av}
-                ClickEffect={"scale"}
-                className={`default`}
-                onClick={() => handleAvailabilityChange(av)}
-              >
-                <p>{av}</p>
-              </CustomButton>
-            ))}
-          </div>
+          <Availability
+            eventData={eventData}
+            updateGlobalState={updateGlobalState}
+            closeParent={closeEditorPopup}
+          />
         ),
 
         target: e.currentTarget,
@@ -1117,20 +1126,11 @@ const AddEditNewEvent = forwardRef(
       openEditorPopup({
         desktopType: "contextual",
         content: (
-          <div
-            className={`${styles.notificationPopup} ${styles.optionsPopup} ${styles.addEventPopup}`}
-          >
-            {EVENT_NOTIFICATION_OPTIONS.map((notification) => (
-              <CustomButton
-                key={notification}
-                ClickEffect={"scale"}
-                className={`default`}
-                onClick={() => handleNotificationChange(notification)}
-              >
-                <p>{formatDurationFromMinutes(notification)}</p>
-              </CustomButton>
-            ))}
-          </div>
+          <Notifications
+            eventData={eventData}
+            updateGlobalState={updateGlobalState}
+            closeParent={closeEditorPopup}
+          />
         ),
         target: e.currentTarget,
         position: "bottomRight",
@@ -1376,7 +1376,7 @@ const AddEditNewEvent = forwardRef(
               </div>
               <div className={styles.visibility}>
                 <CustomButton
-                  onClick={handleVisibiltyClick}
+                  onClick={handleVisibilityClick}
                   ClickEffect={"scale"}
                   type="list"
                   className={`default`}
@@ -1403,7 +1403,9 @@ const AddEditNewEvent = forwardRef(
                   <div className={styles.icon}>
                     <AvailabilityIcon />
                   </div>
-                  <span>{eventData.availability}</span>
+                  <span>
+                    {eventData.availability === "busy" ? "Busy" : "Free"}
+                  </span>
                 </CustomButton>
               </div>
               <div className={styles.notification}>
@@ -1417,9 +1419,7 @@ const AddEditNewEvent = forwardRef(
                     <NotificationIcon />
                   </div>
                   <span>
-                    {eventData?.notification === 0
-                      ? "no notification"
-                      : formatDurationFromMinutes(eventData.notification)}
+                    {formatNotificationSelection(eventData?.notification)}
                   </span>
                 </CustomButton>
               </div>
@@ -1747,150 +1747,6 @@ function TimeListPopup({ baseDate, onPick, is12Format, closePopup }) {
           {formatTime(date)}
         </button>
       ))}
-    </div>
-  );
-}
-
-function VisibilityPopup({
-  eventData,
-  updateGlobalState,
-  friends,
-  openCenteredPopup,
-  closeCenteredPopup,
-  closeParent,
-}) {
-  const handleSelect = (val) => {
-    updateGlobalState({
-      visibility: val,
-    });
-
-    closeParent();
-  };
-
-  const handleSpecificClick = () => {
-    openCenteredPopup(
-      "centered",
-      () => (
-        <SpecificFriendsPopup
-          friends={friends}
-          eventData={eventData}
-          updateGlobalState={updateGlobalState}
-          closePopup={closeCenteredPopup}
-        />
-      ),
-      document.body,
-      "center",
-      null,
-      null,
-      "specific-friends-popup",
-    );
-  };
-
-  return (
-    <div
-      className={`${styles.visibilityPopup} ${styles.optionsPopup} ${styles.addEventPopup}`}
-    >
-      <CustomButton
-        ClickEffect="scale"
-        className={`default ${
-          eventData.visibility === "visible" ? styles.activeVis : ""
-        }`}
-        onClick={() => handleSelect("visible")}
-      >
-        <p>Visible for friends</p>
-      </CustomButton>
-
-      <CustomButton
-        ClickEffect="scale"
-        className={`default ${
-          eventData.visibility === "private" ? styles.activeVis : ""
-        }`}
-        onClick={() => handleSelect("private")}
-      >
-        <p>Private</p>
-      </CustomButton>
-
-      <div className={styles.divider} />
-
-      <div className={styles.onlyShareWith} onClick={handleSpecificClick}>
-        <p>Only share with...</p>
-
-        {eventData.invitedIds?.length > 0 && (
-          <div className={styles.avatarsRow}>
-            {eventData.invitedIds.slice(0, 3).map((id) => {
-              const friend = friends.find((item) => item.id === id);
-
-              return friend ? (
-                <img
-                  key={id}
-                  src={friend.pfpUrl || "defaultAvatar"}
-                  alt="friend"
-                />
-              ) : null;
-            })}
-
-            {eventData.invitedIds.length > 3 && (
-              <div className={styles.moreAvatars}>
-                +{eventData.invitedIds.length - 3}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SpecificFriendsPopup({
-  friends,
-  eventData,
-  updateGlobalState,
-  closePopup,
-}) {
-  const items = friends.map((f) => ({
-    id: f.id,
-    label: f.displayName,
-    icon: f.pfpUrl || "defaultAvatar",
-  }));
-  const [selected, setSelected] = useState(eventData.invitedIds || []);
-
-  const handleApply = () => {
-    const fullFriends = friends.filter((f) => selected.includes(f.id));
-    updateGlobalState({
-      visibility: "specific",
-      invitedIds: selected,
-      invitedFriendsFull: fullFriends.map((f) => ({
-        id: f.id,
-        publicKey: f.publicKey,
-      })),
-    });
-    closePopup();
-  };
-
-  return (
-    <div className={styles.filterPopup}>
-      <div className={styles.filterHeader}>
-        <h3>Only share with...</h3>
-      </div>
-      <div className={styles.filterBody}>
-        {friends.length === 0 ? (
-          <p style={{ color: "var(--text-gray)" }}>No friends found.</p>
-        ) : (
-          <CheckboxGroup
-            items={items}
-            selectedIds={selected}
-            onChange={setSelected}
-          />
-        )}
-      </div>
-      <div className={styles.filterFooter}>
-        <CustomButton onClick={closePopup} className="default">
-          Cancel
-        </CustomButton>
-        <CustomButton onClick={handleApply} className="default primary">
-          Apply
-        </CustomButton>
-      </div>
     </div>
   );
 }

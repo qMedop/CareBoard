@@ -113,7 +113,7 @@ function EventBlock({
       ) : (
         <>
           <div
-            style={{ color: getContrastColor(event?.color) }}
+            style={{ color: getContrastColor(event?.color, 0.3) }}
             className={styles.title}
           >
             <p className={styles.eventText}>

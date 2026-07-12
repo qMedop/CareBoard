@@ -1,24 +1,15 @@
 .button {
-  cursor: pointer;
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  cursor: pointer;
   transition: 0.3s;
   font-family: "Google Sans Flex", "Roboto", Arial, sans-serif;
 }
 .button .effectBgColor {
   z-index: 1;
 }
-.button.default {
-  border-radius: initial;
-  width: initial;
-  height: initial;
-  transition: initial;
-}
+
 .button.primary {
   background-color: transparent;
 }
@@ -171,11 +162,6 @@
   cursor: not-allowed !important;
 }
 @media (max-width: 700px) {
-  .button {
-    font-size: 12px;
-    height: 28px;
-    width: 28px;
-  }
   .button.lineBorder {
     font-size: 14px;
     height: 36px;

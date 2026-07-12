@@ -1,4 +1,4 @@
-export function getContrastColor(color) {
+export function getContrastColor(color, degree = 0.5) {
   let r;
   let g;
   let b;
@@ -39,5 +39,5 @@ export function getContrastColor(color) {
   const luminance =
     0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
 
-  return luminance > 0.5 ? "#000000" : "#f1f1f1";
+  return luminance > degree ? "#000000" : "#f1f1f1";
 }

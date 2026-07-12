@@ -53,3 +53,8 @@
 .listItem .description {
   margin-left: 34px;
 }
+body:global(.mobile) {
+  .listItem > button {
+    cursor: none;
+  }
+}
