@@ -2226,39 +2226,6 @@ export function AuthProvider({ children }) {
     );
   }
 
-  async function sendTestNotification() {
-    if (!currentUser) {
-      throw new Error("User is not authenticated.");
-    }
-
-    const firebaseUser = auth.currentUser;
-
-    if (!firebaseUser) {
-      throw new Error("User is not authenticated.");
-    }
-
-    const idToken = await firebaseUser.getIdToken();
-    const response = await fetch("/api/notifications/send-test", {
-      method: "POST",
-
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
-    });
-
-    const responseData = await response.json();
-
-    console.log("TEST NOTIFICATION RESPONSE:", responseData);
-
-    if (!response.ok) {
-      throw new Error(
-        responseData?.error ?? "Could not send test notification.",
-      );
-    }
-
-    return responseData;
-  }
-
   return (
     <AuthContext.Provider
       value={{
@@ -2281,7 +2248,6 @@ export function AuthProvider({ children }) {
         shareVisibleEventsWithFriend,
         revokeFriendAccess,
         AuthErrorCode,
-        sendTestNotification,
       }}
     >
       {authStatus === null || authStatus === "loading" ? <Loading /> : children}

@@ -78,7 +78,6 @@ function TopNav() {
 
   return (
     <div className={styles.topNav}>
-      <button onClick={sendTestNotification}>Send Test Notification</button>
       <div className={styles.left}>
         <div className={styles.pageTitle} onClick={handleDoubleClick}>
           {activePage === "/" && "Home"}
