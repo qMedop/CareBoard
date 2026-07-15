@@ -43,9 +43,48 @@ function RecurrenceOptionsPopup({
   ];
 
   const handleSelect = (opt) => {
-    if (opt.type === "WEEKDAY")
-      onSave({ type: "WEEKLY", interval: 1, daysOfWeek: [1, 2, 3, 4, 5] });
-    else onSave({ type: opt.type, interval: opt.interval || 1 });
+    if (opt.type === "NONE") {
+      onSave({
+        type: "NONE",
+      });
+
+      return;
+    }
+    if (opt.type === "WEEKDAY") {
+      onSave({
+        type: "WEEKLY",
+        interval: 1,
+        days: [1, 2, 3, 4, 5],
+      });
+
+      return;
+    }
+
+    if (opt.type === "MONTHLY") {
+      onSave({
+        type: "MONTHLY",
+        interval: 1,
+        monthDay: startDT.day,
+      });
+
+      return;
+    }
+
+    if (opt.type === "YEARLY") {
+      onSave({
+        type: "YEARLY",
+        interval: 1,
+        month: startDT.month,
+        monthDay: startDT.day,
+      });
+
+      return;
+    }
+
+    onSave({
+      type: opt.type,
+      interval: opt.interval || 1,
+    });
   };
 
   const handleCustomClick = (e) => {
@@ -118,11 +157,18 @@ function CustomRecurrencePopup({ startDate, onSave, closeParent }) {
     const rule = {
       type: frequency,
       interval: parseInt(interval),
-      endOption: endType,
+      endType,
     };
-    if (frequency === "WEEKLY") rule.daysOfWeek = daysOfWeek;
-    if (endType === "DATE" && endDate) rule.endDate = endDate;
-    else if (endType === "COUNT") rule.occurrenceCount = parseInt(count);
+
+    if (frequency === "WEEKLY") {
+      rule.days = daysOfWeek;
+    }
+
+    if (endType === "DATE" && endDate) {
+      rule.endDate = endDate;
+    } else if (endType === "COUNT") {
+      rule.count = parseInt(count);
+    }
 
     onSave(rule);
     closePopup();

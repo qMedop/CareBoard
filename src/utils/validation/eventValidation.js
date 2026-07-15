@@ -38,6 +38,7 @@ const COMMON_EVENT_KEYS = new Set([
   "invitedIds",
   "invitedFriendsFull",
   "isFullDay",
+  "reminders",
 ]);
 
 const NEW_EVENT_KEYS = COMMON_EVENT_KEYS;
@@ -111,6 +112,9 @@ export const EVENT_VALIDATION_ERROR = Object.freeze({
   GROUP_ID_INVALID: "GROUP_ID_INVALID",
   CREATED_AT_INVALID: "CREATED_AT_INVALID",
   ID_INVALID: "ID_INVALID",
+  REMINDERS_INVALID: "REMINDERS_INVALID",
+  REMINDERS_DUPLICATE: "REMINDERS_DUPLICATE",
+  REMINDERS_MISMATCH: "REMINDERS_MISMATCH",
 });
 
 function success(value) {
@@ -427,6 +431,86 @@ function validateNotificationSettings(notificationSettings, errors) {
     shareTitle: notificationSettings.shareTitle,
     notifyFriends: notificationSettings.notifyFriends,
   };
+}
+
+function validateReminders(value, timeRange, notification, errors) {
+  if (!Array.isArray(value)) {
+    errors.push(
+      createError(
+        EVENT_VALIDATION_ERROR.REMINDERS_INVALID,
+        "reminders",
+        "Reminders must be an array.",
+      ),
+    );
+
+    return [];
+  }
+
+  const normalizedReminders = [];
+
+  for (const reminder of value) {
+    if (typeof reminder !== "string" || !isValidDateString(reminder)) {
+      errors.push(
+        createError(
+          EVENT_VALIDATION_ERROR.REMINDERS_INVALID,
+          "reminders",
+          "Every reminder must be a valid ISO timestamp.",
+        ),
+      );
+
+      return [];
+    }
+
+    normalizedReminders.push(new Date(reminder).toISOString());
+  }
+
+  if (new Set(normalizedReminders).size !== normalizedReminders.length) {
+    errors.push(
+      createError(
+        EVENT_VALIDATION_ERROR.REMINDERS_DUPLICATE,
+        "reminders",
+        "Reminders cannot contain duplicates.",
+      ),
+    );
+
+    return [];
+  }
+
+  const sortedReminders = [...normalizedReminders].sort(
+    (a, b) => Date.parse(a) - Date.parse(b),
+  );
+
+  if (!timeRange || !Array.isArray(notification)) {
+    return sortedReminders;
+  }
+
+  const startTimestamp = Date.parse(timeRange.start);
+
+  const expectedReminders = notification
+    .map((minutesBefore) =>
+      new Date(
+        startTimestamp - minutesBefore * MILLISECONDS_PER_MINUTE,
+      ).toISOString(),
+    )
+    .sort((a, b) => Date.parse(a) - Date.parse(b));
+
+  const matchesExpectedReminders =
+    sortedReminders.length === expectedReminders.length &&
+    sortedReminders.every(
+      (reminder, index) => reminder === expectedReminders[index],
+    );
+
+  if (!matchesExpectedReminders) {
+    errors.push(
+      createError(
+        EVENT_VALIDATION_ERROR.REMINDERS_MISMATCH,
+        "reminders",
+        "Reminders do not match the event start time and notification settings.",
+      ),
+    );
+  }
+
+  return sortedReminders;
 }
 
 function validateInvitedIds(invitedIds, errors) {
@@ -897,6 +981,13 @@ function validateEvent(event, mode) {
 
   const notification = validateNotifications(event.notification, errors);
 
+  const reminders = validateReminders(
+    event.reminders,
+    timeRange,
+    notification,
+    errors,
+  );
+
   const notificationSettings = validateNotificationSettings(
     event.notificationSettings,
     errors,
@@ -932,6 +1023,7 @@ function validateEvent(event, mode) {
     visibility,
     availability,
     notification,
+    reminders,
     notificationSettings,
     emoji,
     recurrence,
@@ -976,49 +1068,4 @@ export function validateNewEvent(event) {
 
 export function validateDecryptedEvent(event) {
   return validateEvent(event, "decrypted");
-}
-
-export function createReminderTimestamps(event, now = Date.now()) {
-  const validation = validateNewEvent(event);
-
-  if (!validation.success) {
-    return {
-      success: false,
-      reminders: [],
-      nextReminderAt: null,
-      errors: validation.errors,
-    };
-  }
-
-  const normalizedEvent = validation.value;
-
-  if (normalizedEvent.notification.length === 0) {
-    return {
-      success: true,
-      reminders: [],
-      nextReminderAt: null,
-      errors: [],
-    };
-  }
-
-  const startTimestamp = Date.parse(normalizedEvent.timeRange.start);
-
-  const reminders = normalizedEvent.notification
-    .map((minutesBefore) => ({
-      minutesBefore,
-      remindAt: startTimestamp - minutesBefore * MILLISECONDS_PER_MINUTE,
-    }))
-    .filter(({ remindAt }) => remindAt > now)
-    .sort((a, b) => a.remindAt - b.remindAt)
-    .map(({ minutesBefore, remindAt }) => ({
-      minutesBefore,
-      remindAt: new Date(remindAt).toISOString(),
-    }));
-
-  return {
-    success: true,
-    reminders,
-    nextReminderAt: reminders[0]?.remindAt ?? null,
-    errors: [],
-  };
 }

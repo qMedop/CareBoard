@@ -9,31 +9,42 @@ import { formatDurationFromMinutes } from "../../../../../../utils/formatDuratio
 import styles from "./Notifications.module.css";
 
 function normalizeNotificationSelection(notification) {
-  if (Array.isArray(notification)) {
-    return notification.filter((value) => Number.isFinite(Number(value)));
-  }
-
-  if (notification === 0 || notification === "0" || notification == null) {
+  if (!Array.isArray(notification)) {
     return [];
   }
 
-  const parsed = Number(notification);
-  return Number.isFinite(parsed) ? [parsed] : [];
+  return [
+    ...new Set(
+      notification
+        .map(Number)
+        .filter((value) => Number.isFinite(value) && value >= 0),
+    ),
+  ].sort((a, b) => a - b);
 }
 
 function Notifications({ eventData, updateGlobalState, closeParent }) {
   const { isMobile } = useTime();
+
   const [selectedNotifications, setSelectedNotifications] = useState(() =>
     normalizeNotificationSelection(eventData.notification),
   );
 
   const items = EVENT_NOTIFICATION_OPTIONS.map((notification) => ({
     id: notification,
-    label: formatDurationFromMinutes(notification),
+
+    label:
+      Number(notification) === 0
+        ? "At event time"
+        : `${formatDurationFromMinutes(notification)} before`,
   }));
 
   const handleApply = () => {
-    updateGlobalState({ notification: selectedNotifications });
+    const notification = normalizeNotificationSelection(selectedNotifications);
+
+    updateGlobalState({
+      notification,
+    });
+
     closeParent();
   };
 
@@ -42,6 +53,7 @@ function Notifications({ eventData, updateGlobalState, closeParent }) {
       {isMobile && (
         <div className={styles.popupHeader}>
           <h3 className={styles.header}>Notifications</h3>
+
           <p className={styles.info}>
             Choose one or more reminders before the event starts
           </p>
@@ -60,6 +72,7 @@ function Notifications({ eventData, updateGlobalState, closeParent }) {
         <CustomButton onClick={closeParent} className="default">
           Cancel
         </CustomButton>
+
         <CustomButton onClick={handleApply} className="default primary">
           Apply
         </CustomButton>

@@ -1,8 +1,6 @@
 import admin from "firebase-admin";
 import crypto from "node:crypto";
 
-const ALLOWED_VISIBILITIES = new Set(["visible", "private", "specific"]);
-
 const MAX_PARTICIPANTS = 100;
 const MAX_REMINDERS = 20;
 
@@ -13,6 +11,24 @@ const MAX_PUBLIC_KEY_LENGTH = 1_000;
 const MAX_IV_LENGTH = 100;
 const MAX_SALT_LENGTH = 100;
 const MAX_NOTIFICATION_TITLE_LENGTH = 200;
+const MAX_RECURRENCE_INTERVAL = 1000;
+const MAX_RECURRENCE_COUNT = 1000;
+
+const RECURRENCE_TYPE = Object.freeze({
+  DAILY: "DAILY",
+  WEEKLY: "WEEKLY",
+  MONTHLY: "MONTHLY",
+  YEARLY: "YEARLY",
+});
+
+const RECURRENCE_END_TYPE = Object.freeze({
+  NEVER: "NEVER",
+  DATE: "DATE",
+  COUNT: "COUNT",
+});
+
+const RECURRENCE_TYPES = new Set(Object.values(RECURRENCE_TYPE));
+const RECURRENCE_END_TYPES = new Set(Object.values(RECURRENCE_END_TYPE));
 
 function getAdminApp() {
   if (admin.apps.length > 0) {
@@ -111,14 +127,16 @@ function getNotificationEncryptionKey() {
   return key;
 }
 
-function encryptNotificationTitle(title) {
+function encryptNotificationMetadata(value) {
   const key = getNotificationEncryptionKey();
   const iv = crypto.randomBytes(12);
 
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
 
+  const plaintext = typeof value === "string" ? value : JSON.stringify(value);
+
   const ciphertext = Buffer.concat([
-    cipher.update(title, "utf8"),
+    cipher.update(plaintext, "utf8"),
     cipher.final(),
   ]);
 
@@ -202,11 +220,15 @@ function normalizeReminders(reminders) {
     uniqueTimestamps.add(new Date(reminder).toISOString());
   }
 
+  const now = Date.now();
+
   return [...uniqueTimestamps]
     .sort((a, b) => Date.parse(a) - Date.parse(b))
     .map((remindAt) => ({
       remindAt,
-      status: "pending",
+      status: Date.parse(remindAt) > now ? "pending" : "done",
+      claimId: null,
+      claimedAt: null,
     }));
 }
 
@@ -236,12 +258,7 @@ async function getAcceptedFriendIds(userId) {
   return friendIds;
 }
 
-async function validateParticipants({
-  ownerId,
-  visibility,
-  participants,
-  keys,
-}) {
+async function validateParticipants({ ownerId, participants, keys }) {
   if (
     !Array.isArray(participants) ||
     participants.length === 0 ||
@@ -273,16 +290,6 @@ async function validateParticipants({
     return {
       valid: false,
       error: "Owner must be a participant.",
-    };
-  }
-
-  if (
-    visibility === "private" &&
-    (uniqueParticipants.length !== 1 || uniqueParticipants[0] !== ownerId)
-  ) {
-    return {
-      valid: false,
-      error: "Private events cannot have other participants.",
     };
   }
 
@@ -323,13 +330,6 @@ async function validateParticipants({
     }
   }
 
-  if (visibility === "private") {
-    return {
-      valid: true,
-      participants: uniqueParticipants,
-    };
-  }
-
   const acceptedFriendIds = await getAcceptedFriendIds(ownerId);
 
   for (const participantId of uniqueParticipants) {
@@ -350,6 +350,148 @@ async function validateParticipants({
     participants: uniqueParticipants,
   };
 }
+function validateRecurrenceEnd(recurrence, occurrenceStart) {
+  const endType = recurrence.endType ?? RECURRENCE_END_TYPE.NEVER;
+
+  if (!RECURRENCE_END_TYPES.has(endType)) {
+    return null;
+  }
+
+  if (endType === RECURRENCE_END_TYPE.NEVER) {
+    return {
+      endType,
+    };
+  }
+
+  if (endType === RECURRENCE_END_TYPE.DATE) {
+    if (!isValidIsoTimestamp(recurrence.endDate)) {
+      return null;
+    }
+
+    const endDate = new Date(recurrence.endDate).toISOString();
+
+    if (Date.parse(endDate) < Date.parse(occurrenceStart)) {
+      return null;
+    }
+
+    return {
+      endType,
+      endDate,
+    };
+  }
+
+  if (
+    !Number.isSafeInteger(recurrence.count) ||
+    recurrence.count < 1 ||
+    recurrence.count > MAX_RECURRENCE_COUNT
+  ) {
+    return null;
+  }
+
+  return {
+    endType,
+    count: recurrence.count,
+  };
+}
+
+function validateRecurrence(recurrence, occurrenceStart) {
+  if (!isPlainObject(recurrence)) {
+    return null;
+  }
+
+  const type = recurrence.type;
+
+  if (!RECURRENCE_TYPES.has(type)) {
+    return null;
+  }
+
+  if (
+    !Number.isSafeInteger(recurrence.interval) ||
+    recurrence.interval < 1 ||
+    recurrence.interval > MAX_RECURRENCE_INTERVAL
+  ) {
+    return null;
+  }
+
+  const allowedKeys = new Set([
+    "type",
+    "interval",
+    "endType",
+    "endDate",
+    "count",
+  ]);
+
+  const normalizedRecurrence = {
+    type,
+    interval: recurrence.interval,
+  };
+
+  if (type === RECURRENCE_TYPE.WEEKLY) {
+    allowedKeys.add("days");
+
+    if (
+      !Array.isArray(recurrence.days) ||
+      recurrence.days.length === 0 ||
+      recurrence.days.length > 7 ||
+      new Set(recurrence.days).size !== recurrence.days.length ||
+      !recurrence.days.every(
+        (day) => Number.isSafeInteger(day) && day >= 0 && day <= 6,
+      )
+    ) {
+      return null;
+    }
+
+    normalizedRecurrence.days = [...recurrence.days].sort((a, b) => a - b);
+  }
+
+  if (type === RECURRENCE_TYPE.MONTHLY) {
+    allowedKeys.add("monthDay");
+
+    if (
+      !Number.isSafeInteger(recurrence.monthDay) ||
+      recurrence.monthDay < 1 ||
+      recurrence.monthDay > 31
+    ) {
+      return null;
+    }
+
+    normalizedRecurrence.monthDay = recurrence.monthDay;
+  }
+
+  if (type === RECURRENCE_TYPE.YEARLY) {
+    allowedKeys.add("month");
+    allowedKeys.add("monthDay");
+
+    if (
+      !Number.isSafeInteger(recurrence.month) ||
+      recurrence.month < 1 ||
+      recurrence.month > 12 ||
+      !Number.isSafeInteger(recurrence.monthDay) ||
+      recurrence.monthDay < 1 ||
+      recurrence.monthDay > 31
+    ) {
+      return null;
+    }
+
+    normalizedRecurrence.month = recurrence.month;
+    normalizedRecurrence.monthDay = recurrence.monthDay;
+  }
+
+  if (!hasOnlyKeys(recurrence, allowedKeys)) {
+    return null;
+  }
+
+  const recurrenceEnd = validateRecurrenceEnd(recurrence, occurrenceStart);
+
+  if (!recurrenceEnd) {
+    return null;
+  }
+
+  return {
+    ...normalizedRecurrence,
+    ...recurrenceEnd,
+  };
+}
 
 function validateRequestBody(body) {
   if (
@@ -358,15 +500,15 @@ function validateRequestBody(body) {
       body,
       new Set([
         "group_id",
-        "visibility",
         "participants",
         "keys",
         "encrypted_event_data",
         "event_data_iv",
         "reminders",
-        "nextReminderAt",
         "notificationSettings",
         "notificationTitle",
+        "recurrence",
+        "occurrenceStart",
       ]),
     )
   ) {
@@ -380,13 +522,6 @@ function validateRequestBody(body) {
     return {
       valid: false,
       error: "Invalid group ID.",
-    };
-  }
-
-  if (!ALLOWED_VISIBILITIES.has(body.visibility)) {
-    return {
-      valid: false,
-      error: "Invalid visibility.",
     };
   }
 
@@ -427,6 +562,24 @@ function validateRequestBody(body) {
     return {
       valid: false,
       error: "Notification title must not be included.",
+    };
+  }
+
+  const hasRecurrence = body.recurrence !== undefined;
+  const hasOccurrenceStart = body.occurrenceStart !== undefined;
+
+  if (hasRecurrence !== hasOccurrenceStart) {
+    return {
+      valid: false,
+      error:
+        "recurrence and occurrenceStart must either both be included or both be absent.",
+    };
+  }
+
+  if (hasOccurrenceStart && !isValidIsoTimestamp(body.occurrenceStart)) {
+    return {
+      valid: false,
+      error: "Invalid occurrence start.",
     };
   }
 
@@ -478,7 +631,21 @@ export default async function handler(req, res) {
         error: bodyValidation.error,
       });
     }
+    let recurrence = null;
+    let occurrenceStart = null;
 
+    if (req.body.recurrence !== undefined) {
+      occurrenceStart = new Date(req.body.occurrenceStart).toISOString();
+
+      recurrence = validateRecurrence(req.body.recurrence, occurrenceStart);
+
+      if (!recurrence) {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid recurrence.",
+        });
+      }
+    }
     // validate reminders
     const reminders = normalizeReminders(req.body.reminders);
 
@@ -489,34 +656,13 @@ export default async function handler(req, res) {
       });
     }
 
-    const pendingReminders = reminders.filter(
-      (reminder) => reminder.status === "pending",
-    );
-
-    const calculatedNextReminderAt = pendingReminders[0]?.remindAt ?? null;
-
-    if (
-      req.body.nextReminderAt !== null &&
-      req.body.nextReminderAt !== undefined &&
-      !isValidIsoTimestamp(req.body.nextReminderAt)
-    ) {
-      return res.status(400).json({
-        success: false,
-        error: "Invalid next reminder timestamp.",
-      });
-    }
-
-    if ((req.body.nextReminderAt ?? null) !== calculatedNextReminderAt) {
-      return res.status(400).json({
-        success: false,
-        error: "nextReminderAt does not match reminders.",
-      });
-    }
+    const calculatedNextReminderAt =
+      reminders.find((reminder) => reminder.status === "pending")?.remindAt ??
+      null;
 
     // validate participants
     const participantValidation = await validateParticipants({
       ownerId,
-      visibility: req.body.visibility,
       participants: req.body.participants,
       keys: req.body.keys,
     });
@@ -532,9 +678,18 @@ export default async function handler(req, res) {
     let encryptedNotificationTitle = null;
 
     if (req.body.notificationSettings.shareTitle) {
-      encryptedNotificationTitle = encryptNotificationTitle(
+      encryptedNotificationTitle = encryptNotificationMetadata(
         req.body.notificationTitle.trim(),
       );
+    }
+
+    let recurrenceEncrypted = null;
+    let occurrenceStartEncrypted = null;
+
+    if (recurrence && occurrenceStart) {
+      recurrenceEncrypted = encryptNotificationMetadata(recurrence);
+
+      occurrenceStartEncrypted = encryptNotificationMetadata(occurrenceStart);
     }
 
     const createdAt = new Date().toISOString();
@@ -545,8 +700,6 @@ export default async function handler(req, res) {
 
       group_id: req.body.group_id,
 
-      visibility: req.body.visibility,
-
       participants: participantValidation.participants,
 
       keys: req.body.keys,
@@ -555,22 +708,24 @@ export default async function handler(req, res) {
 
       event_data_iv: req.body.event_data_iv,
 
-      reminders,
-
-      nextReminderAt: calculatedNextReminderAt,
-
       notificationSettings: {
         shareTitle: req.body.notificationSettings.shareTitle,
 
         notifyFriends: req.body.notificationSettings.notifyFriends,
+
+        titleEncrypted: encryptedNotificationTitle,
+
+        recurrenceEncrypted,
+
+        occurrenceStartEncrypted,
+
+        reminders,
+
+        nextReminderAt: calculatedNextReminderAt,
       },
 
       created_at: createdAt,
     };
-
-    if (encryptedNotificationTitle) {
-      eventDocument.notificationTitleEncrypted = encryptedNotificationTitle;
-    }
 
     const eventRef = await adminDb.collection("events").add(eventDocument);
 

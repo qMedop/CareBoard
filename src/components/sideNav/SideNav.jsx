@@ -24,7 +24,7 @@ import defaultAvatar from "../../assets/svg/user-avatar.svg";
 function SideNav() {
   const location = useLocation();
   const { currentUser } = useData();
-  const { isMobile } = useTime();
+  const { isMobile, defaultAvatarUrl } = useTime();
   const [activePage, setActivePage] = useState(location.pathname);
   const { openPopup, closePopup: closeContextPopup } = usePopup();
 
@@ -134,7 +134,7 @@ function SideNav() {
                 href={"/profile"}
                 ClickEffect={isMobile ? "scale" : false}
               >
-                <img src={currentUser.pfpUrl || defaultAvatar} alt="" />
+                <img src={defaultAvatarUrl(currentUser)} alt="" />
               </CustomButton>
             </div>
             <div className={styles.settings}>
@@ -156,6 +156,7 @@ function SideNav() {
 function MobileMenu() {
   const [activePage, setActivePage] = useState(location.pathname);
   const { currentUser } = useData();
+  const { defaultAvatarUrl } = useTime();
   return (
     <div className={styles.mobileMoreMenu}>
       <div>
@@ -209,7 +210,7 @@ function MobileMenu() {
           className={"default"}
           ClickEffect={"scale"}
         >
-          <img src={currentUser.pfpUrl || defaultAvatar} alt="" />
+          <img src={defaultAvatarUrl(currentUser)} alt="" />
           <p>Profile</p>
         </CustomButton>
       </div>

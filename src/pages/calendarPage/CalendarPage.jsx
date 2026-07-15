@@ -895,123 +895,326 @@ function CalendarPage() {
 function expandRecurringEvents(events, viewStart, viewEnd, timeZoneOffset) {
   const expanded = [];
   const userZone = getUserZone(timeZoneOffset);
+
   const rangeStart = DateTime.fromJSDate(viewStart)
     .setZone(userZone)
     .startOf("day");
+
   const rangeEnd = DateTime.fromJSDate(viewEnd).setZone(userZone).endOf("day");
 
-  if (!rangeStart.isValid || !rangeEnd.isValid) return events;
+  if (!rangeStart.isValid || !rangeEnd.isValid) {
+    return events;
+  }
 
   events.forEach((event) => {
-    if (!event.recurrence || event.recurrence.type === "NONE") {
+    const recurrence = event.recurrence;
+
+    // Normal event — no expansion needed.
+    if (!recurrence || recurrence.type === "NONE") {
       expanded.push(event);
       return;
     }
 
-    const exdateMillis = new Set(
-      (event.exdate || []).map((d) =>
-        DateTime.fromISO(d, { zone: "utc" }).toMillis(),
-      ),
-    );
-
-    const { type, daysOfWeek, endOption, endDate, occurrenceCount } =
-      event.recurrence;
-    let interval = Number(event.recurrence.interval);
-    if (isNaN(interval) || interval < 1) interval = 1;
-
     const originalStart = DateTime.fromISO(event.timeRange.start, {
       zone: "utc",
     }).setZone(userZone);
+
     const originalEnd = DateTime.fromISO(event.timeRange.end, {
       zone: "utc",
     }).setZone(userZone);
+
+    if (!originalStart.isValid || !originalEnd.isValid) {
+      expanded.push(event);
+      return;
+    }
+
     const duration = originalEnd.diff(originalStart);
 
-    let currentStart = originalStart;
-    let count = 0;
-    let recurrenceEndDateTime = null;
+    const interval =
+      Number.isSafeInteger(recurrence.interval) && recurrence.interval > 0
+        ? recurrence.interval
+        : 1;
 
-    if (endOption === "DATE" && endDate) {
-      recurrenceEndDateTime = DateTime.fromISO(endDate, {
-        zone: userZone,
-      }).endOf("day");
+    // Excluded individual occurrences.
+    const exdateMillis = new Set(
+      (event.exdate || [])
+        .map((date) =>
+          DateTime.fromISO(date, {
+            zone: "utc",
+          }).toMillis(),
+        )
+        .filter(Number.isFinite),
+    );
+
+    let recurrenceEnd = null;
+
+    if (recurrence.endType === "DATE" && recurrence.endDate) {
+      recurrenceEnd = DateTime.fromISO(recurrence.endDate, {
+        zone: "utc",
+      })
+        .setZone(userZone)
+        .endOf("day");
     }
 
-    let safetyLoop = 0;
-    const MAX_LOOPS = 2000;
+    let occurrenceCount = 0;
 
-    while (safetyLoop < MAX_LOOPS) {
-      safetyLoop++;
+    const shouldStop = (occurrenceStart) => {
+      if (occurrenceStart > rangeEnd) {
+        return true;
+      }
 
-      if (endOption === "COUNT" && count >= occurrenceCount) break;
       if (
-        endOption === "DATE" &&
-        recurrenceEndDateTime &&
-        currentStart > recurrenceEndDateTime
-      )
-        break;
-      if (currentStart > rangeEnd) break;
-
-      let isValidInstance = true;
-
-      if (type === "WEEKLY" && DAYS_OF_WEEK?.length > 0) {
-        const jsWeekday = currentStart.weekday === 7 ? 0 : currentStart.weekday;
-        if (!DAYS_OF_WEEK.includes(jsWeekday)) isValidInstance = false;
+        recurrence.endType === "DATE" &&
+        recurrenceEnd?.isValid &&
+        occurrenceStart > recurrenceEnd
+      ) {
+        return true;
       }
 
-      if (exdateMillis.has(currentStart.toMillis())) {
-        isValidInstance = false;
+      if (
+        recurrence.endType === "COUNT" &&
+        occurrenceCount >= recurrence.count
+      ) {
+        return true;
       }
 
-      if (isValidInstance) {
-        const instanceEnd = currentStart.plus(duration);
-        if (instanceEnd >= rangeStart && currentStart <= rangeEnd) {
-          expanded.push({
-            ...event,
-            id: `${event.id}_${currentStart.toMillis()}`,
-            sourceEventId: event.id,
-            timeRange: {
-              start: currentStart.toUTC().toISO(),
-              end: instanceEnd.toUTC().toISO(),
-            },
-            exdate: undefined,
-          });
-        }
+      return false;
+    };
 
-        if (
-          type !== "WEEKLY" ||
-          !DAYS_OF_WEEK ||
-          DAYS_OF_WEEK.length === 0 ||
-          DAYS_OF_WEEK.includes(
-            currentStart.weekday === 7 ? 0 : currentStart.weekday,
-          )
-        ) {
-          count++;
-        }
+    const addOccurrence = (occurrenceStart) => {
+      // Count means recurrence occurrences, including excluded occurrences.
+      occurrenceCount += 1;
+
+      const occurrenceStartUtc = occurrenceStart.toUTC();
+      const occurrenceEnd = occurrenceStart.plus(duration);
+
+      if (exdateMillis.has(occurrenceStartUtc.toMillis())) {
+        return;
       }
 
-      if (type === "DAILY")
-        currentStart = currentStart.plus({ days: interval });
-      else if (type === "WEEKLY") {
-        if (DAYS_OF_WEEK?.length > 0) {
-          do {
-            currentStart = currentStart.plus({ days: 1 });
-          } while (
-            currentStart <= rangeEnd &&
-            !DAYS_OF_WEEK.includes(
-              currentStart.weekday === 7 ? 0 : currentStart.weekday,
-            ) &&
-            currentStart.diff(originalStart, "years").years < 5
-          );
-        } else {
-          currentStart = currentStart.plus({ weeks: interval });
+      // Occurrence does not overlap the visible range.
+      if (occurrenceEnd < rangeStart || occurrenceStart > rangeEnd) {
+        return;
+      }
+
+      expanded.push({
+        ...event,
+
+        // Instance IDs stay unique while preserving the parent event ID.
+        id: `${event.id}_${occurrenceStartUtc.toMillis()}`,
+
+        recurringEventId: event.id,
+
+        timeRange: {
+          start: occurrenceStartUtc.toISO(),
+          end: occurrenceEnd.toUTC().toISO(),
+        },
+      });
+    };
+
+    /*
+     * DAILY
+     *
+     * Example:
+     * start = Monday
+     * interval = 2
+     *
+     * Monday → Wednesday → Friday → ...
+     */
+    if (recurrence.type === "DAILY") {
+      let current = originalStart;
+      let safetyLoop = 0;
+
+      while (safetyLoop < 10000) {
+        safetyLoop += 1;
+
+        if (shouldStop(current)) {
+          break;
         }
-      } else if (type === "MONTHLY")
-        currentStart = currentStart.plus({ months: interval });
-      else if (type === "YEARLY")
-        currentStart = currentStart.plus({ years: interval });
-      else break;
+
+        addOccurrence(current);
+
+        current = current.plus({
+          days: interval,
+        });
+      }
+
+      return;
     }
+
+    /*
+     * WEEKLY
+     *
+     * recurrence.days uses:
+     * 0 = Sunday
+     * 1 = Monday
+     * ...
+     * 6 = Saturday
+     *
+     * interval applies to week groups relative to the original event week.
+     */
+    if (recurrence.type === "WEEKLY") {
+      const selectedDays = new Set(recurrence.days || []);
+
+      let currentDay = originalStart.startOf("day");
+      let safetyLoop = 0;
+
+      while (safetyLoop < 10000) {
+        safetyLoop += 1;
+
+        const occurrenceStart = currentDay.set({
+          hour: originalStart.hour,
+          minute: originalStart.minute,
+          second: originalStart.second,
+          millisecond: originalStart.millisecond,
+        });
+
+        if (shouldStop(occurrenceStart)) {
+          break;
+        }
+
+        const daysSinceStart = Math.floor(
+          currentDay.startOf("day").diff(originalStart.startOf("day"), "days")
+            .days,
+        );
+
+        if (daysSinceStart >= 0) {
+          const weekIndex = Math.floor(daysSinceStart / 7);
+
+          const jsWeekday =
+            occurrenceStart.weekday === 7 ? 0 : occurrenceStart.weekday;
+
+          const isCorrectWeek = weekIndex % interval === 0;
+          const isSelectedDay = selectedDays.has(jsWeekday);
+
+          // Never generate an occurrence before the original event.
+          if (
+            isCorrectWeek &&
+            isSelectedDay &&
+            occurrenceStart >= originalStart
+          ) {
+            addOccurrence(occurrenceStart);
+          }
+        }
+
+        currentDay = currentDay.plus({
+          days: 1,
+        });
+      }
+
+      return;
+    }
+
+    /*
+     * MONTHLY
+     *
+     * Example:
+     * monthDay = 15
+     * interval = 2
+     *
+     * Jan 15 → Mar 15 → May 15 → ...
+     *
+     * Invalid dates such as February 31 are skipped.
+     */
+    if (recurrence.type === "MONTHLY") {
+      let currentMonth = originalStart.startOf("month");
+      let safetyLoop = 0;
+
+      while (safetyLoop < 10000) {
+        safetyLoop += 1;
+
+        const candidate = currentMonth.set({
+          day: recurrence.monthDay,
+          hour: originalStart.hour,
+          minute: originalStart.minute,
+          second: originalStart.second,
+          millisecond: originalStart.millisecond,
+        });
+
+        // Luxon may roll invalid dates into another month,
+        // so verify that the requested day survived.
+        const isValidMonthDay =
+          candidate.isValid &&
+          candidate.month === currentMonth.month &&
+          candidate.year === currentMonth.year &&
+          candidate.day === recurrence.monthDay;
+
+        if (isValidMonthDay) {
+          if (shouldStop(candidate)) {
+            break;
+          }
+
+          if (candidate >= originalStart) {
+            addOccurrence(candidate);
+          }
+        } else if (currentMonth > rangeEnd) {
+          break;
+        }
+
+        currentMonth = currentMonth.plus({
+          months: interval,
+        });
+      }
+
+      return;
+    }
+
+    /*
+     * YEARLY
+     *
+     * Example:
+     * month = 7
+     * monthDay = 15
+     *
+     * July 15 every `interval` years.
+     *
+     * Invalid dates such as February 29 in non-leap years are skipped.
+     */
+    if (recurrence.type === "YEARLY") {
+      let currentYear = originalStart.startOf("year");
+      let safetyLoop = 0;
+
+      while (safetyLoop < 10000) {
+        safetyLoop += 1;
+
+        const candidate = currentYear.set({
+          month: recurrence.month,
+          day: recurrence.monthDay,
+          hour: originalStart.hour,
+          minute: originalStart.minute,
+          second: originalStart.second,
+          millisecond: originalStart.millisecond,
+        });
+
+        const isValidDate =
+          candidate.isValid &&
+          candidate.year === currentYear.year &&
+          candidate.month === recurrence.month &&
+          candidate.day === recurrence.monthDay;
+
+        if (isValidDate) {
+          if (shouldStop(candidate)) {
+            break;
+          }
+
+          if (candidate >= originalStart) {
+            addOccurrence(candidate);
+          }
+        } else if (currentYear > rangeEnd) {
+          break;
+        }
+
+        currentYear = currentYear.plus({
+          years: interval,
+        });
+      }
+
+      return;
+    }
+
+    // Unknown recurrence type:
+    // preserve the original event rather than silently losing it.
+    expanded.push(event);
   });
 
   return expanded;

@@ -96,7 +96,26 @@ function normalizeNotificationSelection(notification) {
 
   return Number.isFinite(parsed) ? [parsed] : [];
 }
+function createReminderTimestamps(eventStart, notification) {
+  const start = DateTime.fromISO(eventStart, {
+    zone: "utc",
+  });
 
+  if (!start.isValid) {
+    return [];
+  }
+
+  return normalizeNotificationSelection(notification)
+    .map((minutesBefore) =>
+      start
+        .minus({
+          minutes: minutesBefore,
+        })
+        .toUTC()
+        .toISO(),
+    )
+    .sort((a, b) => Date.parse(a) - Date.parse(b));
+}
 function formatNotificationSelection(notification) {
   const normalized = normalizeNotificationSelection(notification);
 
@@ -168,6 +187,7 @@ const AddEditNewEvent = forwardRef(
       visibility: DEFAULT_EVENT_VISIBILITY,
       availability: DEFAULT_EVENT_AVAILABILITY,
       notification: [],
+      reminders: [],
       notificationSettings: {
         ...DEFAULT_NOTIFICATION_SETTINGS,
       },
@@ -324,6 +344,7 @@ const AddEditNewEvent = forwardRef(
       isFullDayRef.current = isFullDay;
     }, [isFullDay]);
 
+    const safeStart = sourceEvent?.timeRange?.start || sourceEvent?.start || "";
     // Load event into editor
     useEffect(() => {
       if (sourceEvent) {
@@ -336,6 +357,10 @@ const AddEditNewEvent = forwardRef(
             notification: normalizeNotificationSelection(
               sourceEvent.notification,
             ),
+            reminders: createReminderTimestamps(
+              safeStart,
+              sourceEvent.notification,
+            ),
             notificationSettings: {
               ...DEFAULT_NOTIFICATION_SETTINGS,
               ...(sourceEvent.notificationSettings || {}),
@@ -343,32 +368,41 @@ const AddEditNewEvent = forwardRef(
           };
         }
 
-        const safeStart =
-          sourceEvent.timeRange?.start || sourceEvent.start || "";
-
         const safeEnd = sourceEvent.timeRange?.end || sourceEvent.end || "";
 
         setEventData({
           title: sourceEvent.title || "",
           description: sourceEvent.description || "",
+
           timeRange: {
             start: safeStart,
             end: safeEnd,
           },
+
           color: sourceEvent.color || DEFAULT_EVENT_COLOR,
           visibility: sourceEvent.visibility || DEFAULT_EVENT_VISIBILITY,
           availability: sourceEvent.availability || DEFAULT_EVENT_AVAILABILITY,
+
           notification: normalizeNotificationSelection(
             sourceEvent.notification,
           ),
+
+          reminders: createReminderTimestamps(
+            safeStart,
+            sourceEvent.notification,
+          ),
+
           notificationSettings: {
             ...DEFAULT_NOTIFICATION_SETTINGS,
             ...(sourceEvent.notificationSettings || {}),
           },
+
           emoji: sourceEvent.emoji || "",
+
           recurrence: sourceEvent.recurrence || {
             ...DEFAULT_EVENT_RECURRENCE,
           },
+
           group_id: sourceEvent.group_id ?? null,
           invitedIds: sourceEvent.invitedIds || [],
           invitedFriendsFull: sourceEvent.invitedFriendsFull || [],
@@ -458,6 +492,10 @@ const AddEditNewEvent = forwardRef(
         visibility: original.visibility || DEFAULT_EVENT_VISIBILITY,
         availability: original.availability || DEFAULT_EVENT_AVAILABILITY,
         notification: normalizeNotificationSelection(original.notification),
+        reminders: createReminderTimestamps(
+          original.timeRange?.start || original.start,
+          original.notification,
+        ),
         notificationSettings: {
           ...DEFAULT_NOTIFICATION_SETTINGS,
           ...(original.notificationSettings || {}),
@@ -568,6 +606,17 @@ const AddEditNewEvent = forwardRef(
             ...updates,
           };
 
+          // recalculate public reminder timestamps
+          if (
+            Object.hasOwn(updates, "notification") ||
+            Object.hasOwn(updates, "timeRange")
+          ) {
+            nextEventData.reminders = createReminderTimestamps(
+              nextEventData.timeRange.start,
+              nextEventData.notification,
+            );
+          }
+
           const activeIsFullDay =
             overrideIsFullDay !== null
               ? overrideIsFullDay
@@ -672,12 +721,17 @@ const AddEditNewEvent = forwardRef(
         color: currentEvent.color,
         visibility: currentEvent.visibility,
         availability: currentEvent.availability,
+
         notification: currentEvent.notification,
+        reminders: currentEvent.reminders,
+
         notificationSettings: currentEvent.notificationSettings,
+
         emoji: currentEvent.emoji,
         recurrence: currentEvent.recurrence,
         invitedIds: currentEvent.invitedIds,
         invitedFriendsFull: currentEvent.invitedFriendsFull,
+
         isFullDay: isFullDayRef.current,
       };
 
@@ -690,6 +744,7 @@ const AddEditNewEvent = forwardRef(
 
     // Validate event before saving
     const validateEventForSave = useCallback(() => {
+      console.log(createEventPayload());
       const validation = validateNewEvent(createEventPayload());
 
       if (!validation.success) {

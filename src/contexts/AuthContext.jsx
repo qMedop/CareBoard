@@ -27,7 +27,7 @@ import {
   onSnapshot,
   runTransaction,
 } from "firebase/firestore";
-import { auth, db } from "../../firebase";
+import { db, auth } from "../../firebase";
 import {
   EVENT_AVAILABILITY,
   DEFAULT_EVENT_COLOR,
@@ -1114,6 +1114,16 @@ export function AuthProvider({ children }) {
         publicPayload.username_lower = newUsernameLower;
       }
 
+      if (isNonEmptyString(formData.gender)) {
+        if (
+          formData.gender === "male" ||
+          formData.gender === "female" ||
+          formData.gender === "others"
+        ) {
+          publicPayload.gender = formData.gender;
+        }
+      }
+
       if (isNonEmptyString(formData.displayName)) {
         publicPayload.displayName = formData.displayName;
       }
@@ -1291,6 +1301,8 @@ export function AuthProvider({ children }) {
         visibility: validatedEvent.visibility,
         availability: validatedEvent.availability,
 
+        notification: validatedEvent.notification,
+
         recurrence: validatedEvent.recurrence,
         exdate: validatedEvent.exdate,
 
@@ -1439,14 +1451,6 @@ export function AuthProvider({ children }) {
         })
         .filter(Boolean)
         .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-
-      const now = Date.now();
-
-      const nextReminderAt =
-        reminderTimestamps.find(
-          (timestamp) => new Date(timestamp).getTime() > now,
-        ) ?? null;
-
       // create notification settings
       const notificationSettings = {
         shareTitle: validatedEvent.notificationSettings?.shareTitle === true,
@@ -1459,8 +1463,6 @@ export function AuthProvider({ children }) {
       const eventPayload = {
         group_id: validatedEvent.group_id ?? crypto.randomUUID(),
 
-        visibility: validatedEvent.visibility,
-
         participants,
 
         keys,
@@ -1471,10 +1473,14 @@ export function AuthProvider({ children }) {
 
         reminders: reminderTimestamps,
 
-        nextReminderAt,
-
         notificationSettings,
       };
+
+      // send server-side recurrence metadata only for recurring events
+      if (validatedEvent.recurrence?.type !== "NONE") {
+        eventPayload.recurrence = validatedEvent.recurrence;
+        eventPayload.occurrenceStart = validatedEvent.timeRange.start;
+      }
 
       // send title only when notification title sharing is enabled
       if (notificationSettings.shareTitle) {
@@ -1496,7 +1502,12 @@ export function AuthProvider({ children }) {
       if (onProgress) {
         onProgress("uploading");
       }
-      console.log(eventPayload);
+      console.log("EVENT BEFORE API:", {
+        notification: validatedEvent.notification,
+        reminders: validatedEvent.reminders,
+        payloadReminders: eventPayload.reminders,
+        payload: eventPayload,
+      });
       // send encrypted event envelope to api
       const response = await fetch("/api/events/create", {
         method: "POST",
@@ -1516,7 +1527,11 @@ export function AuthProvider({ children }) {
       } catch {
         responseData = null;
       }
-
+      console.log("CREATE EVENT API RESPONSE:", {
+        status: response.status,
+        ok: response.ok,
+        responseData,
+      });
       if (!response.ok) {
         devLog("ADD_EVENT_API", response.status, responseData);
 
@@ -2211,6 +2226,39 @@ export function AuthProvider({ children }) {
     );
   }
 
+  async function sendTestNotification() {
+    if (!currentUser) {
+      throw new Error("User is not authenticated.");
+    }
+
+    const firebaseUser = auth.currentUser;
+
+    if (!firebaseUser) {
+      throw new Error("User is not authenticated.");
+    }
+
+    const idToken = await firebaseUser.getIdToken();
+    const response = await fetch("/api/notifications/send-test", {
+      method: "POST",
+
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+    });
+
+    const responseData = await response.json();
+
+    console.log("TEST NOTIFICATION RESPONSE:", responseData);
+
+    if (!response.ok) {
+      throw new Error(
+        responseData?.error ?? "Could not send test notification.",
+      );
+    }
+
+    return responseData;
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -2233,6 +2281,7 @@ export function AuthProvider({ children }) {
         shareVisibleEventsWithFriend,
         revokeFriendAccess,
         AuthErrorCode,
+        sendTestNotification,
       }}
     >
       {authStatus === null || authStatus === "loading" ? <Loading /> : children}

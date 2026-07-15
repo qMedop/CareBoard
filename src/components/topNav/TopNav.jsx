@@ -10,7 +10,10 @@ import {
 import { CalendarNavControlls } from "../../pages/calendarPage/CalendarPage";
 import { ToDoNavControlls } from "../../pages/toDoPage/ToDoPage";
 import { useUserSettings } from "../../contexts/UserSettingsContext";
+import { useData } from "../../contexts/AuthContext";
 function TopNav() {
+  const { sendTestNotification } = useData();
+
   const location = useLocation();
   const [activePage, setActivePage] = useState(location.pathname);
 
@@ -75,6 +78,7 @@ function TopNav() {
 
   return (
     <div className={styles.topNav}>
+      <button onClick={sendTestNotification}>Send Test Notification</button>
       <div className={styles.left}>
         <div className={styles.pageTitle} onClick={handleDoubleClick}>
           {activePage === "/" && "Home"}
