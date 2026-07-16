@@ -41,36 +41,36 @@ const allowedPaths = [
   "/to-do",
 ];
 
-messaging.onBackgroundMessage((payload) => {
-  const notificationTitle =
-    typeof payload?.notification?.title === "string"
-      ? payload.notification.title.slice(0, 100)
-      : "CareBoard Alert";
-  const targetUrl = allowedPaths.includes(payload?.data?.url)
-    ? payload.data.url
-    : "/calendar";
-  const body =
-    typeof payload?.notification?.body === "string"
-      ? payload.notification.body.slice(0, 300)
-      : "You have a new background event update!";
-  const notificationOptions = {
-    body: body,
-    tag: "calendar-events",
-    renotify: true,
+// messaging.onBackgroundMessage((payload) => {
+//   const notificationTitle =
+//     typeof payload?.notification?.title === "string"
+//       ? payload.notification.title.slice(0, 100)
+//       : "CareBoard Alert";
+//   const targetUrl = allowedPaths.includes(payload?.data?.url)
+//     ? payload.data.url
+//     : "/calendar";
+//   const body =
+//     typeof payload?.notification?.body === "string"
+//       ? payload.notification.body.slice(0, 300)
+//       : "You have a new background event update!";
+//   const notificationOptions = {
+//     body: body,
+//     tag: "calendar-events",
+//     renotify: true,
 
-    icon: "/logo192.png",
-    badge: "/favicon.ico",
-    vibrate: [200, 100, 200],
-    data: {
-      url: targetUrl,
-    },
-  };
-  return self.registration
-    .showNotification(notificationTitle, notificationOptions)
-    .catch((err) => {
-      console.error("Notification error:", err);
-    });
-});
+//     icon: "/logo192.png",
+//     badge: "/favicon.ico",
+//     vibrate: [200, 100, 200],
+//     data: {
+//       url: targetUrl,
+//     },
+//   };
+//   return self.registration
+//     .showNotification(notificationTitle, notificationOptions)
+//     .catch((err) => {
+//       console.error("Notification error:", err);
+//     });
+// });
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -131,27 +131,27 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  const targetUrl = event.notification.data?.url || "/calendar";
+// self.addEventListener("notificationclick", (event) => {
+//   event.notification.close();
+//   const targetUrl = event.notification.data?.url || "/calendar";
 
-  event.waitUntil(
-    clients
-      .matchAll({
-        type: "window",
-        includeUncontrolled: true,
-      })
-      .then((clientList) => {
-        for (const client of clientList) {
-          const clientPath = new URL(client.url).pathname;
+//   event.waitUntil(
+//     clients
+//       .matchAll({
+//         type: "window",
+//         includeUncontrolled: true,
+//       })
+//       .then((clientList) => {
+//         for (const client of clientList) {
+//           const clientPath = new URL(client.url).pathname;
 
-          if (clientPath === targetUrl && "focus" in client) {
-            return client.focus();
-          }
-        }
-        if (clients.openWindow) {
-          return clients.openWindow(targetUrl);
-        }
-      }),
-  );
-});
+//           if (clientPath === targetUrl && "focus" in client) {
+//             return client.focus();
+//           }
+//         }
+//         if (clients.openWindow) {
+//           return clients.openWindow(targetUrl);
+//         }
+//       }),
+//   );
+// });

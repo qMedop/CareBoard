@@ -1,6 +1,6 @@
 Some limitations i can't do due to my firebase free plan.
 
-- Notifications
+- Notifications "Fixed"
 - isFirstTime & createAt getting set by default
 - Users uploading their own PFP (bucket)
-- Making sure there is no duplicated usernames from the server side
+- Making sure there is no duplicated usernames from the server side "Fixed"

@@ -42,7 +42,6 @@ import { usePopup } from "../../../../contexts/PopupContext";
 import { useData } from "../../../../contexts/AuthContext";
 import { useTime } from "../../../../contexts/TimeContext";
 import { useEventSheet } from "../../../../contexts/PopupContext";
-import { useUserSettings } from "../../../../contexts/UserSettingsContext";
 
 import CustomButton from "../../../../components/button/Button";
 import EmojiPopup from "../../../../components/emojiPopup/EmojiPopup";
@@ -77,6 +76,8 @@ import Notifications from "./components/notifications/Notifications";
 import TimeListPopup from "./components/timeList/TimeListPopup";
 import DescriptionPopup from "./components/description/DescriptionPopup";
 import RecurrenceOptionsPopup from "./components/recurrence/RecurrenceOptionsPopup";
+import { useUserSettings } from "../../../../contexts/UserSettingsContext";
+import EditableTime from "./components/editableTime/EditableTime";
 
 const DEFAULT_NOTIFICATION_SETTINGS = Object.freeze({
   shareTitle: false,
@@ -143,14 +144,18 @@ const AddEditNewEvent = forwardRef(
     const { openEventSubSheet, closeEventSubSheet, requestCloseEventSheet } =
       useEventSheet();
 
-    const { openPopup, closePopup: closeContextPopup } = usePopup();
+    const {
+      openPopup,
+      closePopup: closeContextPopup,
+      closeAllPopups,
+    } = usePopup();
 
-    const { timeFormat } = useUserSettings();
-
+    const { userSettings } = useUserSettings();
     const isDraft = newEvent && incomingEventId === newEvent.id;
 
     const eventId = isDraft ? null : incomingEventId;
-    const is24Format = timeFormat === "24h";
+    const is24Format = userSettings.timeFormat === "24h";
+
     const userZone = getUserZone(timeZoneOffset);
 
     const successTimeoutRef = useRef(null);
@@ -175,6 +180,7 @@ const AddEditNewEvent = forwardRef(
     const [measuredTabHeight, setMeasuredTabHeight] = useState(null);
     const [validationErrors, setValidationErrors] = useState([]);
     const [loadingStatus, setLoadingStatus] = useState(EVENT_SAVE_STATUS.IDLE);
+    const [startTimeChange, setStartTimeChange] = useState(null);
 
     const [eventData, setEventData] = useState({
       title: "",
@@ -587,7 +593,6 @@ const AddEditNewEvent = forwardRef(
       ],
     );
 
-    // Update editor and optimistic event state
     const updateGlobalState = useCallback(
       (updates, overrideIsFullDay = null) => {
         const updatedFields = new Set(Object.keys(updates));
@@ -600,80 +605,79 @@ const AddEditNewEvent = forwardRef(
           }),
         );
 
-        setEventData((previousEventData) => {
-          const nextEventData = {
-            ...previousEventData,
-            ...updates,
-          };
+        const previousEventData = eventDataRef.current;
 
-          // recalculate public reminder timestamps
-          if (
-            Object.hasOwn(updates, "notification") ||
-            Object.hasOwn(updates, "timeRange")
-          ) {
-            nextEventData.reminders = createReminderTimestamps(
-              nextEventData.timeRange.start,
-              nextEventData.notification,
-            );
-          }
+        const nextEventData = {
+          ...previousEventData,
+          ...updates,
+        };
 
-          const activeIsFullDay =
-            overrideIsFullDay !== null
-              ? overrideIsFullDay
-              : isFullDayRef.current;
+        if (
+          Object.hasOwn(updates, "notification") ||
+          Object.hasOwn(updates, "timeRange")
+        ) {
+          nextEventData.reminders = createReminderTimestamps(
+            nextEventData.timeRange.start,
+            nextEventData.notification,
+          );
+        }
 
-          if (!eventId) {
-            setNewEvent((previousEvent) =>
-              previousEvent
+        const activeIsFullDay =
+          overrideIsFullDay !== null ? overrideIsFullDay : isFullDayRef.current;
+
+        eventDataRef.current = nextEventData;
+
+        setEventData(nextEventData);
+
+        if (!eventId) {
+          setNewEvent((previousEvent) =>
+            previousEvent
+              ? {
+                  ...previousEvent,
+                  ...nextEventData,
+                  isFullDay: activeIsFullDay,
+                }
+              : previousEvent,
+          );
+
+          return;
+        }
+
+        const isRecurring =
+          originalEventRef.current?.recurrence?.type !== RECURRENCE_TYPE.NONE;
+
+        if (!isRecurring) {
+          setLoadedEvents((previousEvents) =>
+            previousEvents.map((event) =>
+              event.id === eventId
                 ? {
-                    ...previousEvent,
+                    ...event,
                     ...nextEventData,
                     isFullDay: activeIsFullDay,
                   }
-                : previousEvent,
-            );
+                : event,
+            ),
+          );
 
-            return nextEventData;
-          }
+          return;
+        }
 
-          const isRecurring =
-            originalEventRef.current?.recurrence?.type !== RECURRENCE_TYPE.NONE;
+        setLoadedEvents((previousEvents) => {
+          const filteredEvents = previousEvents.filter(
+            (event) => event.id !== shadowIdRef.current,
+          );
 
-          if (!isRecurring) {
-            setLoadedEvents((previousEvents) =>
-              previousEvents.map((event) =>
-                event.id === eventId
-                  ? {
-                      ...event,
-                      ...nextEventData,
-                      isFullDay: activeIsFullDay,
-                    }
-                  : event,
-              ),
-            );
+          const shadowEvent = {
+            ...originalEventRef.current,
+            ...nextEventData,
+            id: shadowIdRef.current,
+            isFullDay: activeIsFullDay,
+            recurrence: {
+              type: RECURRENCE_TYPE.NONE,
+            },
+          };
 
-            return nextEventData;
-          }
-
-          setLoadedEvents((previousEvents) => {
-            const filteredEvents = previousEvents.filter(
-              (event) => event.id !== shadowIdRef.current,
-            );
-
-            const shadowEvent = {
-              ...originalEventRef.current,
-              ...nextEventData,
-              id: shadowIdRef.current,
-              isFullDay: activeIsFullDay,
-              recurrence: {
-                type: RECURRENCE_TYPE.NONE,
-              },
-            };
-
-            return [...filteredEvents, shadowEvent];
-          });
-
-          return nextEventData;
+          return [...filteredEvents, shadowEvent];
         });
       },
       [eventId, setLoadedEvents, setNewEvent],
@@ -1233,68 +1237,6 @@ const AddEditNewEvent = forwardRef(
     };
 
     // Pick start time
-    const handleStartTimeClick = (event) => {
-      openEditorPopup({
-        desktopType: "contextual",
-        content: (
-          <TimeListPopup
-            baseDate={new Date(eventDataRef.current.timeRange.start)}
-            closePopup={closeEditorPopup}
-            is12Format={!is24Format}
-            onPick={(date) => {
-              const currentStartLocal = DateTime.fromISO(
-                eventDataRef.current.timeRange.start,
-                {
-                  zone: "utc",
-                },
-              ).setZone(userZone);
-
-              const currentEndLocal = DateTime.fromISO(
-                eventDataRef.current.timeRange.end,
-                {
-                  zone: "utc",
-                },
-              ).setZone(userZone);
-
-              const duration = currentEndLocal.diff(currentStartLocal);
-
-              const newStart = currentStartLocal.set({
-                hour: date.getHours(),
-                minute: date.getMinutes(),
-                second: 0,
-                millisecond: 0,
-              });
-
-              const newEnd = newStart.plus(duration);
-
-              const newStartIso = newStart.toUTC().toISO({
-                suppressMilliseconds: true,
-              });
-
-              const newEndIso = newEnd.toUTC().toISO({
-                suppressMilliseconds: true,
-              });
-
-              const newIsFullDay = isRangeFullDay(newStartIso, newEndIso);
-
-              setIsFullDay(newIsFullDay);
-
-              updateGlobalState(
-                {
-                  timeRange: {
-                    start: newStartIso,
-                    end: newEndIso,
-                  },
-                },
-                newIsFullDay,
-              );
-            }}
-          />
-        ),
-        target: event.currentTarget,
-        position: "bottomLeft",
-      });
-    };
 
     // Pick end time
     const handleEndTimeClick = (event) => {
@@ -1701,29 +1643,19 @@ const AddEditNewEvent = forwardRef(
                 </div>
 
                 <div className={styles.right}>
-                  <div className={styles.time}>
-                    <div className={styles.startTime}>
-                      <CustomButton
-                        onClick={handleStartTimeClick}
-                        ClickEffect="scale"
-                        className="default"
-                      >
-                        <p>{startTimeDisplay}</p>
-                      </CustomButton>
-                    </div>
-
-                    <div className={styles.line} />
-
-                    <div className={styles.endtTime}>
-                      <CustomButton
-                        onClick={handleEndTimeClick}
-                        ClickEffect="scale"
-                        className="default"
-                      >
-                        <p>{endTimeDisplay}</p>
-                      </CustomButton>
-                    </div>
-                  </div>
+                  <TimeSpace
+                    openEditorPopup={openEditorPopup}
+                    isRangeFullDay={isRangeFullDay}
+                    setIsFullDay={setIsFullDay}
+                    updateGlobalState={updateGlobalState}
+                    eventDataRef={eventDataRef}
+                    closeEditorPopup={closeEditorPopup}
+                    startTimeDisplay={startTimeDisplay}
+                    endTimeDisplay={endTimeDisplay}
+                    startTimeIso={eventData.timeRange.start}
+                    endTimeIso={eventData.timeRange.end}
+                    timeFormat={userSettings?.timeFormat}
+                  />
 
                   <div className={styles.options}>
                     <CustomButton
@@ -1780,29 +1712,19 @@ const AddEditNewEvent = forwardRef(
                   </div>
 
                   {!isFullDay && (
-                    <div className={styles.time}>
-                      <div className={styles.startTime}>
-                        <CustomButton
-                          onClick={handleStartTimeClick}
-                          ClickEffect="scale"
-                          className="default"
-                        >
-                          <p>{startTimeDisplay}</p>
-                        </CustomButton>
-                      </div>
-
-                      <div className={styles.line} />
-
-                      <div className={styles.endtTime}>
-                        <CustomButton
-                          onClick={handleEndTimeClick}
-                          ClickEffect="scale"
-                          className="default"
-                        >
-                          <p>{endTimeDisplay}</p>
-                        </CustomButton>
-                      </div>
-                    </div>
+                    <TimeSpace
+                      openEditorPopup={openEditorPopup}
+                      isRangeFullDay={isRangeFullDay}
+                      setIsFullDay={setIsFullDay}
+                      updateGlobalState={updateGlobalState}
+                      eventDataRef={eventDataRef}
+                      closeEditorPopup={closeEditorPopup}
+                      startTimeDisplay={startTimeDisplay}
+                      endTimeDisplay={endTimeDisplay}
+                      startTimeIso={eventData.timeRange.start}
+                      endTimeIso={eventData.timeRange.end}
+                      timeFormat={userSettings?.timeFormat}
+                    />
                   )}
                 </div>
               </div>
@@ -2126,5 +2048,55 @@ const AddEditNewEvent = forwardRef(
     );
   },
 );
+
+function TimeSpace({
+  openEditorPopup,
+  isRangeFullDay,
+  setIsFullDay,
+  updateGlobalState,
+  eventDataRef,
+  closeEditorPopup,
+  startTimeDisplay,
+  endTimeDisplay,
+  startTimeIso,
+  endTimeIso,
+  timeFormat,
+}) {
+  return (
+    <div className={styles.time}>
+      <div className={styles.startTime}>
+        <EditableTime
+          openEditorPopup={openEditorPopup}
+          isRangeFullDay={isRangeFullDay}
+          setIsFullDay={setIsFullDay}
+          updateGlobalState={updateGlobalState}
+          eventDataRef={eventDataRef}
+          closeEditorPopup={closeEditorPopup}
+          timeDisplay={startTimeDisplay}
+          timeFormat={timeFormat}
+          currentTimeIso={startTimeIso}
+          type="start"
+        />
+      </div>
+
+      <div className={styles.line} />
+
+      <div className={styles.endtTime}>
+        <EditableTime
+          openEditorPopup={openEditorPopup}
+          isRangeFullDay={isRangeFullDay}
+          setIsFullDay={setIsFullDay}
+          updateGlobalState={updateGlobalState}
+          eventDataRef={eventDataRef}
+          closeEditorPopup={closeEditorPopup}
+          timeDisplay={endTimeDisplay}
+          timeFormat={timeFormat}
+          currentTimeIso={endTimeIso}
+          type="end"
+        />
+      </div>
+    </div>
+  );
+}
 
 export default AddEditNewEvent;

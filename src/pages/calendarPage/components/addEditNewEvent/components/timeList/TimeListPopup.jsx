@@ -1,99 +1,194 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "./TimeListPopup.module.css";
+
 import {
   EVENT_TIME_SLOT_MINUTES,
   EVENT_TIME_SLOTS_PER_DAY,
 } from "../../../../../../constants/constants";
 
-function TimeListPopup({ baseDate, onPick, is12Format, closePopup }) {
+import { useUserSettings } from "../../../../../../contexts/UserSettingsContext";
+
+function TimeListPopup({ baseDate, getCurrentDate, onPick, closePopup }) {
+  const { userSettings } = useUserSettings();
+
+  const is12Format = userSettings.timeFormat === "12h";
+
   const listRef = useRef(null);
   const itemRefs = useRef([]);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const isKeyboardNavigationRef = useRef(false);
+
+  const [selectedDate] = useState(() => new Date(baseDate));
+  const [currentDate, setCurrentDate] = useState(() => new Date(baseDate));
+  const [highlightedIndex, setHighlightedIndex] = useState(() => {
+    const minutes = baseDate.getHours() * 60 + baseDate.getMinutes();
+
+    return Math.min(
+      Math.round(minutes / EVENT_TIME_SLOT_MINUTES),
+      EVENT_TIME_SLOTS_PER_DAY - 1,
+    );
+  });
 
   const timeSlots = useMemo(() => {
     const slots = [];
     const startOfDay = new Date(baseDate);
+
     startOfDay.setHours(0, 0, 0, 0);
 
-    for (let i = 0; i < EVENT_TIME_SLOTS_PER_DAY; i++) {
-      const d = new Date(startOfDay);
+    for (let index = 0; index < EVENT_TIME_SLOTS_PER_DAY; index += 1) {
+      const date = new Date(startOfDay);
 
-      d.setMinutes(i * EVENT_TIME_SLOT_MINUTES);
+      date.setMinutes(index * EVENT_TIME_SLOT_MINUTES);
 
-      slots.push(d);
+      slots.push(date);
     }
+
     return slots;
   }, [baseDate]);
 
+  const currentMinutes = currentDate.getHours() * 60 + currentDate.getMinutes();
+
+  const isExactSlot = currentMinutes % EVENT_TIME_SLOT_MINUTES === 0;
+
   useEffect(() => {
-    if (!listRef.current) return;
+    const initialIndex = Math.min(
+      Math.round(currentMinutes / EVENT_TIME_SLOT_MINUTES),
+      EVENT_TIME_SLOTS_PER_DAY - 1,
+    );
 
-    const currentMinutes = baseDate.getHours() * 60 + baseDate.getMinutes();
-    let closestIndex = Math.round(currentMinutes / EVENT_TIME_SLOT_MINUTES);
+    setHighlightedIndex(initialIndex);
 
-    if (closestIndex >= EVENT_TIME_SLOTS_PER_DAY) {
-      closestIndex = 0;
-    }
-
-    setHighlightedIndex(closestIndex);
-    if (itemRefs.current[closestIndex])
-      itemRefs.current[closestIndex].scrollIntoView({
+    requestAnimationFrame(() => {
+      itemRefs.current[initialIndex]?.scrollIntoView({
         block: "center",
         behavior: "auto",
       });
 
-    listRef.current.focus();
+      listRef.current?.focus();
+    });
   }, []);
 
-  const scrollToItem = (index) => {
-    if (itemRefs.current[index])
-      itemRefs.current[index].scrollIntoView({
-        block: "center",
-        behavior: "auto",
+  useEffect(() => {
+    if (!getCurrentDate) {
+      return undefined;
+    }
+
+    const syncCurrentDate = () => {
+      const latestDate = getCurrentDate();
+
+      if (!(latestDate instanceof Date) || Number.isNaN(latestDate.getTime())) {
+        return;
+      }
+
+      setCurrentDate((previousDate) => {
+        if (previousDate.getTime() === latestDate.getTime()) {
+          return previousDate;
+        }
+
+        return latestDate;
       });
+
+      if (isKeyboardNavigationRef.current) {
+        isKeyboardNavigationRef.current = false;
+        return;
+      }
+
+      const latestMinutes =
+        latestDate.getHours() * 60 + latestDate.getMinutes();
+
+      const nextIndex = Math.min(
+        Math.round(latestMinutes / EVENT_TIME_SLOT_MINUTES),
+        EVENT_TIME_SLOTS_PER_DAY - 1,
+      );
+
+      setHighlightedIndex(nextIndex);
+    };
+
+    syncCurrentDate();
+
+    const intervalId = setInterval(syncCurrentDate, 100);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [getCurrentDate]);
+
+  const selectKeyboardTime = (index) => {
+    const date = timeSlots[index];
+
+    isKeyboardNavigationRef.current = true;
+
+    setHighlightedIndex(index);
+    setCurrentDate(date);
+
+    itemRefs.current[index]?.scrollIntoView({
+      block: "nearest",
+      behavior: "auto",
+    });
+
+    onPick(date);
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      const next = (highlightedIndex + 1) % timeSlots.length;
-      setHighlightedIndex(next);
-      scrollToItem(next);
-      onPick(timeSlots[next]);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      const next = (highlightedIndex - 1 + timeSlots.length) % timeSlots.length;
-      setHighlightedIndex(next);
-      scrollToItem(next);
-      onPick(timeSlots[next]);
-    } else if (e.key === "Enter") {
-      e.preventDefault();
+  const handleKeyDown = (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+
+      const nextIndex = (highlightedIndex + 1) % timeSlots.length;
+
+      selectKeyboardTime(nextIndex);
+
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+
+      const nextIndex =
+        (highlightedIndex - 1 + timeSlots.length) % timeSlots.length;
+
+      selectKeyboardTime(nextIndex);
+
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+
       if (highlightedIndex !== -1) {
         onPick(timeSlots[highlightedIndex]);
-        if (closePopup) closePopup();
+        closePopup?.();
       }
+
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closePopup?.();
     }
   };
 
   const handleItemClick = (date) => {
     onPick(date);
-    if (closePopup) closePopup();
+    closePopup?.();
   };
 
-  const formatTime = (date) =>
-    is12Format
-      ? date
-          .toLocaleTimeString([], {
-            hour: "numeric",
-            minute: "2-digit",
-            hour12: true,
-          })
-          .toLowerCase()
-      : date.toLocaleTimeString([], {
-          hour: "2-digit",
+  const formatTime = (date) => {
+    if (is12Format) {
+      return date
+        .toLocaleTimeString([], {
+          hour: "numeric",
           minute: "2-digit",
-          hour12: false,
-        });
+          hour12: true,
+        })
+        .toLowerCase();
+    }
+
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  };
 
   return (
     <div
@@ -102,22 +197,40 @@ function TimeListPopup({ baseDate, onPick, is12Format, closePopup }) {
       tabIndex={-1}
       onKeyDown={handleKeyDown}
     >
-      {timeSlots.map((date, i) => (
+      {!isExactSlot && (
         <button
-          key={i}
-          ref={(el) => (itemRefs.current[i] = el)}
-          className={`${styles.timeBtn} ${
-            date.getHours() === baseDate.getHours() &&
-            date.getMinutes() === baseDate.getMinutes()
-              ? styles.selectedTime
-              : ""
-          } ${highlightedIndex === i ? styles.highlightedTime : ""}`}
-          onClick={() => handleItemClick(date)}
-          onMouseEnter={() => setHighlightedIndex(i)}
+          type="button"
+          className={`${styles.timeBtn} ${styles.selectedTime}`}
+          onClick={() => handleItemClick(currentDate)}
         >
-          {formatTime(date)}
+          {formatTime(currentDate)}
         </button>
-      ))}
+      )}
+
+      {timeSlots.map((date, index) => {
+        const isSelected =
+          date.getHours() === selectedDate.getHours() &&
+          date.getMinutes() === selectedDate.getMinutes();
+
+        const isHighlighted = highlightedIndex === index;
+
+        return (
+          <button
+            type="button"
+            key={date.getTime()}
+            ref={(element) => {
+              itemRefs.current[index] = element;
+            }}
+            className={`${styles.timeBtn} ${
+              isSelected ? styles.selectedTime : ""
+            } ${isHighlighted ? styles.highlightedTime : ""}`}
+            onClick={() => handleItemClick(date)}
+            onMouseEnter={() => setHighlightedIndex(index)}
+          >
+            {formatTime(date)}
+          </button>
+        );
+      })}
     </div>
   );
 }

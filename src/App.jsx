@@ -19,8 +19,7 @@ import FirstTimeUserRoute from "./components/protectedRoutes/FirstTimeUserRoute.
 import { LoginTopNav } from "./components/LoginTopNav/LoginTopNav.jsx";
 import LoginPage from "./pages/loginPage/LoginPage.jsx";
 import ProfilePage from "./pages/profilePage/ProfilePage.jsx";
-import { scheduleNotificationAtTimestamp } from "./utils/localNotifier";
-import { useTime } from "./contexts/TimeContext.jsx";
+
 function App() {
   const location = useLocation();
   const [activePage, setActivePage] = useState(location.pathname);
@@ -29,35 +28,6 @@ function App() {
   const showNavs = authStatus === "done" && currentUser;
   const showSNav =
     activePage.startsWith("/login") || activePage.startsWith("/profile-start");
-
-  const { loadedEvents } = useTime();
-  useEffect(() => {
-    setActivePage(location.pathname);
-  }, [location.pathname]);
-  useEffect(() => {
-    if (!loadedEvents || loadedEvents.length === 0) return;
-
-    loadedEvents.forEach((event) => {
-      if (!event.created_at) return;
-
-      const creationTimeMs = new Date(event.created_at).getTime();
-      const targetTestTimeMs = creationTimeMs + 10000; // 10 seconds in the future
-
-      const now = Date.now();
-
-      if (targetTestTimeMs > now) {
-        const displayTitle = event.title || "CareBoard Offline Alert";
-        const displayBody =
-          "Success! Your phone triggered this with the app closed!";
-
-        scheduleNotificationAtTimestamp(
-          displayTitle,
-          displayBody,
-          targetTestTimeMs,
-        );
-      }
-    });
-  }, [loadedEvents]);
 
   return (
     <>
